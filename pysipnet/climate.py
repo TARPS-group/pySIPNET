@@ -118,7 +118,9 @@ class ClimateDrivers:
             File format version.  ``"v1"`` expects 14 columns (location index
             in col 1, soil-wetness in col 14); ``"v2"`` expects 12 columns.
         """
-        raise NotImplementedError
+        from pysipnet.io.clim_io import read_clim_file
+
+        return read_clim_file(Path(path), version=version)
 
     @classmethod
     def from_dataframe(
@@ -208,7 +210,9 @@ class ClimateDrivers:
 
     def to_file(self, path: str | Path) -> None:
         """Write the climate data to a SIPNET-format ``.clim`` file."""
-        raise NotImplementedError
+        from pysipnet.io.clim_io import write_clim_file
+
+        write_clim_file(self, Path(path))
 
     # ── Properties ─────────────────────────────────────────────────────────────
 
