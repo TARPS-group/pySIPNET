@@ -28,7 +28,7 @@ SIPNET v1 climate file (14 columns, space-delimited, no header):
 +-----+----------------+---------+-------------------------------------------+
 |  7  | tsoil          | °C      | Mean soil temperature                     |
 +-----+----------------+---------+-------------------------------------------+
-|  8  | par            | mol m⁻² | PAR integrated over the full timestep (mol photons; 1 Einstein = 1 mol) |
+|  8  | par            | mol m⁻² | PAR integrated over the full timestep (1 Einstein = 1 mol) |
 +-----+----------------+---------+-------------------------------------------+
 |  9  | precip         | mm      | Total precipitation over the timestep     |
 +-----+----------------+---------+-------------------------------------------+
@@ -60,22 +60,28 @@ behaviour while making the issue visible to the user.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-import numpy as np
 import pandas as pd
-
-from pysipnet.version import CLIM_COLS_V1, CLIM_COLS_V2
 
 # Canonical column names for the Python representation.
 # The loc and soil_wetness columns from v1 are not included here —
 # they are written/read by the IO layer as padding, not stored in the DataFrame.
 CLIM_COLUMNS_V1: list[str] = [
-    "year", "day", "time", "length",
-    "tair", "tsoil", "par", "precip",
-    "vpd", "vpd_soil", "vpress", "wspd",
+    "year",
+    "day",
+    "time",
+    "length",
+    "tair",
+    "tsoil",
+    "par",
+    "precip",
+    "vpd",
+    "vpd_soil",
+    "vpress",
+    "wspd",
 ]
 
 CLIM_COLUMNS_V2: list[str] = CLIM_COLUMNS_V1  # same logical columns, different file format
@@ -191,6 +197,7 @@ class ClimateDrivers:
         if (self.data["vpd"] <= 0).any():
             n = (self.data["vpd"] <= 0).sum()
             import warnings
+
             warnings.warn(
                 f"{n} timestep(s) have vpd ≤ 0 Pa. "
                 "SIPNET adds a tiny value internally to avoid division by zero, "
@@ -200,6 +207,7 @@ class ClimateDrivers:
         if (self.data["wspd"] <= 0).any():
             n = (self.data["wspd"] <= 0).sum()
             import warnings
+
             warnings.warn(
                 f"{n} timestep(s) have wspd ≤ 0 m s⁻¹. "
                 "SIPNET clamps these internally, but this may indicate bad data.",

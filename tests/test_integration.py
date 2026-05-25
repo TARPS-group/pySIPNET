@@ -28,26 +28,29 @@ pytestmark = pytest.mark.skipif(
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_climate(n_days: int = 30, year: int = 2010, start_doy: int = 150):
     """Return a ClimateDrivers with synthetic summer data."""
     from pysipnet.climate import ClimateDrivers
 
     rows = []
     for i in range(n_days):
-        rows.append({
-            "year": year,
-            "day": start_doy + i,
-            "time": 0.0,
-            "length": 1.0,
-            "tair": 18.0 + 5.0 * np.sin(np.pi * i / n_days),
-            "tsoil": 12.0 + 3.0 * np.sin(np.pi * i / n_days),
-            "par": 15.0,
-            "precip": 2.0,
-            "vpd": 1200.0,
-            "vpd_soil": 600.0,
-            "vpress": 1500.0,
-            "wspd": 2.0,
-        })
+        rows.append(
+            {
+                "year": year,
+                "day": start_doy + i,
+                "time": 0.0,
+                "length": 1.0,
+                "tair": 18.0 + 5.0 * np.sin(np.pi * i / n_days),
+                "tsoil": 12.0 + 3.0 * np.sin(np.pi * i / n_days),
+                "par": 15.0,
+                "precip": 2.0,
+                "vpd": 1200.0,
+                "vpd_soil": 600.0,
+                "vpress": 1500.0,
+                "wspd": 2.0,
+            }
+        )
     df = pd.DataFrame(rows)
     return ClimateDrivers.from_dataframe(df, version="v1")
 
@@ -55,6 +58,7 @@ def _make_climate(n_days: int = 30, year: int = 2010, start_doy: int = 150):
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestEndToEnd:
     def test_run_completes(self, minimal_params):

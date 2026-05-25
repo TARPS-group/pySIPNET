@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from pysipnet.build import (
@@ -11,7 +9,6 @@ from pysipnet.build import (
     _PATCH_SCRIPT,
     _REPO_ROOT,
     _SIPNET_DIR,
-    apply_patch,
     binary_sha256,
     build_preset,
     ensure_binary,
@@ -25,6 +22,7 @@ _STANDARD_BINARY = _CACHE_DIR / ModelPreset.STANDARD.binary_name
 # ---------------------------------------------------------------------------
 # Module-level constants
 # ---------------------------------------------------------------------------
+
 
 class TestConstants:
     def test_repo_root_has_makefile(self):
@@ -40,6 +38,7 @@ class TestConstants:
 # ---------------------------------------------------------------------------
 # ensure_binary
 # ---------------------------------------------------------------------------
+
 
 class TestEnsureBinary:
     def test_raises_if_binary_missing(self, tmp_path, monkeypatch):
@@ -65,6 +64,7 @@ class TestEnsureBinary:
 # ---------------------------------------------------------------------------
 # binary_sha256
 # ---------------------------------------------------------------------------
+
 
 class TestBinarySha256:
     @pytest.mark.skipif(
@@ -101,6 +101,7 @@ class TestBinarySha256:
 # build_preset (no-op path only — avoids running make in unit tests)
 # ---------------------------------------------------------------------------
 
+
 class TestBuildPreset:
     @pytest.mark.skipif(
         not _STANDARD_BINARY.exists(),
@@ -130,6 +131,7 @@ class TestBuildPreset:
 # ---------------------------------------------------------------------------
 # init_submodule
 # ---------------------------------------------------------------------------
+
 
 class TestInitSubmodule:
     def test_noop_if_makefile_exists(self, monkeypatch):

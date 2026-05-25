@@ -75,11 +75,12 @@ provided given the active :class:`ModelFlagsV1`.
 
 from __future__ import annotations
 
-from typing import Annotated
+from pydantic import BaseModel, model_validator
 
-from pydantic import BaseModel, Field, model_validator
-
-from pysipnet.parameters.base import ParameterDomain, ParameterSpec, get_parameter_specs, param_field
+from pysipnet.parameters.base import (
+    ParameterDomain,
+    param_field,
+)
 
 _D = ParameterDomain  # local alias for brevity
 
@@ -126,10 +127,7 @@ class ModelFlagsV1(BaseModel):
     @model_validator(mode="after")
     def _check_phenology_exclusivity(self) -> ModelFlagsV1:
         if self.gdd and self.soil_phenol:
-            raise ValueError(
-                "gdd and soil_phenol are mutually exclusive: "
-                "set exactly one to True."
-            )
+            raise ValueError("gdd and soil_phenol are mutually exclusive: set exactly one to True.")
         return self
 
     @classmethod
@@ -280,8 +278,7 @@ class PhotosynthesisParams(BaseModel):
     attenuation: float = param_field(
         unit="1",
         domain=_D.POSITIVE,
-        description="Canopy PAR extinction coefficient (Beer's law k) "
-        "(SIPNET param: attenuation).",
+        description="Canopy PAR extinction coefficient (Beer's law k) (SIPNET param: attenuation).",
     )
 
 
@@ -485,8 +482,7 @@ class AllocationParams(BaseModel):
     fine_root_allocation: float = param_field(
         unit="1",
         domain=_D.OPEN_UNIT_INTERVAL,
-        description="Fraction of NPP allocated to fine roots "
-        "(SIPNET param: fineRootAllocation).",
+        description="Fraction of NPP allocated to fine roots (SIPNET param: fineRootAllocation).",
     )
     fine_root_exudation: float = param_field(
         unit="1",
@@ -706,7 +702,8 @@ class SIPNETParametersV1(BaseModel):
             errors.append("water.leaf_pool_depth is required when ModelFlagsV1.leaf_water is True")
         if flags.litter_pool and self.respiration.litter_breakdown_rate is None:
             errors.append(
-                "respiration.litter_breakdown_rate is required when ModelFlagsV1.litter_pool is True"
+                "respiration.litter_breakdown_rate is required"
+                " when ModelFlagsV1.litter_pool is True"
             )
         if flags.litter_pool and self.respiration.frac_litter_respired is None:
             errors.append(
@@ -723,6 +720,4 @@ class SIPNETParametersV1(BaseModel):
                 "phenology.leaf_on_day is required when both gdd and soil_phenol are False"
             )
         if errors:
-            raise ValueError(
-                "Parameter–flag mismatch:\n" + "\n".join(f"  • {e}" for e in errors)
-            )
+            raise ValueError("Parameter–flag mismatch:\n" + "\n".join(f"  • {e}" for e in errors))

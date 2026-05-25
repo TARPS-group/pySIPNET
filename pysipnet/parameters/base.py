@@ -18,7 +18,7 @@ via :func:`validate_unit_string`.  Examples:
 +----------------------------------+-------------------------------------+
 | year⁻¹                          | ``"1 / year"``                      |
 +----------------------------------+-------------------------------------+
-| K·day (growing degree-days)      | ``"K * day"`` (= °C·day; K used to avoid Pint offset-unit error) |
+| K·day (growing degree-days)      | ``"K * day"`` (K avoids Pint offset-unit error) |
 +----------------------------------+-------------------------------------+
 | cm K⁻¹ day⁻¹                    | ``"cm / (K * day)"``                |
 +----------------------------------+-------------------------------------+
@@ -68,19 +68,18 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
-_MISSING: Any = dataclasses.MISSING
-
 import pint
-from pydantic import Field
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+_MISSING: Any = dataclasses.MISSING
 
 _ureg = pint.UnitRegistry()
 
 
-class ParameterDomain(str, Enum):
+class ParameterDomain(StrEnum):
     """Mathematical support of a scalar parameter.
 
     Use this when constructing bijectors for unconstrained optimisation or
@@ -226,6 +225,10 @@ def get_parameter_specs(model_cls: type[BaseModel], prefix: str = "") -> dict[st
             result[path] = extra["_spec"]
         else:
             annotation = field_info.annotation
-            if annotation is not None and isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            if (
+                annotation is not None
+                and isinstance(annotation, type)
+                and issubclass(annotation, BaseModel)
+            ):
                 result.update(get_parameter_specs(annotation, prefix=path))
     return result

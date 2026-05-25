@@ -27,13 +27,8 @@ With agronomic events::
 """
 
 # Runner
-from pysipnet.runner import ModelPreset, SIPNETRunner
-
-# Results
-from pysipnet.result import SIPNETResult
-
-# Parameters (top-level groups available via pysipnet.parameters)
-from pysipnet.parameters.v1 import ModelFlagsV1, SIPNETParametersV1
+# Build utilities
+from pysipnet.build import build_preset, ensure_binary
 
 # Climate
 from pysipnet.climate import ClimateDrivers
@@ -49,8 +44,12 @@ from pysipnet.events import (
     TillageEvent,
 )
 
-# Build utilities
-from pysipnet.build import build_preset, ensure_binary
+# Parameters (top-level groups available via pysipnet.parameters)
+from pysipnet.parameters.v1 import ModelFlagsV1, SIPNETParametersV1
+
+# Results
+from pysipnet.result import SIPNETResult
+from pysipnet.runner import ModelPreset, SIPNETRunner
 
 # Version
 from pysipnet.version import PYSIPNET_VERSION, SIPNET_PINNED_COMMIT, SIPNET_TARGET_VERSION

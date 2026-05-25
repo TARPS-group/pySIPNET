@@ -78,7 +78,6 @@ def build_preset(preset: ModelPreset, *, force: bool = False) -> Path:
     Path
         Path to the compiled binary.
     """
-    from pysipnet.runner import ModelPreset
 
     target = _CACHE_DIR / preset.binary_name
     if target.exists() and not force:
