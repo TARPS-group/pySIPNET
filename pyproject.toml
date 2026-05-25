@@ -28,7 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 xarray = ["xarray>=2023.0"]
 viz = ["plotly>=5.0"]
-examples = ["matplotlib>=3.7", "jupyter>=1.0"]
+examples = ["matplotlib>=3.7", "jupyter>=1.0", "nbformat>=4.2.0"]
 
 [dependency-groups]
 dev = [
@@ -44,6 +44,7 @@ dev = [
     "xarray>=2023.0",
     "plotly>=5.0",
     "matplotlib>=3.7",
+    "nbformat>=4.2.0",
 ]
 
 [tool.hatch.build.targets.wheel]
