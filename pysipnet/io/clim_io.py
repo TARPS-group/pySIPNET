@@ -55,9 +55,7 @@ def write_clim_file(climate: ClimateDrivers, path: Path) -> None:
         raise ValueError(f"Unknown climate version: {climate.version!r}")
 
 
-def read_clim_file(
-    path: Path, version: Literal["v1", "v2"] = "v1"
-) -> ClimateDrivers:
+def read_clim_file(path: Path, version: Literal["v1", "v2"] = "v1") -> ClimateDrivers:
     """Read a SIPNET climate file.
 
     Parameters

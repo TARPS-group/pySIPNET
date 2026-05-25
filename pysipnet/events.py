@@ -41,14 +41,14 @@ from __future__ import annotations
 
 from enum import IntEnum
 from pathlib import Path
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-
 
 # ---------------------------------------------------------------------------
 # Irrigation method enum
 # ---------------------------------------------------------------------------
+
 
 class IrrigationMethod(IntEnum):
     """Water delivery method for irrigation events.
@@ -67,6 +67,7 @@ class IrrigationMethod(IntEnum):
 # Individual event models
 # ---------------------------------------------------------------------------
 
+
 class HarvestEvent(BaseModel):
     """Remove and/or redistribute aboveground and belowground biomass."""
 
@@ -76,32 +77,32 @@ class HarvestEvent(BaseModel):
     year: int = Field(gt=0)
     day: int = Field(ge=1, le=366)
     fraction_removed_above: float = Field(
-        ge=0, le=1,
+        ge=0,
+        le=1,
         description="Fraction of aboveground C removed from the system.",
     )
     fraction_removed_below: float = Field(
-        ge=0, le=1,
+        ge=0,
+        le=1,
         description="Fraction of belowground C removed from the system.",
     )
     fraction_transferred_above: float = Field(
-        ge=0, le=1,
+        ge=0,
+        le=1,
         description="Fraction of aboveground C transferred to the surface litter pool.",
     )
     fraction_transferred_below: float = Field(
-        ge=0, le=1,
+        ge=0,
+        le=1,
         description="Fraction of belowground C transferred to the soil litter pool.",
     )
 
     @model_validator(mode="after")
     def _check_fractions(self) -> HarvestEvent:
         if self.fraction_removed_above + self.fraction_transferred_above > 1:
-            raise ValueError(
-                "fraction_removed_above + fraction_transferred_above must be ≤ 1"
-            )
+            raise ValueError("fraction_removed_above + fraction_transferred_above must be ≤ 1")
         if self.fraction_removed_below + self.fraction_transferred_below > 1:
-            raise ValueError(
-                "fraction_removed_below + fraction_transferred_below must be ≤ 1"
-            )
+            raise ValueError("fraction_removed_below + fraction_transferred_below must be ≤ 1")
         return self
 
     def _to_line(self) -> str:
@@ -180,7 +181,8 @@ class TillageEvent(BaseModel):
     year: int = Field(gt=0)
     day: int = Field(ge=1, le=366)
     fraction_litter_transferred: float = Field(
-        ge=0, le=1,
+        ge=0,
+        le=1,
         description="Fraction of surface litter pool moved to soil pool.",
     )
     som_decomp_modifier: float = Field(
@@ -206,13 +208,7 @@ class TillageEvent(BaseModel):
 # ---------------------------------------------------------------------------
 
 AnyEvent = Annotated[
-    Union[
-        HarvestEvent,
-        IrrigationEvent,
-        FertilizationEvent,
-        PlantingEvent,
-        TillageEvent,
-    ],
+    HarvestEvent | IrrigationEvent | FertilizationEvent | PlantingEvent | TillageEvent,
     Field(discriminator="type"),
 ]
 
@@ -295,9 +291,7 @@ class EventSequence(BaseModel):
             year, day, type_token = int(tokens[0]), int(tokens[1]), tokens[2]
             event_type = _TOKEN_TO_TYPE.get(type_token)
             if event_type is None:
-                raise ValueError(
-                    f"Unknown event type token {type_token!r} on line: {raw_line!r}"
-                )
+                raise ValueError(f"Unknown event type token {type_token!r} on line: {raw_line!r}")
             model_cls = _TYPE_TO_MODEL[event_type]
             params = _parse_params(event_type, year, day, tokens[3:])
             events.append(model_cls.model_validate(params))
@@ -320,26 +314,44 @@ class EventSequence(BaseModel):
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _parse_params(event_type: str, year: int, day: int, tokens: list[str]) -> dict:
     """Convert raw token list to a kwarg dict for the appropriate event model."""
     base = {"year": year, "day": day}
     try:
         if event_type == "harvest":
             fRA, fRB, fTA, fTB = (float(t) for t in tokens[:4])
-            return {**base, "fraction_removed_above": fRA, "fraction_removed_below": fRB,
-                    "fraction_transferred_above": fTA, "fraction_transferred_below": fTB}
+            return {
+                **base,
+                "fraction_removed_above": fRA,
+                "fraction_removed_below": fRB,
+                "fraction_transferred_above": fTA,
+                "fraction_transferred_below": fTB,
+            }
         if event_type == "irrigation":
             return {**base, "amount": float(tokens[0]), "method": int(tokens[1])}
         if event_type == "fertilization":
-            return {**base, "org_n": float(tokens[0]), "org_c": float(tokens[1]),
-                    "min_n": float(tokens[2])}
+            return {
+                **base,
+                "org_n": float(tokens[0]),
+                "org_c": float(tokens[1]),
+                "min_n": float(tokens[2]),
+            }
         if event_type == "planting":
-            return {**base, "leaf_c": float(tokens[0]), "wood_c": float(tokens[1]),
-                    "fine_root_c": float(tokens[2]), "coarse_root_c": float(tokens[3])}
+            return {
+                **base,
+                "leaf_c": float(tokens[0]),
+                "wood_c": float(tokens[1]),
+                "fine_root_c": float(tokens[2]),
+                "coarse_root_c": float(tokens[3]),
+            }
         if event_type == "tillage":
-            return {**base, "fraction_litter_transferred": float(tokens[0]),
-                    "som_decomp_modifier": float(tokens[1]),
-                    "litter_decomp_modifier": float(tokens[2])}
+            return {
+                **base,
+                "fraction_litter_transferred": float(tokens[0]),
+                "som_decomp_modifier": float(tokens[1]),
+                "litter_decomp_modifier": float(tokens[2]),
+            }
     except (IndexError, ValueError) as exc:
         raise ValueError(
             f"Could not parse params for {event_type} event at ({year}, {day}): {exc}"

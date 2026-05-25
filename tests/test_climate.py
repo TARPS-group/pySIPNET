@@ -14,25 +14,28 @@ def _make_df(
     year: int = 2020,
 ) -> pd.DataFrame:
     """Return a minimal valid daily climate DataFrame."""
-    return pd.DataFrame({
-        "year": year,
-        "day": range(start_doy, start_doy + n_days),
-        "time": 0.0,
-        "length": 1.0,
-        "tair": 15.0,
-        "tsoil": 10.0,
-        "par": 10.0,
-        "precip": 2.0,
-        "vpd": 800.0,
-        "vpd_soil": 400.0,
-        "vpress": 1200.0,
-        "wspd": 2.5,
-    })
+    return pd.DataFrame(
+        {
+            "year": year,
+            "day": range(start_doy, start_doy + n_days),
+            "time": 0.0,
+            "length": 1.0,
+            "tair": 15.0,
+            "tsoil": 10.0,
+            "par": 10.0,
+            "precip": 2.0,
+            "vpd": 800.0,
+            "vpd_soil": 400.0,
+            "vpress": 1200.0,
+            "wspd": 2.5,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Construction
 # ---------------------------------------------------------------------------
+
 
 class TestFromDataframe:
     def test_happy_path(self):
@@ -71,6 +74,7 @@ class TestFromDataframe:
 # ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
+
 
 class TestValidation:
     def test_null_values_raise(self):
@@ -125,7 +129,8 @@ class TestValidation:
         df = _make_df()
         ClimateDrivers.from_dataframe(df)
         vpd_wspd = [
-            w for w in recwarn.list
+            w
+            for w in recwarn.list
             if "vpd" in str(w.message).lower() or "wspd" in str(w.message).lower()
         ]
         assert len(vpd_wspd) == 0
@@ -134,6 +139,7 @@ class TestValidation:
 # ---------------------------------------------------------------------------
 # Properties
 # ---------------------------------------------------------------------------
+
 
 class TestProperties:
     def test_n_timesteps(self):
@@ -167,6 +173,7 @@ class TestProperties:
 # File IO
 # ---------------------------------------------------------------------------
 
+
 class TestFileIO:
     def test_roundtrip_v1(self, tmp_path):
         cd = ClimateDrivers.from_dataframe(_make_df(n_days=7))
@@ -199,7 +206,7 @@ class TestFileIO:
         cd = ClimateDrivers.from_dataframe(_make_df(n_days=n))
         path = tmp_path / "test.clim"
         cd.to_file(path)
-        lines = [l for l in path.read_text().splitlines() if l.strip()]
+        lines = [ln for ln in path.read_text().splitlines() if ln.strip()]
         assert len(lines) == n
 
     def test_from_file_13_column_format(self, tmp_path):

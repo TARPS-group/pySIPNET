@@ -19,10 +19,10 @@ from pysipnet.io.param_io import (
 )
 from pysipnet.parameters.v1 import ModelFlagsV1
 
-
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def flags():
@@ -32,6 +32,7 @@ def flags():
 # ---------------------------------------------------------------------------
 # Name mapping tables
 # ---------------------------------------------------------------------------
+
 
 class TestNameMappings:
     def test_python_to_sipnet_non_empty(self):
@@ -59,6 +60,7 @@ class TestNameMappings:
 # _flatten
 # ---------------------------------------------------------------------------
 
+
 class TestFlatten:
     def test_returns_dict_of_floats(self, minimal_params):
         flat = _flatten(minimal_params)
@@ -85,6 +87,7 @@ class TestFlatten:
 # ---------------------------------------------------------------------------
 # write_param_file
 # ---------------------------------------------------------------------------
+
 
 class TestWriteParamFile:
     def test_creates_file(self, tmp_path, minimal_params, flags):
@@ -133,43 +136,76 @@ class TestWriteParamFile:
     def test_validate_for_flags_called(self, tmp_path, flags):
         """write_param_file must fail if snow_melt is missing with SNOW=1."""
         from pysipnet.parameters.v1 import (
-            AllocationParams, InitialConditions, LeafPhysiologyParams,
-            PhenologyParams, PhotosynthesisParams, RespirationParams,
-            SIPNETParametersV1, WaterParams,
+            AllocationParams,
+            InitialConditions,
+            LeafPhysiologyParams,
+            PhenologyParams,
+            PhotosynthesisParams,
+            RespirationParams,
+            SIPNETParametersV1,
+            WaterParams,
         )
+
         params = SIPNETParametersV1(
             initial_conditions=InitialConditions(
-                plant_wood=1.0, lai=0.0, soil=1.0, soil_water_frac=0.5,
-                fine_root_frac=0.05, coarse_root_frac=0.15,
+                plant_wood=1.0,
+                lai=0.0,
+                soil=1.0,
+                soil_water_frac=0.5,
+                fine_root_frac=0.05,
+                coarse_root_frac=0.15,
             ),
             photosynthesis=PhotosynthesisParams(
-                a_max=100.0, a_max_frac=0.76, base_fol_resp_frac=0.1,
-                psn_t_min=2.0, psn_t_opt=24.0, d_vpd_slope=0.05,
-                d_vpd_exp=1.0, half_sat_par=300.0, attenuation=0.5,
+                a_max=100.0,
+                a_max_frac=0.76,
+                base_fol_resp_frac=0.1,
+                psn_t_min=2.0,
+                psn_t_opt=24.0,
+                d_vpd_slope=0.05,
+                d_vpd_exp=1.0,
+                half_sat_par=300.0,
+                attenuation=0.5,
             ),
             phenology=PhenologyParams(
-                leaf_off_day=270.0, gdd_leaf_on=100.0,
-                leaf_growth=50.0, frac_leaf_fall=0.95,
-                leaf_allocation=0.25, leaf_turnover_rate=1.0,
+                leaf_off_day=270.0,
+                gdd_leaf_on=100.0,
+                leaf_growth=50.0,
+                frac_leaf_fall=0.95,
+                leaf_allocation=0.25,
+                leaf_turnover_rate=1.0,
             ),
             respiration=RespirationParams(
-                base_veg_resp=0.02, veg_resp_q10=2.0, growth_resp_frac=0.0,
-                frozen_soil_fol_r_eff=0.5, frozen_soil_threshold=-1.0,
-                base_fine_root_resp=0.5, base_coarse_root_resp=0.1,
-                fine_root_q10=2.0, coarse_root_q10=2.0,
-                base_soil_resp=0.06, soil_resp_q10=2.0,
+                base_veg_resp=0.02,
+                veg_resp_q10=2.0,
+                growth_resp_frac=0.0,
+                frozen_soil_fol_r_eff=0.5,
+                frozen_soil_threshold=-1.0,
+                base_fine_root_resp=0.5,
+                base_coarse_root_resp=0.1,
+                fine_root_q10=2.0,
+                coarse_root_q10=2.0,
+                base_soil_resp=0.06,
+                soil_resp_q10=2.0,
                 soil_resp_moist_effect=1.5,
             ),
             allocation=AllocationParams(
-                fine_root_allocation=0.35, wood_allocation=0.30,
-                fine_root_turnover_rate=1.0, coarse_root_turnover_rate=0.1,
+                fine_root_allocation=0.35,
+                wood_allocation=0.30,
+                fine_root_turnover_rate=1.0,
+                coarse_root_turnover_rate=0.1,
                 wood_turnover_rate=0.02,
             ),
             water=WaterParams(
-                water_remove_frac=0.1, frozen_soil_eff=0.1, wue_const=10.0,
-                soil_whc=12.0, litter_whc=5.0, immed_evap_frac=0.1,
-                fast_flow_frac=0.1, rd_const=100.0,
-                r_soil_const1=3.0, r_soil_const2=2.0,
+                water_remove_frac=0.1,
+                frozen_soil_eff=0.1,
+                wue_const=10.0,
+                soil_whc=12.0,
+                litter_whc=5.0,
+                immed_evap_frac=0.1,
+                fast_flow_frac=0.1,
+                rd_const=100.0,
+                r_soil_const1=3.0,
+                r_soil_const2=2.0,
                 # snow_melt is None — should fail with SNOW=True flags
             ),
             leaf=LeafPhysiologyParams(leaf_c_sp_wt=32.0, c_frac_leaf=0.45),
@@ -181,6 +217,7 @@ class TestWriteParamFile:
 # ---------------------------------------------------------------------------
 # read_param_file
 # ---------------------------------------------------------------------------
+
 
 class TestReadParamFile:
     def test_reads_simple_file(self, tmp_path):
@@ -234,6 +271,7 @@ class TestReadParamFile:
 # ---------------------------------------------------------------------------
 # write → read roundtrip
 # ---------------------------------------------------------------------------
+
 
 class TestRoundtrip:
     def test_all_non_none_params_survive_roundtrip(self, tmp_path, minimal_params, flags):

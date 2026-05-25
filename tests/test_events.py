@@ -15,41 +15,66 @@ from pysipnet.events import (
     TillageEvent,
 )
 
-
 # ---------------------------------------------------------------------------
 # HarvestEvent
 # ---------------------------------------------------------------------------
 
+
 class TestHarvestEvent:
     def test_valid(self):
-        e = HarvestEvent(year=2020, day=100,
-                         fraction_removed_above=0.4, fraction_removed_below=0.1,
-                         fraction_transferred_above=0.2, fraction_transferred_below=0.3)
+        e = HarvestEvent(
+            year=2020,
+            day=100,
+            fraction_removed_above=0.4,
+            fraction_removed_below=0.1,
+            fraction_transferred_above=0.2,
+            fraction_transferred_below=0.3,
+        )
         assert e.year == 2020
         assert e.type == "harvest"
 
     def test_above_fractions_exceed_one_raises(self):
         with pytest.raises(ValidationError, match="fraction_removed_above"):
-            HarvestEvent(year=2020, day=100,
-                         fraction_removed_above=0.8, fraction_removed_below=0.0,
-                         fraction_transferred_above=0.5, fraction_transferred_below=0.0)
+            HarvestEvent(
+                year=2020,
+                day=100,
+                fraction_removed_above=0.8,
+                fraction_removed_below=0.0,
+                fraction_transferred_above=0.5,
+                fraction_transferred_below=0.0,
+            )
 
     def test_below_fractions_exceed_one_raises(self):
         with pytest.raises(ValidationError, match="fraction_removed_below"):
-            HarvestEvent(year=2020, day=100,
-                         fraction_removed_above=0.0, fraction_removed_below=0.7,
-                         fraction_transferred_above=0.0, fraction_transferred_below=0.6)
+            HarvestEvent(
+                year=2020,
+                day=100,
+                fraction_removed_above=0.0,
+                fraction_removed_below=0.7,
+                fraction_transferred_above=0.0,
+                fraction_transferred_below=0.6,
+            )
 
     def test_fraction_out_of_range_raises(self):
         with pytest.raises(ValidationError):
-            HarvestEvent(year=2020, day=100,
-                         fraction_removed_above=1.5, fraction_removed_below=0.0,
-                         fraction_transferred_above=0.0, fraction_transferred_below=0.0)
+            HarvestEvent(
+                year=2020,
+                day=100,
+                fraction_removed_above=1.5,
+                fraction_removed_below=0.0,
+                fraction_transferred_above=0.0,
+                fraction_transferred_below=0.0,
+            )
 
     def test_to_line_format(self):
-        e = HarvestEvent(year=2024, day=70,
-                         fraction_removed_above=0.1, fraction_removed_below=0.2,
-                         fraction_transferred_above=0.3, fraction_transferred_below=0.4)
+        e = HarvestEvent(
+            year=2024,
+            day=70,
+            fraction_removed_above=0.1,
+            fraction_removed_below=0.2,
+            fraction_transferred_above=0.3,
+            fraction_transferred_below=0.4,
+        )
         line = e._to_line()
         tokens = line.split()
         assert tokens[0] == "2024"
@@ -62,6 +87,7 @@ class TestHarvestEvent:
 # ---------------------------------------------------------------------------
 # IrrigationEvent
 # ---------------------------------------------------------------------------
+
 
 class TestIrrigationEvent:
     def test_valid_canopy(self):
@@ -88,6 +114,7 @@ class TestIrrigationEvent:
 # FertilizationEvent
 # ---------------------------------------------------------------------------
 
+
 class TestFertilizationEvent:
     def test_valid(self):
         e = FertilizationEvent(year=2020, day=90, org_n=15.0, org_c=5.0, min_n=10.0)
@@ -109,20 +136,24 @@ class TestFertilizationEvent:
 # PlantingEvent
 # ---------------------------------------------------------------------------
 
+
 class TestPlantingEvent:
     def test_valid(self):
-        e = PlantingEvent(year=2020, day=90, leaf_c=10.0, wood_c=5.0,
-                          fine_root_c=4.0, coarse_root_c=3.0)
+        e = PlantingEvent(
+            year=2020, day=90, leaf_c=10.0, wood_c=5.0, fine_root_c=4.0, coarse_root_c=3.0
+        )
         assert e.leaf_c == 10.0
 
     def test_negative_value_raises(self):
         with pytest.raises(ValidationError):
-            PlantingEvent(year=2020, day=90, leaf_c=-1.0, wood_c=5.0,
-                          fine_root_c=4.0, coarse_root_c=3.0)
+            PlantingEvent(
+                year=2020, day=90, leaf_c=-1.0, wood_c=5.0, fine_root_c=4.0, coarse_root_c=3.0
+            )
 
     def test_to_line(self):
-        e = PlantingEvent(year=2024, day=70, leaf_c=10.0, wood_c=5.0,
-                          fine_root_c=4.0, coarse_root_c=3.0)
+        e = PlantingEvent(
+            year=2024, day=70, leaf_c=10.0, wood_c=5.0, fine_root_c=4.0, coarse_root_c=3.0
+        )
         tokens = e._to_line().split()
         assert tokens[2] == "plant"
         assert len(tokens) == 7  # year day plant leafC woodC fineRootC coarseRootC
@@ -132,20 +163,36 @@ class TestPlantingEvent:
 # TillageEvent
 # ---------------------------------------------------------------------------
 
+
 class TestTillageEvent:
     def test_valid(self):
-        e = TillageEvent(year=2020, day=100, fraction_litter_transferred=0.1,
-                         som_decomp_modifier=1.2, litter_decomp_modifier=1.3)
+        e = TillageEvent(
+            year=2020,
+            day=100,
+            fraction_litter_transferred=0.1,
+            som_decomp_modifier=1.2,
+            litter_decomp_modifier=1.3,
+        )
         assert e.som_decomp_modifier == pytest.approx(1.2)
 
     def test_fraction_above_one_raises(self):
         with pytest.raises(ValidationError):
-            TillageEvent(year=2020, day=100, fraction_litter_transferred=1.5,
-                         som_decomp_modifier=1.0, litter_decomp_modifier=1.0)
+            TillageEvent(
+                year=2020,
+                day=100,
+                fraction_litter_transferred=1.5,
+                som_decomp_modifier=1.0,
+                litter_decomp_modifier=1.0,
+            )
 
     def test_to_line(self):
-        e = TillageEvent(year=2022, day=45, fraction_litter_transferred=0.1,
-                         som_decomp_modifier=0.2, litter_decomp_modifier=0.3)
+        e = TillageEvent(
+            year=2022,
+            day=45,
+            fraction_litter_transferred=0.1,
+            som_decomp_modifier=0.2,
+            litter_decomp_modifier=0.3,
+        )
         tokens = e._to_line().split()
         assert tokens[2] == "till"
         assert len(tokens) == 6
@@ -155,14 +202,22 @@ class TestTillageEvent:
 # EventSequence
 # ---------------------------------------------------------------------------
 
+
 class TestEventSequence:
     def _simple_sequence(self):
-        return EventSequence(events=[
-            IrrigationEvent(year=2020, day=100, amount=5.0, method=IrrigationMethod.SOIL),
-            HarvestEvent(year=2020, day=270,
-                         fraction_removed_above=0.4, fraction_removed_below=0.0,
-                         fraction_transferred_above=0.2, fraction_transferred_below=0.0),
-        ])
+        return EventSequence(
+            events=[
+                IrrigationEvent(year=2020, day=100, amount=5.0, method=IrrigationMethod.SOIL),
+                HarvestEvent(
+                    year=2020,
+                    day=270,
+                    fraction_removed_above=0.4,
+                    fraction_removed_below=0.0,
+                    fraction_transferred_above=0.2,
+                    fraction_transferred_below=0.0,
+                ),
+            ]
+        )
 
     def test_empty_sequence(self):
         seq = EventSequence()
@@ -174,19 +229,27 @@ class TestEventSequence:
 
     def test_out_of_order_raises(self):
         with pytest.raises(ValidationError, match="chronological"):
-            EventSequence(events=[
-                HarvestEvent(year=2020, day=270,
-                             fraction_removed_above=0.4, fraction_removed_below=0.0,
-                             fraction_transferred_above=0.2, fraction_transferred_below=0.0),
-                IrrigationEvent(year=2020, day=100, amount=5.0,
-                                method=IrrigationMethod.SOIL),
-            ])
+            EventSequence(
+                events=[
+                    HarvestEvent(
+                        year=2020,
+                        day=270,
+                        fraction_removed_above=0.4,
+                        fraction_removed_below=0.0,
+                        fraction_transferred_above=0.2,
+                        fraction_transferred_below=0.0,
+                    ),
+                    IrrigationEvent(year=2020, day=100, amount=5.0, method=IrrigationMethod.SOIL),
+                ]
+            )
 
     def test_same_day_allowed(self):
-        seq = EventSequence(events=[
-            IrrigationEvent(year=2020, day=100, amount=3.0, method=IrrigationMethod.CANOPY),
-            FertilizationEvent(year=2020, day=100, org_n=15.0, org_c=5.0, min_n=10.0),
-        ])
+        seq = EventSequence(
+            events=[
+                IrrigationEvent(year=2020, day=100, amount=3.0, method=IrrigationMethod.CANOPY),
+                FertilizationEvent(year=2020, day=100, org_n=15.0, org_c=5.0, min_n=10.0),
+            ]
+        )
         assert len(seq) == 2
 
     def test_repr_contains_counts(self):
@@ -201,7 +264,7 @@ class TestEventSequence:
         seq = self._simple_sequence()
         path = tmp_path / "events.in"
         seq.to_file(path)
-        lines = [l for l in path.read_text().splitlines() if l.strip()]
+        lines = [ln for ln in path.read_text().splitlines() if ln.strip()]
         assert len(lines) == 2
 
     def test_empty_sequence_writes_empty_file(self, tmp_path):
@@ -210,17 +273,30 @@ class TestEventSequence:
         assert path.read_text() == ""
 
     def test_roundtrip(self, tmp_path):
-        seq = EventSequence(events=[
-            IrrigationEvent(year=2022, day=40, amount=5.0, method=IrrigationMethod.CANOPY),
-            FertilizationEvent(year=2022, day=40, org_n=15.0, org_c=5.0, min_n=10.0),
-            TillageEvent(year=2022, day=45, fraction_litter_transferred=0.1,
-                         som_decomp_modifier=0.2, litter_decomp_modifier=0.3),
-            PlantingEvent(year=2022, day=46, leaf_c=10.0, wood_c=5.0,
-                          fine_root_c=4.0, coarse_root_c=3.0),
-            HarvestEvent(year=2022, day=250,
-                         fraction_removed_above=0.4, fraction_removed_below=0.1,
-                         fraction_transferred_above=0.2, fraction_transferred_below=0.3),
-        ])
+        seq = EventSequence(
+            events=[
+                IrrigationEvent(year=2022, day=40, amount=5.0, method=IrrigationMethod.CANOPY),
+                FertilizationEvent(year=2022, day=40, org_n=15.0, org_c=5.0, min_n=10.0),
+                TillageEvent(
+                    year=2022,
+                    day=45,
+                    fraction_litter_transferred=0.1,
+                    som_decomp_modifier=0.2,
+                    litter_decomp_modifier=0.3,
+                ),
+                PlantingEvent(
+                    year=2022, day=46, leaf_c=10.0, wood_c=5.0, fine_root_c=4.0, coarse_root_c=3.0
+                ),
+                HarvestEvent(
+                    year=2022,
+                    day=250,
+                    fraction_removed_above=0.4,
+                    fraction_removed_below=0.1,
+                    fraction_transferred_above=0.2,
+                    fraction_transferred_below=0.3,
+                ),
+            ]
+        )
         path = tmp_path / "events.in"
         seq.to_file(path)
         seq2 = EventSequence.from_file(path)

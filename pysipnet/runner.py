@@ -41,7 +41,7 @@ from __future__ import annotations
 import subprocess
 import tempfile
 import uuid
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -54,7 +54,7 @@ if TYPE_CHECKING:
 _DEFAULT_CACHE_DIR = Path(__file__).parent.parent / ".sipnet_cache"
 
 
-class ModelPreset(str, Enum):
+class ModelPreset(StrEnum):
     """Named SIPNET v1 binary presets.
 
     Each preset corresponds to a fixed set of compile-time flags (see
@@ -202,10 +202,7 @@ class SIPNETRunner:
             else:
                 events_flag = "0"
 
-            (workdir / "sipnet.in").write_text(
-                f"fileName = sipnet\n"
-                f"EVENTS = {events_flag}\n"
-            )
+            (workdir / "sipnet.in").write_text(f"fileName = sipnet\nEVENTS = {events_flag}\n")
 
             proc = subprocess.run(
                 [str(self.binary_path)],

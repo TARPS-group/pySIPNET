@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pandas as pd
 
 if TYPE_CHECKING:
-    from pysipnet.parameters.v1 import ModelFlagsV1, SIPNETParametersV1
     from pysipnet.climate import ClimateDrivers
+    from pysipnet.parameters.v1 import ModelFlagsV1, SIPNETParametersV1
 
 
 @dataclass
@@ -104,9 +104,7 @@ class SIPNETResult:
                 "xarray is required for SIPNETResult.to_xarray(). "
                 "Install with: pip install pysipnet[xarray]"
             ) from exc
-        return xr.Dataset.from_dataframe(
-            self.timeseries.set_index(["year", "day", "time"])
-        )
+        return xr.Dataset.from_dataframe(self.timeseries.set_index(["year", "day", "time"]))
 
     def nee(self) -> pd.Series:
         """Net ecosystem exchange time series (g C m⁻² per timestep, + = to atmosphere)."""
