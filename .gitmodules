@@ -1,0 +1,3 @@
+[submodule "sipnet"]
+	path = sipnet
+	url = https://github.com/PecanProject/sipnet

@@ -1,6 +1,28 @@
 # Project-specific files and directories
 data/
 
+# Claude Code memory (local only, contains personal context)
+memory/
+
+# Compiled SIPNET binaries cache
+.sipnet_cache/
+
+# uv
+.venv/
+uv.lock
+
+# MkDocs build output
+site/
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# mypy / ruff caches
+.mypy_cache/
+.ruff_cache/
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
