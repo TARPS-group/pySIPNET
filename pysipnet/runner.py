@@ -157,6 +157,15 @@ class SIPNETRunner:
         and parses the output.  The working directory is deleted on success
         unless ``keep_workdir=True``.
 
+        Working directory
+        -----------------
+        The working directory is ``<workdir_base>/sipnet_<run_id>/``.  It is
+        created with ``exist_ok=True``, so re-using the same ``run_id`` simply
+        overwrites the previous run's input files (SIPNET then overwrites the
+        output file).  This is safe but means the old outputs are not
+        recoverable — use distinct ``run_id`` values if you need to compare
+        runs.
+
         Parameters
         ----------
         parameters:
@@ -167,7 +176,8 @@ class SIPNETRunner:
             Meteorological forcing.
         run_id:
             Optional identifier for the working directory name.  Defaults to
-            a random UUID hex string.
+            a random UUID hex string.  If the directory already exists it is
+            reused and its contents overwritten.
         events:
             Optional :class:`~pysipnet.events.EventSequence`.  When provided,
             the sequence is written to ``events.in`` in the working directory
