@@ -87,10 +87,15 @@ class SIPNETResult:
             flags=flags,
         )
 
-    def to_xarray(self):  # type: ignore[return]
+    def to_xarray(self):
         """Convert ``timeseries`` to an :class:`xarray.Dataset`.
 
-        Requires the optional ``xarray`` dependency.
+        The returned Dataset uses ``(year, day, time)`` as a multi-level
+        index so they appear as coordinates rather than data variables.
+
+        Requires the optional ``xarray`` dependency::
+
+            pip install pysipnet[xarray]
         """
         try:
             import xarray as xr
@@ -99,7 +104,9 @@ class SIPNETResult:
                 "xarray is required for SIPNETResult.to_xarray(). "
                 "Install with: pip install pysipnet[xarray]"
             ) from exc
-        raise NotImplementedError
+        return xr.Dataset.from_dataframe(
+            self.timeseries.set_index(["year", "day", "time"])
+        )
 
     def nee(self) -> pd.Series:
         """Net ecosystem exchange time series (g C m⁻² per timestep, + = to atmosphere)."""

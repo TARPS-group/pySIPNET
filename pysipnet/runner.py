@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pysipnet.climate import ClimateDrivers
+    from pysipnet.events import EventSequence
     from pysipnet.parameters.v1 import ModelFlagsV1, SIPNETParametersV1
     from pysipnet.result import SIPNETResult
 
@@ -148,7 +149,7 @@ class SIPNETRunner:
         climate: ClimateDrivers,
         *,
         run_id: str | None = None,
-        events=None,
+        events: EventSequence | None = None,
     ) -> SIPNETResult:
         """Execute SIPNET and return a parsed result.
 
@@ -168,8 +169,9 @@ class SIPNETRunner:
             Optional identifier for the working directory name.  Defaults to
             a random UUID hex string.
         events:
-            Optional :class:`~pysipnet.events.EventSequence` (not yet
-            implemented).
+            Optional :class:`~pysipnet.events.EventSequence`.  When provided,
+            the sequence is written to ``events.in`` in the working directory
+            and SIPNET is run with ``EVENTS = 1``.
 
         Returns
         -------
@@ -193,9 +195,16 @@ class SIPNETRunner:
         try:
             write_param_file(parameters, flags, workdir / "sipnet.param")
             write_clim_file(climate, workdir / "sipnet.clim")
+
+            if events is not None:
+                events.to_file(workdir / "events.in")
+                events_flag = "1"
+            else:
+                events_flag = "0"
+
             (workdir / "sipnet.in").write_text(
-                "fileName = sipnet\n"
-                "EVENTS = 0\n"
+                f"fileName = sipnet\n"
+                f"EVENTS = {events_flag}\n"
             )
 
             proc = subprocess.run(
