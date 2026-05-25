@@ -1,6 +1,6 @@
 # pySIPNET
 
-A clean, well-documented Python interface to [SIPNET](https://github.com/PecanProject/sipnet) — the Simplified Photosynthesis and Evapotranspiration Model.
+A Python interface to [SIPNET](https://github.com/PecanProject/sipnet) — the Simplified Photosynthesis and Evapotranspiration Model.
 
 ## What is SIPNET?
 
@@ -10,16 +10,17 @@ SIPNET is a lightweight process-based terrestrial carbon and water flux model.  
 
 pySIPNET provides:
 
-- **Typed, hierarchical parameter models** — every parameter carries its units, domain (for calibration), and a description.  No ambiguous positional data structures.
+- **Typed, hierarchical parameter models** — every parameter carries its units, domain, and a description.
 - **Validated climate drivers** — the forcing data structure catches format errors before SIPNET does.
 - **Isolated run execution** — each run gets a fresh working directory; runs never share state.
 - **Clean output** — SIPNET output is parsed into a labelled DataFrame.
 
-pySIPNET is **independent of PEcAn**.  It makes no assumptions about PEcAn conventions, file layouts, or data formats.
+While the SIPNET model is often utilized within the [PEcAN](https://github.com/pecanproject) ecosystem, pySIPNET is **independent of PEcAn**.  
+It makes no assumptions about PEcAn conventions, file layouts, or data formats.
 
 ## What pySIPNET is NOT
 
-pySIPNET does not include an ensemble runner.  The single-run interface is designed to be composed by external tools suited to the target compute environment (see [Design](design.md) for recommendations).
+pySIPNET does not include an ensemble runner.  The single-run interface is designed to be composed by external tools suited to the target compute environment.
 
 ## Quick example
 
