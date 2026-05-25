@@ -8,7 +8,7 @@ of PEcAn, directly wrapping the SIPNET model executable.
 
 ## Features
 
-- Typed, hierarchical parameter models with units and calibration metadata on every field
+- Typed, hierarchical parameter models with units and metadata on every field
 - Validated climate driver container (SIPNET v1 and v2 format support)
 - Isolated run execution — each run gets its own working directory, enabling trivial parallelism
 - Clean output as labelled DataFrames
