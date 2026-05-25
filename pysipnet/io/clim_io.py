@@ -97,7 +97,25 @@ def _write_v1(climate: ClimateDrivers, path: Path) -> None:
 
 
 def _write_v2(climate: ClimateDrivers, path: Path) -> None:
-    raise NotImplementedError
+    df = climate.data
+    rows: list[str] = []
+    for _, row in df.iterrows():
+        parts = [
+            str(int(row["year"])),
+            str(int(row["day"])),
+            f"{row['time']:.6g}",
+            f"{row['length']:.6g}",
+            f"{row['tair']:.6g}",
+            f"{row['tsoil']:.6g}",
+            f"{row['par']:.10g}",
+            f"{row['precip']:.6g}",
+            f"{row['vpd']:.6g}",
+            f"{row['vpd_soil']:.6g}",
+            f"{row['vpress']:.6g}",
+            f"{row['wspd']:.6g}",
+        ]
+        rows.append(" ".join(parts))
+    path.write_text("\n".join(rows) + "\n")
 
 
 def _read_v1(path: Path) -> ClimateDrivers:
@@ -119,4 +137,15 @@ def _read_v1(path: Path) -> ClimateDrivers:
 
 
 def _read_v2(path: Path) -> ClimateDrivers:
-    raise NotImplementedError
+    raw = pd.read_csv(path, sep=r"\s+", header=None, dtype=float)
+    n_cols = raw.shape[1]
+    if n_cols != 12:
+        raise ValueError(
+            f"Expected 12 columns in v2 climate file, got {n_cols}. "
+            "Ensure the file is in SIPNET v2 format."
+        )
+    data = raw.copy()
+    data.columns = CLIM_COLUMNS_V1  # type: ignore[assignment]
+    for col in ("year", "day"):
+        data[col] = data[col].astype(int)
+    return ClimateDrivers.from_dataframe(data, version="v2")
