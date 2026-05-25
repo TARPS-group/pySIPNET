@@ -1,16 +1,17 @@
 # pySIPNET
 
-A clean, well-documented Python interface to [SIPNET](https://github.com/PecanProject/sipnet) — the Simplified Photosynthesis and Evapotranspiration Model.
+A Python interface to [SIPNET](https://github.com/PecanProject/sipnet) — the Simplified Photosynthesis and Evapotranspiration Model.
+An existing SIPNET interface exists within the [PEcAn](https://github.com/pecanproject) ecosystem. In contrast, pySIPNET is independent
+of PEcAn, directly wrapping the SIPNET model executable.
 
 **Status:** Early development (v0.1.0.dev0).  The parameter and climate data models are implemented; the IO layer and runner are stubs.
 
 ## Features
 
 - Typed, hierarchical parameter models with units and calibration metadata on every field
-- Validated climate driver container (v1 and v2 format support)
+- Validated climate driver container (SIPNET v1 and v2 format support)
 - Isolated run execution — each run gets its own working directory, enabling trivial parallelism
 - Clean output as labelled DataFrames
-- Independent of PEcAn
 
 ## Requirements
 
