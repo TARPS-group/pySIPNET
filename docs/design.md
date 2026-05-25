@@ -34,7 +34,7 @@ Every parameter field carries its units via a [`ParameterSpec`][pysipnet.paramet
 
 When the physical unit does not fully capture the substance (e.g., "grams of *carbon*" vs. generic "grams"), the `constituent` field on `ParameterSpec` provides the qualifier (`"C"`, `"N"`, `"CO2 g-1 leaf"`).
 
-### 3. Documented parameter domains (for calibration)
+### 3. Documented parameter domains
 
 Every parameter has a [`ParameterDomain`][pysipnet.parameters.base.ParameterDomain] that encodes its mathematical support:
 
@@ -46,7 +46,7 @@ Every parameter has a [`ParameterDomain`][pysipnet.parameters.base.ParameterDoma
 | `UNIT_INTERVAL` | [0, 1] | logistic / sigmoid |
 | `OPEN_UNIT_INTERVAL` | (0, 1) | logit |
 
-Retrieve domains programmatically for building bijector maps:
+Retrieve domains programmatically:
 
 ```python
 from pysipnet.parameters.base import get_parameter_specs, ParameterDomain
@@ -55,6 +55,8 @@ from pysipnet.parameters.v1 import SIPNETParametersV1
 specs = get_parameter_specs(SIPNETParametersV1)
 log_params = [k for k, s in specs.items() if s.domain == ParameterDomain.POSITIVE]
 ```
+
+This is useful, for example, to map parameters to an unconstrained domain for parameter estimation tasks. 
 
 ### 4. Fully serialisable run specification
 
