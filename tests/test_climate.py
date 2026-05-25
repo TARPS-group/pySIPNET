@@ -234,3 +234,43 @@ class TestFileIO:
         path.write_text("1 2 3 4 5\n6 7 8 9 10\n")
         with pytest.raises(ValueError, match="Expected 13 or 14 columns"):
             ClimateDrivers.from_file(path, version="v1")
+
+    def test_roundtrip_v2(self, tmp_path):
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=7), version="v2")
+        path = tmp_path / "test_v2.clim"
+        cd.to_file(path)
+        cd2 = ClimateDrivers.from_file(path, version="v2")
+        pd.testing.assert_frame_equal(
+            cd.data.reset_index(drop=True),
+            cd2.data.reset_index(drop=True),
+            check_exact=False,
+            rtol=1e-5,
+        )
+
+    def test_v2_file_has_12_columns(self, tmp_path):
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=3), version="v2")
+        path = tmp_path / "test_v2.clim"
+        cd.to_file(path)
+        first_line = path.read_text().splitlines()[0]
+        assert len(first_line.split()) == 12
+
+    def test_v2_file_starts_with_year(self, tmp_path):
+        """v2 has no loc column — first token is year."""
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=3, year=2021), version="v2")
+        path = tmp_path / "test_v2.clim"
+        cd.to_file(path)
+        first_line = path.read_text().splitlines()[0]
+        assert first_line.split()[0] == "2021"
+
+    def test_v2_from_file_wrong_column_count_raises(self, tmp_path):
+        path = tmp_path / "bad_v2.clim"
+        path.write_text("1 2 3 4 5\n6 7 8 9 10\n")
+        with pytest.raises(ValueError, match="Expected 12 columns"):
+            ClimateDrivers.from_file(path, version="v2")
+
+    def test_v2_version_preserved_after_roundtrip(self, tmp_path):
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=5), version="v2")
+        path = tmp_path / "test_v2.clim"
+        cd.to_file(path)
+        cd2 = ClimateDrivers.from_file(path, version="v2")
+        assert cd2.version == "v2"
