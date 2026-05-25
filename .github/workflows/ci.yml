@@ -56,7 +56,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .sipnet_cache/
-          key: sipnet-${{ runner.os }}-${{ hashFiles('sipnet/.git/HEAD', 'sipnet/src/**/*.c', 'sipnet/src/**/*.h', 'patches/apply_flags_patch.py', 'Makefile') }}
+          key: sipnet-${{ runner.os }}-${{ hashFiles('.git/modules/sipnet/HEAD', 'sipnet/src/**/*.c', 'sipnet/src/**/*.h', 'patches/apply_flags_patch.py', 'Makefile') }}
 
       - name: Build SIPNET binaries
         if: steps.cache-sipnet.outputs.cache-hit != 'true'
