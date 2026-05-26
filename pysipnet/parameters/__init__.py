@@ -13,6 +13,7 @@ from pysipnet.parameters.v1 import (
     PhenologyParams,
     PhotosynthesisParams,
     RespirationParams,
+    SIPNET_PARAM_GROUPS,
     SIPNETParametersV1,
     WaterParams,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "PhenologyParams",
     "PhotosynthesisParams",
     "RespirationParams",
+    "SIPNET_PARAM_GROUPS",
     "SIPNETParametersV1",
     "WaterParams",
 ]

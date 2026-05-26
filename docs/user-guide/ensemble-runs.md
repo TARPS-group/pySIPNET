@@ -6,10 +6,11 @@ assumes you are comfortable with the single-run interface covered in
 [Running a Model](running-a-model.md).
 
 !!! note "Optional dependency"
-    Ensemble running requires the `pyens` package.  Install it with:
+    Ensemble running requires the `pyens` package, which is not yet on PyPI.
+    Install it from source:
 
     ```bash
-    pip install pysipnet[ensemble]
+    pip install git+https://github.com/arob5/PyEns.git
     ```
 
 ---
@@ -38,27 +39,26 @@ Completed runs are lost unless you write extra error-handling code.
 **Parallelism.** Switching from a serial loop to multiprocessing or an HPC
 cluster requires rewriting the loop.
 
-PyEns solves all three.  pySIPNET's `ensemble` module connects the two
-packages with a single adapter class: `SIPNETModel`.
+PyEns solves all three.  Because `SIPNETModel` is already a plain
+``(**kwargs) → SIPNETResult`` callable, passing it to `EnsembleRunner`
+requires no adapter or glue code.
 
 ---
 
-## SIPNETModel
+## SIPNETModel as the PyEns entry point
 
-`SIPNETModel` wraps a `SIPNETRunner` so it can be used as a PyEns model
-callable.  You give it a runner and a *baseline* parameter set; each ensemble
-run receives a dict of overrides that are applied on top of the baseline.
+`SIPNETModel` is a core part of pySIPNET — no PyEns import needed to
+construct one.  You give it a runner and a *baseline* parameter set; each
+call applies a dict of overrides on top of that baseline:
 
 ```python
-from pysipnet import SIPNETRunner, ModelPreset, ClimateDrivers
-from pysipnet.ensemble import SIPNETModel
+from pysipnet import SIPNETRunner, ModelPreset, SIPNETModel
 
 runner = SIPNETRunner(preset=ModelPreset.STANDARD)
 model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 ```
 
-Once constructed, `model` behaves like any Python callable.  You can call it
-directly to verify it works before handing it to PyEns:
+You can call it directly to verify it works before handing it to PyEns:
 
 ```python
 result = model(a_max=112.0, base_veg_resp=0.02)
@@ -67,7 +67,7 @@ print(result.outputs[["nee", "gpp"]].sum())
 
 Any SIPNET v1 parameter name can be passed as a keyword argument.  The
 reserved names `climate` and `events` pass a `ClimateDrivers` or
-`EventSequence` object through to the runner directly.
+`EventSequence` directly through to the runner.
 
 ---
 
@@ -138,7 +138,8 @@ multiple ensemble members.
 import numpy as np
 from pyens import Axis, EnsembleSpec, Fixed, EnsembleRunner
 from pyens.backends import LocalBackend
-from pysipnet.ensemble import SIPNETModel, sipnet_site_fields, sipnet_member_fields
+from pysipnet import SIPNETModel
+from pysipnet.ensemble import sipnet_site_fields, sipnet_member_fields
 
 # ── Data ──────────────────────────────────────────────────────────────────────
 clim_hf = ClimateDrivers.from_file("data/harvard_forest.clim", version="v1")
