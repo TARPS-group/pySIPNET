@@ -28,7 +28,6 @@ dependencies = [
 [project.optional-dependencies]
 xarray = ["xarray>=2023.0"]
 viz = ["plotly>=5.3"]
-ensemble = ["pyens>=0.1"]
 examples = ["matplotlib>=3.7", "jupyter>=1.0", "nbformat>=4.2.0"]
 
 [dependency-groups]
@@ -75,5 +74,3 @@ markers = [
     "slow: takes more than a few seconds",
 ]
 
-[tool.uv.sources]
-pyens = { path = "../pyens" }
