@@ -49,7 +49,7 @@ from pysipnet.events import (
 from pysipnet.model import SIPNETModel
 
 # Parameters (top-level groups available via pysipnet.parameters)
-from pysipnet.parameters.v1 import SIPNET_PARAM_GROUPS, ModelFlagsV1, SIPNETParametersV1
+from pysipnet.parameters.v1 import SIPNET_PARAMS_BY_GROUP, ModelFlagsV1, SIPNETParametersV1
 
 # Results
 from pysipnet.result import RunProvenance, SIPNETResult
@@ -72,7 +72,7 @@ __all__ = [
     # Parameters
     "SIPNETParametersV1",
     "ModelFlagsV1",
-    "SIPNET_PARAM_GROUPS",
+    "SIPNET_PARAMS_BY_GROUP",
     # Climate
     "ClimateDrivers",
     # Events

@@ -358,27 +358,27 @@ preset2 = ModelPreset(config2["preset"])
 
 ## Querying parameter metadata
 
-### SIPNET_PARAM_GROUPS
+### SIPNET_PARAMS_BY_GROUP
 
-`SIPNET_PARAM_GROUPS` maps each group name to the list of parameter names in
+`SIPNET_PARAMS_BY_GROUP` maps each group name to the list of parameter names in
 that group.  It is useful for discovering available parameters and for
 building calibration tooling:
 
 ```python
-from pysipnet import SIPNET_PARAM_GROUPS
+from pysipnet import SIPNET_PARAMS_BY_GROUP
 
 # What parameters are in the photosynthesis group?
-SIPNET_PARAM_GROUPS["photosynthesis"]
+SIPNET_PARAMS_BY_GROUP["photosynthesis"]
 # ['a_max', 'a_max_frac', 'base_fol_resp_frac', 'psn_t_min', 'psn_t_opt',
 #  'd_vpd_slope', 'd_vpd_exp', 'half_sat_par', 'attenuation']
 
 # All groups
-list(SIPNET_PARAM_GROUPS.keys())
+list(SIPNET_PARAMS_BY_GROUP.keys())
 # ['initial_conditions', 'photosynthesis', 'phenology', 'respiration',
 #  'allocation', 'water', 'leaf']
 
 # Total parameter count
-sum(len(ps) for ps in SIPNET_PARAM_GROUPS.values())  # 61
+sum(len(ps) for ps in SIPNET_PARAMS_BY_GROUP.values())  # 61
 ```
 
 ### get_parameter_specs

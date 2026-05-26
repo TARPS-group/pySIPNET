@@ -753,7 +753,7 @@ def _build_param_groups() -> dict[str, list[str]]:
     return groups
 
 
-SIPNET_PARAM_GROUPS: dict[str, list[str]] = _build_param_groups()
+SIPNET_PARAMS_BY_GROUP: dict[str, list[str]] = _build_param_groups()
 """Mapping from parameter group name to the list of field names in that group.
 
 Built once at module import time by inspecting :class:`SIPNETParametersV1`.
@@ -790,12 +790,12 @@ Examples
 --------
 List all photosynthesis parameter names::
 
-    from pysipnet.parameters import SIPNET_PARAM_GROUPS
-    SIPNET_PARAM_GROUPS["photosynthesis"]
+    from pysipnet.parameters import SIPNET_PARAMS_BY_GROUP
+    SIPNET_PARAMS_BY_GROUP["photosynthesis"]
     # ['a_max', 'a_max_frac', 'base_fol_resp_frac', ...]
 
 Check which group a parameter belongs to::
 
-    group = next(g for g, ps in SIPNET_PARAM_GROUPS.items() if "a_max" in ps)
+    group = next(g for g, ps in SIPNET_PARAMS_BY_GROUP.items() if "a_max" in ps)
     # 'photosynthesis'
 """

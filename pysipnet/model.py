@@ -13,7 +13,7 @@ and exposes a single ``__call__`` interface::
     result_both      = model(a_max=120.0, climate=other_climate)
 
 Any SIPNET v1 parameter name (see
-:data:`~pysipnet.parameters.SIPNET_PARAM_GROUPS`) can be passed as a keyword
+:data:`~pysipnet.parameters.SIPNET_PARAMS_BY_GROUP`) can be passed as a keyword
 argument to override the baseline value for that run.  The reserved names
 ``climate`` and ``events`` pass a
 :class:`~pysipnet.climate.ClimateDrivers` or
@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from pysipnet.parameters.v1 import SIPNET_PARAM_GROUPS
+from pysipnet.parameters.v1 import SIPNET_PARAMS_BY_GROUP
 
 if TYPE_CHECKING:
     from pysipnet.climate import ClimateDrivers
@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 # Flat param-name → group-name reverse lookup, derived from the public constant
 # so the two are always in sync.
 _PARAM_GROUP: dict[str, str] = {
-    param: group for group, params in SIPNET_PARAM_GROUPS.items() for param in params
+    param: group for group, params in SIPNET_PARAMS_BY_GROUP.items() for param in params
 }
 
 _RESERVED_FIELDS: frozenset[str] = frozenset({"climate", "events"})
@@ -190,7 +190,7 @@ class SIPNETModel:
         **param_overrides:
             Parameter values to override for this run.  Each key must be a
             valid SIPNET v1 parameter name (see
-            :data:`~pysipnet.parameters.SIPNET_PARAM_GROUPS`).
+            :data:`~pysipnet.parameters.SIPNET_PARAMS_BY_GROUP`).
             Unrecognised keys raise :class:`ValueError` immediately.
 
         Returns
@@ -211,7 +211,7 @@ class SIPNETModel:
         if unknown:
             raise ValueError(
                 f"SIPNETModel: unrecognised parameter name(s): {sorted(unknown)}. "
-                "Use a name from pysipnet.parameters.SIPNET_PARAM_GROUPS, "
+                "Use a name from pysipnet.parameters.SIPNET_PARAMS_BY_GROUP, "
                 "or climate= / events= for non-parameter inputs."
             )
 
