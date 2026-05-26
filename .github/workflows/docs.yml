@@ -1,0 +1,63 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Allow the deploy job to push to gh-pages.
+permissions:
+  contents: write
+
+jobs:
+  # ── Build (all PRs and pushes) ─────────────────────────────────────────────
+  build:
+    name: Build docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history lets mkdocs gh-deploy set last-modified dates.
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dev dependencies
+        run: uv sync --all-groups
+
+      - name: Build (strict)
+        # --strict turns warnings into errors so broken nav links are caught
+        # in CI.  The build artefact is written to site/ but not uploaded;
+        # the deploy job re-builds from a clean checkout.
+        run: uv run mkdocs build --strict
+
+  # ── Deploy (main branch only) ──────────────────────────────────────────────
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dev dependencies
+        run: uv sync --all-groups
+
+      - name: Configure git identity for gh-deploy
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Deploy
+        run: uv run mkdocs gh-deploy --force

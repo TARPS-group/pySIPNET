@@ -28,15 +28,30 @@ git submodule update --init sipnet/
 Using [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv sync                    # installs runtime + dev dependencies
-uv sync --extra xarray     # also install xarray for Dataset output
+uv sync                              # installs runtime + dev dependencies
+uv sync --extra xarray               # + xarray for Dataset output
+uv sync --extra viz                  # + plotly for the result dashboard
+uv sync --extra ensemble             # + pyens for ensemble runs
 ```
 
 Using pip:
 
 ```bash
-pip install -e ".[xarray]"
+pip install -e "."                   # runtime only
+pip install -e ".[xarray]"          # + xarray
+pip install -e ".[viz]"             # + plotly
+pip install -e ".[ensemble]"        # + pyens
+pip install -e ".[xarray,viz,ensemble]"  # all optional extras
 ```
+
+### Optional extras
+
+| Extra | Package | When you need it |
+|:------|:--------|:-----------------|
+| `xarray` | `xarray>=2023.0` | `SIPNETResult.to_xarray()` |
+| `viz` | `plotly>=5.3` | `pysipnet.viz.dashboard()` |
+| `ensemble` | `pyens>=0.1` | `pysipnet.ensemble.SIPNETModel` |
+| `examples` | matplotlib, jupyter | Running the example notebooks |
 
 ## 3. Build the SIPNET binary
 
