@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pandas as pd
 import pytest
 
@@ -9,10 +11,8 @@ plotly = pytest.importorskip("plotly")
 
 
 def _make_result(include_litter: bool = False):
-    """Return a minimal SIPNETResult with synthetic timeseries and climate."""
-    from unittest.mock import MagicMock
-
-    from pysipnet.result import SIPNETResult
+    """Return a minimal SIPNETResult with synthetic outputs and climate."""
+    from pysipnet.result import RunProvenance, SIPNETResult
 
     n = 10
     ts_cols = {
@@ -54,11 +54,13 @@ def _make_result(include_litter: bool = False):
 
     climate = ClimateDrivers.from_dataframe(pd.DataFrame(clim_cols))
 
+    provenance = MagicMock(spec=RunProvenance)
+    provenance.returncode = 0
+
     result = MagicMock(spec=SIPNETResult)
-    result.timeseries = ts
+    result.outputs = ts
     result.climate = climate
-    result.success = True
-    result.returncode = 0
+    result.provenance = provenance
     return result
 
 
@@ -72,11 +74,14 @@ class TestDashboard:
         assert isinstance(fig, Figure)
 
     def test_has_four_row_layout(self):
+        import plotly.graph_objects as go
+
         from pysipnet.viz import dashboard
 
         fig = dashboard(_make_result())
-        # Multiple y-axes means traces are distributed across rows.
-        y_axes = {trace.yaxis for trace in fig.data}
+        # Table traces don't live on cartesian axes; filter to Scatter only.
+        scatter = [t for t in fig.data if isinstance(t, go.Scatter)]
+        y_axes = {t.yaxis for t in scatter}
         assert len(y_axes) > 1
 
     def test_flux_traces_present(self):
@@ -93,7 +98,7 @@ class TestDashboard:
 
         fig = dashboard(_make_result())
         names = {t.name for t in fig.data}
-        assert "Plant Wood C" in names
+        assert "Wood C (stem)" in names
         assert "Soil C" in names
 
     def test_missing_column_skipped(self):
@@ -125,15 +130,16 @@ class TestDashboard:
         names = {t.name for t in fig.data}
         assert "Cumulative NEE" in names
 
-    def test_empty_timeseries_raises(self):
-        from unittest.mock import MagicMock
-
+    def test_empty_outputs_raises(self):
         from pysipnet.climate import ClimateDrivers
-        from pysipnet.result import SIPNETResult
+        from pysipnet.result import RunProvenance, SIPNETResult
         from pysipnet.viz import dashboard
 
+        provenance = MagicMock(spec=RunProvenance)
+        provenance.returncode = 1
+
         result = MagicMock(spec=SIPNETResult)
-        result.timeseries = pd.DataFrame()
+        result.outputs = pd.DataFrame()
         result.climate = ClimateDrivers.from_dataframe(
             pd.DataFrame(
                 {
@@ -152,7 +158,7 @@ class TestDashboard:
                 }
             )
         )
-        result.returncode = 1
+        result.provenance = provenance
 
         with pytest.raises(ValueError, match="empty"):
             dashboard(result)

@@ -19,7 +19,7 @@ Dask, Parsl, Ray, etc.)::
         from pysipnet.climate import ClimateDrivers
         params  = SIPNETParametersV1.model_validate(config_dict["params"])
         climate = ClimateDrivers.from_dataframe(pd.DataFrame(config_dict["climate"]))
-        return runner.run(params, climate).timeseries.to_dict()
+        return runner.run(params, climate).outputs.to_dict()
 
     with ProcessPoolExecutor() as pool:
         results = list(pool.map(run_one, ensemble_configs))
@@ -193,7 +193,7 @@ class SIPNETRunner:
 
         from pysipnet.io.clim_io import write_clim_file
         from pysipnet.io.param_io import write_param_file
-        from pysipnet.result import SIPNETResult
+        from pysipnet.result import RunProvenance, SIPNETResult
 
         self._check_binary()
         flags = self.preset.flags
@@ -222,14 +222,22 @@ class SIPNETRunner:
                 timeout=self.timeout,
             )
 
-            result = SIPNETResult.from_workdir(
+            provenance = RunProvenance(
+                preset=self.preset,
+                binary_path=self.binary_path,
+                run_id=run_id,
                 workdir=workdir,
+                returncode=proc.returncode,
+                success=(proc.returncode == 0),
+                stdout=proc.stdout,
+                stderr=proc.stderr,
+            )
+
+            result = SIPNETResult.from_workdir(
                 parameters=parameters,
                 climate=climate,
                 flags=flags,
-                returncode=proc.returncode,
-                stdout=proc.stdout,
-                stderr=proc.stderr,
+                provenance=provenance,
             )
         finally:
             if not self.keep_workdir:

@@ -1,6 +1,12 @@
 # Project-specific files and directories
 data/
 
+# macOS metadata
+.DS_Store
+
+# Generated Plotly HTML exports (created by fig.write_html)
+examples/dashboard.html
+
 # Claude Code memory (local only, contains personal context)
 memory/
 
