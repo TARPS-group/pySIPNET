@@ -6,6 +6,7 @@ The top-level imports expose the v1 API directly for convenience::
 """
 
 from pysipnet.parameters.v1 import (
+    SIPNET_PARAM_GROUPS,
     AllocationParams,
     InitialConditions,
     LeafPhysiologyParams,
@@ -13,7 +14,6 @@ from pysipnet.parameters.v1 import (
     PhenologyParams,
     PhotosynthesisParams,
     RespirationParams,
-    SIPNET_PARAM_GROUPS,
     SIPNETParametersV1,
     WaterParams,
 )
