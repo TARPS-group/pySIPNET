@@ -19,7 +19,7 @@ Dask, Parsl, Ray, etc.)::
         from pysipnet.climate import ClimateDrivers
         params  = SIPNETParametersV1.model_validate(config_dict["params"])
         climate = ClimateDrivers.from_dataframe(pd.DataFrame(config_dict["climate"]))
-        return runner.run(params, climate).timeseries.to_dict()
+        return runner.run(params, climate).outputs.to_dict()
 
     with ProcessPoolExecutor() as pool:
         results = list(pool.map(run_one, ensemble_configs))
@@ -157,6 +157,15 @@ class SIPNETRunner:
         and parses the output.  The working directory is deleted on success
         unless ``keep_workdir=True``.
 
+        Working directory
+        -----------------
+        The working directory is ``<workdir_base>/sipnet_<run_id>/``.  It is
+        created with ``exist_ok=True``, so re-using the same ``run_id`` simply
+        overwrites the previous run's input files (SIPNET then overwrites the
+        output file).  This is safe but means the old outputs are not
+        recoverable — use distinct ``run_id`` values if you need to compare
+        runs.
+
         Parameters
         ----------
         parameters:
@@ -167,7 +176,8 @@ class SIPNETRunner:
             Meteorological forcing.
         run_id:
             Optional identifier for the working directory name.  Defaults to
-            a random UUID hex string.
+            a random UUID hex string.  If the directory already exists it is
+            reused and its contents overwritten.
         events:
             Optional :class:`~pysipnet.events.EventSequence`.  When provided,
             the sequence is written to ``events.in`` in the working directory
@@ -183,7 +193,7 @@ class SIPNETRunner:
 
         from pysipnet.io.clim_io import write_clim_file
         from pysipnet.io.param_io import write_param_file
-        from pysipnet.result import SIPNETResult
+        from pysipnet.result import RunProvenance, SIPNETResult
 
         self._check_binary()
         flags = self.preset.flags
@@ -212,14 +222,22 @@ class SIPNETRunner:
                 timeout=self.timeout,
             )
 
-            result = SIPNETResult.from_workdir(
+            provenance = RunProvenance(
+                preset=self.preset,
+                binary_path=self.binary_path,
+                run_id=run_id,
                 workdir=workdir,
+                returncode=proc.returncode,
+                success=(proc.returncode == 0),
+                stdout=proc.stdout,
+                stderr=proc.stderr,
+            )
+
+            result = SIPNETResult.from_workdir(
                 parameters=parameters,
                 climate=climate,
                 flags=flags,
-                returncode=proc.returncode,
-                stdout=proc.stdout,
-                stderr=proc.stderr,
+                provenance=provenance,
             )
         finally:
             if not self.keep_workdir:

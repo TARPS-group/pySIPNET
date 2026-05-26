@@ -66,9 +66,9 @@ class TestEndToEnd:
         climate = _make_climate()
         result = runner.run(minimal_params, climate)
 
-        assert result.success, (
-            f"SIPNET exited with code {result.returncode}\n"
-            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        assert result.provenance.success, (
+            f"SIPNET exited with code {result.provenance.returncode}\n"
+            f"stdout: {result.provenance.stdout}\nstderr: {result.provenance.stderr}"
         )
 
     def test_output_shape(self, minimal_params):
@@ -76,33 +76,33 @@ class TestEndToEnd:
         climate = _make_climate(n_days=30)
         result = runner.run(minimal_params, climate)
 
-        assert result.success
-        assert len(result.timeseries) == 30
-        assert result.timeseries.shape[1] > 10
+        assert result.provenance.success
+        assert len(result.outputs) == 30
+        assert result.outputs.shape[1] > 10
 
     def test_key_columns_present(self, minimal_params):
         runner = SIPNETRunner(preset=ModelPreset.STANDARD)
         climate = _make_climate()
         result = runner.run(minimal_params, climate)
 
-        assert result.success
+        assert result.provenance.success
         for col in ("nee", "gpp", "npp", "evapotranspiration"):
-            assert col in result.timeseries.columns, f"Missing column: {col}"
+            assert col in result.outputs.columns, f"Missing column: {col}"
 
     def test_no_nans_in_output(self, minimal_params):
         runner = SIPNETRunner(preset=ModelPreset.STANDARD)
         climate = _make_climate()
         result = runner.run(minimal_params, climate)
 
-        assert result.success
-        assert not result.timeseries.isnull().any().any(), "NaN values found in output"
+        assert result.provenance.success
+        assert not result.outputs.isnull().any().any(), "NaN values found in output"
 
     def test_convenience_accessors(self, minimal_params):
         runner = SIPNETRunner(preset=ModelPreset.STANDARD)
         climate = _make_climate()
         result = runner.run(minimal_params, climate)
 
-        assert result.success
+        assert result.provenance.success
         assert len(result.nee()) == 30
         assert len(result.gpp()) == 30
         assert len(result.et()) == 30
@@ -112,7 +112,7 @@ class TestEndToEnd:
         climate = _make_climate()
         result = runner.run(minimal_params, climate)
 
-        assert result.success
+        assert result.provenance.success
         assert (result.gpp() >= 0).all(), "GPP should be non-negative"
 
     def test_carbon_balance_identity(self, minimal_params):
@@ -125,8 +125,8 @@ class TestEndToEnd:
         climate = _make_climate()
         result = runner.run(minimal_params, climate)
 
-        assert result.success
-        ts = result.timeseries
+        assert result.provenance.success
+        ts = result.outputs
         computed_nee = ts["rtot"] - ts["gpp"]
         np.testing.assert_allclose(
             ts["nee"].values,

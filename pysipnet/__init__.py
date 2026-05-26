@@ -13,7 +13,7 @@ Quickstart::
     runner  = SIPNETRunner(preset=ModelPreset.STANDARD)
     result  = runner.run(params, climate)
 
-    print(result.timeseries[["nee", "gpp"]].describe())
+    print(result.outputs[["nee", "gpp"]].describe())
 
 With agronomic events::
 
@@ -48,7 +48,7 @@ from pysipnet.events import (
 from pysipnet.parameters.v1 import ModelFlagsV1, SIPNETParametersV1
 
 # Results
-from pysipnet.result import SIPNETResult
+from pysipnet.result import RunProvenance, SIPNETResult
 from pysipnet.runner import ModelPreset, SIPNETRunner
 
 # Version
@@ -62,6 +62,7 @@ __all__ = [
     "ModelPreset",
     # Results
     "SIPNETResult",
+    "RunProvenance",
     # Parameters
     "SIPNETParametersV1",
     "ModelFlagsV1",
