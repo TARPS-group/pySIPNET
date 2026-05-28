@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from pysipnet.climate import CLIM_COLUMNS_V1, ClimateDrivers
+from pysipnet.runner import ClimateStaging, ModelPreset, SIPNETRunner
 
 
 def _make_df(
@@ -274,3 +275,161 @@ class TestFileIO:
         cd.to_file(path)
         cd2 = ClimateDrivers.from_file(path, version="v2")
         assert cd2.version == "v2"
+
+
+# ---------------------------------------------------------------------------
+# from_path (file-backed / lazy)
+# ---------------------------------------------------------------------------
+
+
+class TestFromPath:
+    def _write(self, tmp_path, n_days=5, **kwargs) -> tuple[ClimateDrivers, Path]:
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=n_days, **kwargs))
+        path = tmp_path / "test.clim"
+        cd.to_file(path)
+        return cd, path
+
+    def test_data_not_loaded_on_construction(self, tmp_path):
+        _, path = self._write(tmp_path)
+        ref = ClimateDrivers.from_path(path)
+        assert ref._data is None
+
+    def test_source_path_stored(self, tmp_path):
+        _, path = self._write(tmp_path)
+        ref = ClimateDrivers.from_path(path)
+        assert ref.source_path == path
+
+    def test_n_timesteps_without_load(self, tmp_path):
+        _, path = self._write(tmp_path, n_days=7)
+        ref = ClimateDrivers.from_path(path)
+        assert ref.n_timesteps == 7
+        assert ref._data is None
+
+    def test_date_range_without_load(self, tmp_path):
+        _, path = self._write(tmp_path, start_doy=100, year=2020)
+        ref = ClimateDrivers.from_path(path)
+        (y0, d0), (y1, d1) = ref.date_range
+        assert (y0, d0) == (2020, 100)
+        assert (y1, d1) == (2020, 104)
+        assert ref._data is None
+
+    def test_data_lazy_loads_on_first_access(self, tmp_path):
+        _, path = self._write(tmp_path)
+        ref = ClimateDrivers.from_path(path)
+        assert ref._data is None
+        _ = ref.data
+        assert ref._data is not None
+
+    def test_data_cached_after_first_access(self, tmp_path):
+        _, path = self._write(tmp_path)
+        ref = ClimateDrivers.from_path(path)
+        df1 = ref.data
+        df2 = ref.data
+        assert df1 is df2
+
+    def test_data_matches_original(self, tmp_path):
+        cd, path = self._write(tmp_path)
+        ref = ClimateDrivers.from_path(path)
+        pd.testing.assert_frame_equal(
+            cd.data.reset_index(drop=True),
+            ref.data.reset_index(drop=True),
+            check_exact=False,
+            rtol=1e-5,
+        )
+
+    def test_file_not_found_raises(self):
+        with pytest.raises(FileNotFoundError, match="not found"):
+            ClimateDrivers.from_path("/nonexistent/path/missing.clim")
+
+    def test_bad_column_count_raises(self, tmp_path):
+        bad = tmp_path / "bad.clim"
+        bad.write_text("1 2 3\n4 5 6\n")
+        with pytest.raises(ValueError, match="columns"):
+            ClimateDrivers.from_path(bad, version="v1")
+
+    def test_version_stored(self, tmp_path):
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=3), version="v1")
+        path = tmp_path / "test.clim"
+        cd.to_file(path)
+        ref = ClimateDrivers.from_path(path, version="v1")
+        assert ref.version == "v1"
+
+    def test_repr_does_not_load_data(self, tmp_path):
+        _, path = self._write(tmp_path, n_days=5, start_doy=100, year=2021)
+        ref = ClimateDrivers.from_path(path)
+        r = repr(ref)
+        assert "ClimateDrivers" in r
+        assert "5" in r
+        assert ref._data is None
+
+
+# ---------------------------------------------------------------------------
+# ClimateStaging (runner file staging logic)
+# ---------------------------------------------------------------------------
+
+
+class TestClimateStaging:
+    def _runner(self, staging: ClimateStaging) -> SIPNETRunner:
+        return SIPNETRunner(preset=ModelPreset.STANDARD, climate_staging=staging)
+
+    def test_in_memory_writes_file(self, tmp_path):
+        runner = self._runner(ClimateStaging.COPY)
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=3))
+        dest = tmp_path / "out.clim"
+        runner._stage_clim_file(cd, dest)
+        assert dest.exists()
+        lines = [ln for ln in dest.read_text().splitlines() if ln.strip()]
+        assert len(lines) == 3
+
+    def test_in_memory_symlink_mode_still_writes(self, tmp_path):
+        runner = self._runner(ClimateStaging.SYMLINK)
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=3))
+        dest = tmp_path / "out.clim"
+        runner._stage_clim_file(cd, dest)
+        assert dest.exists()
+
+    def test_file_backed_copy(self, tmp_path):
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=5))
+        src = tmp_path / "src.clim"
+        cd.to_file(src)
+        ref = ClimateDrivers.from_path(src)
+
+        runner = self._runner(ClimateStaging.COPY)
+        dest = tmp_path / "dest.clim"
+        runner._stage_clim_file(ref, dest)
+
+        assert dest.exists()
+        assert not dest.is_symlink()
+        assert dest.read_text() == src.read_text()
+
+    def test_file_backed_copy_does_not_load_data(self, tmp_path):
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=5))
+        src = tmp_path / "src.clim"
+        cd.to_file(src)
+        ref = ClimateDrivers.from_path(src)
+
+        runner = self._runner(ClimateStaging.COPY)
+        runner._stage_clim_file(ref, tmp_path / "dest.clim")
+        assert ref._data is None
+
+    def test_file_backed_symlink(self, tmp_path):
+        import sys
+
+        if sys.platform == "win32":
+            pytest.skip("Symlinks require elevated privileges on Windows")
+
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=5))
+        src = tmp_path / "src.clim"
+        cd.to_file(src)
+        ref = ClimateDrivers.from_path(src)
+
+        runner = self._runner(ClimateStaging.SYMLINK)
+        dest = tmp_path / "dest.clim"
+        runner._stage_clim_file(ref, dest)
+
+        assert dest.is_symlink()
+        assert dest.resolve() == src.resolve()
+
+    def test_default_staging_is_copy(self):
+        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        assert runner.climate_staging == ClimateStaging.COPY

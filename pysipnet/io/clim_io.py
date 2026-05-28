@@ -55,6 +55,63 @@ def write_clim_file(climate: ClimateDrivers, path: Path) -> None:
         raise ValueError(f"Unknown climate version: {climate.version!r}")
 
 
+def peek_clim_file(
+    path: Path, version: Literal["v1", "v2"] = "v1"
+) -> tuple[int, tuple[int, int], tuple[int, int]]:
+    """Read only the first and last rows of a climate file plus the row count.
+
+    This is a lightweight alternative to a full read, used by
+    :meth:`~pysipnet.climate.ClimateDrivers.from_path` to populate metadata
+    without loading the whole file.
+
+    Parameters
+    ----------
+    path:
+        Path to the ``.clim`` file.
+    version:
+        File format version.
+
+    Returns
+    -------
+    tuple
+        ``(n_rows, (start_year, start_doy), (end_year, end_doy))``.
+    """
+    with path.open() as fh:
+        n_rows = sum(1 for line in fh if line.strip())
+
+    if n_rows == 0:
+        raise ValueError(f"Climate file is empty: {path}")
+
+    first = pd.read_csv(path, sep=r"\s+", header=None, nrows=1, dtype=float)
+    last = pd.read_csv(
+        path, sep=r"\s+", header=None, skiprows=n_rows - 1, nrows=1, dtype=float
+    )
+
+    n_cols = first.shape[1]
+
+    if version == "v1":
+        if n_cols == 14:
+            year_col, day_col = 1, 2
+        elif n_cols == 13:
+            year_col, day_col = 0, 1
+        else:
+            raise ValueError(
+                f"Expected 13 or 14 columns in v1 climate file at {path}, got {n_cols}."
+            )
+    elif version == "v2":
+        if n_cols != 12:
+            raise ValueError(
+                f"Expected 12 columns in v2 climate file at {path}, got {n_cols}."
+            )
+        year_col, day_col = 0, 1
+    else:
+        raise ValueError(f"Unknown climate version: {version!r}")
+
+    start = (int(first.iloc[0, year_col]), int(first.iloc[0, day_col]))
+    end = (int(last.iloc[0, year_col]), int(last.iloc[0, day_col]))
+    return n_rows, start, end
+
+
 def read_clim_file(path: Path, version: Literal["v1", "v2"] = "v1") -> ClimateDrivers:
     """Read a SIPNET climate file.
 
