@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 
 # Flat param-name → group-name reverse lookup, derived from the public constant
 # so the two are always in sync.
-_PARAM_GROUP: dict[str, str] = {
+_PARAM_TO_GROUP: dict[str, str] = {
     param: group for group, params in SIPNET_PARAMS_BY_GROUP.items() for param in params
 }
 
@@ -76,7 +76,7 @@ def _apply_overrides(
         Baseline parameter set to copy and modify.
     overrides:
         Flat ``{param_name: value}`` dict.  All keys must be present in
-        :data:`_PARAM_GROUP`.
+        :data:`_PARAM_TO_GROUP`.
 
     Returns
     -------
@@ -88,7 +88,7 @@ def _apply_overrides(
 
     current = base.model_dump()
     for param_name, value in overrides.items():
-        group = _PARAM_GROUP[param_name]
+        group = _PARAM_TO_GROUP[param_name]
         current[group][param_name] = value
     return SIPNETParametersV1.model_validate(current)
 
@@ -207,7 +207,7 @@ class SIPNETModel:
             If applying the overrides produces an invalid parameter set (e.g.,
             violating the allocation triangle constraint).
         """
-        unknown = {k for k in param_overrides if k not in _PARAM_GROUP}
+        unknown = {k for k in param_overrides if k not in _PARAM_TO_GROUP}
         if unknown:
             raise ValueError(
                 f"SIPNETModel: unrecognised parameter name(s): {sorted(unknown)}. "

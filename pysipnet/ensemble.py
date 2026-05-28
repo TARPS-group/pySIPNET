@@ -38,17 +38,10 @@ except ImportError as _exc:
         "Install it from source: pip install git+https://github.com/arob5/PyEns.git"
     ) from _exc
 
-from pysipnet.parameters.v1 import SIPNET_PARAMS_BY_GROUP
+from pysipnet.model import _PARAM_TO_GROUP, _RESERVED_FIELDS
 
 if TYPE_CHECKING:
     from pysipnet.climate import ClimateDrivers
-
-_RESERVED_FIELDS: frozenset[str] = frozenset({"climate", "events"})
-
-# Flat param → group lookup, derived from the public constant.
-_PARAM_GROUP: dict[str, str] = {
-    param: group for group, params in SIPNET_PARAMS_BY_GROUP.items() for param in params
-}
 
 
 def sipnet_site_fields(
@@ -161,7 +154,7 @@ def _validate_param_names(names: Any, *, context: str) -> None:
             "Pass climates= as a keyword argument to sipnet_site_fields, "
             "not as a site_params entry."
         )
-    unknown = {n for n in names if n not in _PARAM_GROUP}
+    unknown = {n for n in names if n not in _PARAM_TO_GROUP}
     if unknown:
         raise ValueError(
             f"{context}: unrecognised parameter name(s): {sorted(unknown)}. "
