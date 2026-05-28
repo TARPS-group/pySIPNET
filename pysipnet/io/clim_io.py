@@ -83,9 +83,7 @@ def peek_clim_file(
         raise ValueError(f"Climate file is empty: {path}")
 
     first = pd.read_csv(path, sep=r"\s+", header=None, nrows=1, dtype=float)
-    last = pd.read_csv(
-        path, sep=r"\s+", header=None, skiprows=n_rows - 1, nrows=1, dtype=float
-    )
+    last = pd.read_csv(path, sep=r"\s+", header=None, skiprows=n_rows - 1, nrows=1, dtype=float)
 
     n_cols = first.shape[1]
 
@@ -100,9 +98,7 @@ def peek_clim_file(
             )
     elif version == "v2":
         if n_cols != 12:
-            raise ValueError(
-                f"Expected 12 columns in v2 climate file at {path}, got {n_cols}."
-            )
+            raise ValueError(f"Expected 12 columns in v2 climate file at {path}, got {n_cols}.")
         year_col, day_col = 0, 1
     else:
         raise ValueError(f"Unknown climate version: {version!r}")

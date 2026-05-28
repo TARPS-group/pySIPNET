@@ -76,6 +76,7 @@ class ClimateStaging(StrEnum):
     COPY = "copy"
     SYMLINK = "symlink"
 
+
 _DEFAULT_CACHE_DIR = Path(__file__).parent.parent / ".sipnet_cache"
 
 
