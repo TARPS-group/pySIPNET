@@ -1,0 +1,1266 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Clean Python interface to the SIPNET land surface model">
+      
+      
+        <meta name="author" content="Andrew Roberts">
+      
+      
+      
+        <link rel="prev" href="../running-a-model/">
+      
+      
+        <link rel="next" href="../../api/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Ensemble Runs - pySIPNET</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="green" data-md-color-accent="light-green">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ensemble-runs" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="pySIPNET" class="md-header__button md-logo" aria-label="pySIPNET" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            pySIPNET
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Ensemble Runs
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="green" data-md-color-accent="light-green"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="green" data-md-color-accent="light-green"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/andrewroberts/pySIPNET" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    andrewroberts/pySIPNET
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="pySIPNET" class="md-nav__button md-logo" aria-label="pySIPNET" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    pySIPNET
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/andrewroberts/pySIPNET" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    andrewroberts/pySIPNET
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sipnet-version/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SIPNET Version
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../running-a-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running a Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ensemble Runs
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ensemble Runs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-problem-with-loops" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The problem with loops
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sipnetmodel-as-the-pyens-entry-point" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SIPNETModel as the PyEns entry point
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-simple-parameter-sweep" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A simple parameter sweep
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sweeping-multiple-parameters-independently" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sweeping multiple parameters independently
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-site-multi-member-ensembles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-site, multi-member ensembles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Multi-site, multi-member ensembles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#running-in-parallel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running in parallel
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#working-with-ensembleresult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working with EnsembleResult
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Working with EnsembleResult">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#checking-for-failures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checking for failures
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#extracting-outputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extracting outputs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#looking-up-a-specific-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Looking up a specific run
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#collecting-outputs-into-a-dataframe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collecting outputs into a DataFrame
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#describing-the-ensemble-before-running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Describing the ensemble before running
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-partialspec-for-iterative-workflows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using PartialSpec for iterative workflows
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-problem-with-loops" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The problem with loops
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sipnetmodel-as-the-pyens-entry-point" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SIPNETModel as the PyEns entry point
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-simple-parameter-sweep" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A simple parameter sweep
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sweeping-multiple-parameters-independently" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sweeping multiple parameters independently
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-site-multi-member-ensembles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-site, multi-member ensembles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Multi-site, multi-member ensembles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#running-in-parallel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running in parallel
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#working-with-ensembleresult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working with EnsembleResult
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Working with EnsembleResult">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#checking-for-failures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checking for failures
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#extracting-outputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extracting outputs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#looking-up-a-specific-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Looking up a specific run
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#collecting-outputs-into-a-dataframe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collecting outputs into a DataFrame
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#describing-the-ensemble-before-running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Describing the ensemble before running
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-partialspec-for-iterative-workflows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using PartialSpec for iterative workflows
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="ensemble-runs">Ensemble Runs</h1>
+<p>This guide explains how to run SIPNET over many parameter and climate
+configurations using <a href="https://github.com/andrewroberts/pyens">PyEns</a>.  It
+assumes you are comfortable with the single-run interface covered in
+<a href="../running-a-model/">Running a Model</a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Optional dependency</p>
+<p>Ensemble running requires the <code>pyens</code> package, which is not yet on PyPI.
+Install it from source:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>git+https://github.com/arob5/PyEns.git
+</code></pre></div>
+</div>
+<hr />
+<h2 id="the-problem-with-loops">The problem with loops</h2>
+<p>The most direct way to run many SIPNET configurations is a Python loop:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">for</span> <span class="n">a_max</span> <span class="ow">in</span> <span class="p">[</span><span class="mf">80.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">,</span> <span class="mf">120.0</span><span class="p">,</span> <span class="mf">140.0</span><span class="p">]:</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">p</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">model_copy</span><span class="p">(</span><span class="n">update</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;photosynthesis&quot;</span><span class="p">:</span> <span class="o">...</span><span class="p">})</span>  <span class="c1"># tedious</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">climate</span><span class="p">))</span>
+</code></pre></div>
+<p>This approach works for a handful of runs, but it leaves three problems
+unsolved.</p>
+<p><strong>Result association.</strong> Each output must be manually paired with the
+configuration that produced it.  With many parameters varying simultaneously,
+tracking which output came from which combination becomes error-prone.</p>
+<p><strong>Failure isolation.</strong> If one run raises an exception, the loop stops.
+Completed runs are lost unless you write extra error-handling code.</p>
+<p><strong>Parallelism.</strong> Switching from a serial loop to multiprocessing or an HPC
+cluster requires rewriting the loop.</p>
+<p>PyEns solves all three.  Because <code>SIPNETModel</code> is already a plain
+<code>(**kwargs) → SIPNETResult</code> callable, passing it to <code>EnsembleRunner</code>
+requires no adapter or glue code.</p>
+<hr />
+<h2 id="sipnetmodel-as-the-pyens-entry-point">SIPNETModel as the PyEns entry point</h2>
+<p><code>SIPNETModel</code> is a core part of pySIPNET — no PyEns import needed to
+construct one.  You give it a runner and a <em>baseline</em> parameter set; each
+call applies a dict of overrides on top of that baseline:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pysipnet</span><span class="w"> </span><span class="kn">import</span> <span class="n">SIPNETRunner</span><span class="p">,</span> <span class="n">ModelPreset</span><span class="p">,</span> <span class="n">SIPNETModel</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">SIPNETRunner</span><span class="p">(</span><span class="n">preset</span><span class="o">=</span><span class="n">ModelPreset</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">)</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">model</span>  <span class="o">=</span> <span class="n">SIPNETModel</span><span class="p">(</span><span class="n">runner</span><span class="p">,</span> <span class="n">base_params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span> <span class="n">base_climate</span><span class="o">=</span><span class="n">climate</span><span class="p">)</span>
+</code></pre></div>
+<p>You can call it directly to verify it works before handing it to PyEns:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">a_max</span><span class="o">=</span><span class="mf">112.0</span><span class="p">,</span> <span class="n">base_veg_resp</span><span class="o">=</span><span class="mf">0.02</span><span class="p">)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">outputs</span><span class="p">[[</span><span class="s2">&quot;nee&quot;</span><span class="p">,</span> <span class="s2">&quot;gpp&quot;</span><span class="p">]]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+</code></pre></div>
+<p>Any SIPNET v1 parameter name can be passed as a keyword argument.  The
+reserved names <code>climate</code> and <code>events</code> pass a <code>ClimateDrivers</code> or
+<code>EventSequence</code> directly through to the runner.</p>
+<hr />
+<h2 id="a-simple-parameter-sweep">A simple parameter sweep</h2>
+<p>To sweep a single parameter, define a PyEns <code>Axis</code> for the sweep dimension
+and a <code>Grid</code> of values, then run through <code>EnsembleRunner</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyens</span><span class="w"> </span><span class="kn">import</span> <span class="n">Axis</span><span class="p">,</span> <span class="n">EnsembleSpec</span><span class="p">,</span> <span class="n">Grid</span><span class="p">,</span> <span class="n">EnsembleRunner</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyens.backends</span><span class="w"> </span><span class="kn">import</span> <span class="n">SequentialBackend</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">a_max_values</span> <span class="o">=</span> <span class="p">[</span><span class="mf">80.0</span><span class="p">,</span> <span class="mf">90.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">,</span> <span class="mf">110.0</span><span class="p">,</span> <span class="mf">120.0</span><span class="p">,</span> <span class="mf">130.0</span><span class="p">,</span> <span class="mf">140.0</span><span class="p">]</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">ax</span>   <span class="o">=</span> <span class="n">Axis</span><span class="p">(</span><span class="s2">&quot;a_max&quot;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">a_max_values</span><span class="p">))</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">spec</span> <span class="o">=</span> <span class="n">EnsembleSpec</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">{</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="s2">&quot;a_max&quot;</span><span class="p">:</span> <span class="n">Grid</span><span class="p">(</span><span class="n">a_max_values</span><span class="p">,</span> <span class="n">along</span><span class="o">=</span><span class="n">ax</span><span class="p">),</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="p">})</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="n">ensemble_runner</span> <span class="o">=</span> <span class="n">EnsembleRunner</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">SequentialBackend</span><span class="p">())</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="n">result</span> <span class="o">=</span> <span class="n">ensemble_runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+</code></pre></div>
+<p><code>result</code> is an <code>EnsembleResult</code> — one <code>RunRecord</code> per combination, in the
+order they were run:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">n_runs</span><span class="p">)</span>    <span class="c1"># 7</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">n_failed</span><span class="p">)</span>  <span class="c1"># 0 if all succeeded</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">coord</span>  <span class="o">=</span> <span class="n">record</span><span class="o">.</span><span class="n">coordinate</span>   <span class="c1"># e.g. {&quot;a_max&quot;: 3}  (integer axis index)</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">output</span> <span class="o">=</span> <span class="n">record</span><span class="o">.</span><span class="n">output</span>       <span class="c1"># SIPNETResult</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">coord</span><span class="p">,</span> <span class="n">output</span><span class="o">.</span><span class="n">gpp</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+</code></pre></div>
+<hr />
+<h2 id="sweeping-multiple-parameters-independently">Sweeping multiple parameters independently</h2>
+<p>Two <code>Grid</code> fields that reference <strong>different</strong> <code>Axis</code> instances are <em>crossed</em>:
+the ensemble runs every combination (Cartesian product).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">a_max_ax</span> <span class="o">=</span> <span class="n">Axis</span><span class="p">(</span><span class="s2">&quot;a_max&quot;</span><span class="p">,</span>        <span class="n">size</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">resp_ax</span>  <span class="o">=</span> <span class="n">Axis</span><span class="p">(</span><span class="s2">&quot;base_veg_resp&quot;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">spec</span> <span class="o">=</span> <span class="n">EnsembleSpec</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">{</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="s2">&quot;a_max&quot;</span><span class="p">:</span>         <span class="n">Grid</span><span class="p">([</span><span class="mf">80.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">,</span> <span class="mf">120.0</span><span class="p">,</span> <span class="mf">140.0</span><span class="p">,</span> <span class="mf">160.0</span><span class="p">],</span> <span class="n">along</span><span class="o">=</span><span class="n">a_max_ax</span><span class="p">),</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="s2">&quot;base_veg_resp&quot;</span><span class="p">:</span> <span class="n">Grid</span><span class="p">([</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.03</span><span class="p">,</span> <span class="mf">0.04</span><span class="p">],</span>            <span class="n">along</span><span class="o">=</span><span class="n">resp_ax</span><span class="p">),</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="p">})</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="c1"># 5 × 4 = 20 runs</span>
+</code></pre></div>
+<p>Two <code>Grid</code> fields that reference the <strong>same</strong> <code>Axis</code> instance are <em>aligned</em>:
+they co-vary and produce one run per axis position (zip semantics).  Use this
+when parameters or climate drivers naturally pair up — for example, site
+climate and site initial conditions.</p>
+<hr />
+<h2 id="multi-site-multi-member-ensembles">Multi-site, multi-member ensembles</h2>
+<p>The helper functions <code>sipnet_site_fields</code> and <code>sipnet_member_fields</code> make it
+easy to set up the most common ensemble pattern: multiple sites crossed with
+multiple ensemble members.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyens</span><span class="w"> </span><span class="kn">import</span> <span class="n">Axis</span><span class="p">,</span> <span class="n">EnsembleSpec</span><span class="p">,</span> <span class="n">Fixed</span><span class="p">,</span> <span class="n">EnsembleRunner</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyens.backends</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalBackend</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pysipnet</span><span class="w"> </span><span class="kn">import</span> <span class="n">SIPNETModel</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pysipnet.ensemble</span><span class="w"> </span><span class="kn">import</span> <span class="n">sipnet_site_fields</span><span class="p">,</span> <span class="n">sipnet_member_fields</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># ── Data ──────────────────────────────────────────────────────────────────────</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="n">clim_hf</span> <span class="o">=</span> <span class="n">ClimateDrivers</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="s2">&quot;data/harvard_forest.clim&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">&quot;v1&quot;</span><span class="p">)</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="n">clim_nr</span> <span class="o">=</span> <span class="n">ClimateDrivers</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="s2">&quot;data/niwot_ridge.clim&quot;</span><span class="p">,</span>    <span class="n">version</span><span class="o">=</span><span class="s2">&quot;v1&quot;</span><span class="p">)</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="c1"># ── Axes ──────────────────────────────────────────────────────────────────────</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="n">sites</span>   <span class="o">=</span> <span class="n">Axis</span><span class="p">(</span><span class="s2">&quot;site&quot;</span><span class="p">,</span>   <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;harvard_forest&quot;</span><span class="p">,</span> <span class="s2">&quot;niwot_ridge&quot;</span><span class="p">])</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="n">members</span> <span class="o">=</span> <span class="n">Axis</span><span class="p">(</span><span class="s2">&quot;member&quot;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="c1"># ── Sampled parameters ────────────────────────────────────────────────────────</span>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a><span class="n">a_max_samples</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">80</span><span class="p">,</span> <span class="mi">140</span><span class="p">,</span> <span class="mi">50</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+<a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>
+<a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a><span class="c1"># ── Spec ──────────────────────────────────────────────────────────────────────</span>
+<a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a><span class="n">spec</span> <span class="o">=</span> <span class="n">EnsembleSpec</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">{</span>
+<a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a>    <span class="c1"># Site-level: climate + IC vary per site, aligned on the sites axis</span>
+<a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a>    <span class="o">**</span><span class="n">sipnet_site_fields</span><span class="p">(</span>
+<a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a>        <span class="n">sites</span><span class="p">,</span>
+<a id="__codelineno-7-24" name="__codelineno-7-24" href="#__codelineno-7-24"></a>        <span class="n">climates</span><span class="o">=</span><span class="p">[</span><span class="n">clim_hf</span><span class="p">,</span> <span class="n">clim_nr</span><span class="p">],</span>
+<a id="__codelineno-7-25" name="__codelineno-7-25" href="#__codelineno-7-25"></a>        <span class="n">plant_wood</span><span class="o">=</span><span class="p">[</span><span class="mf">30000.0</span><span class="p">,</span> <span class="mf">24000.0</span><span class="p">],</span>    <span class="c1"># initial wood C per site</span>
+<a id="__codelineno-7-26" name="__codelineno-7-26" href="#__codelineno-7-26"></a>        <span class="n">soil</span><span class="o">=</span><span class="p">[</span><span class="mf">10000.0</span><span class="p">,</span> <span class="mf">8500.0</span><span class="p">],</span>           <span class="c1"># initial soil C per site</span>
+<a id="__codelineno-7-27" name="__codelineno-7-27" href="#__codelineno-7-27"></a>    <span class="p">),</span>
+<a id="__codelineno-7-28" name="__codelineno-7-28" href="#__codelineno-7-28"></a>    <span class="c1"># Member-level: a_max varies per member, aligned on the members axis</span>
+<a id="__codelineno-7-29" name="__codelineno-7-29" href="#__codelineno-7-29"></a>    <span class="o">**</span><span class="n">sipnet_member_fields</span><span class="p">(</span>
+<a id="__codelineno-7-30" name="__codelineno-7-30" href="#__codelineno-7-30"></a>        <span class="n">members</span><span class="p">,</span>
+<a id="__codelineno-7-31" name="__codelineno-7-31" href="#__codelineno-7-31"></a>        <span class="n">a_max</span><span class="o">=</span><span class="n">a_max_samples</span><span class="p">,</span>
+<a id="__codelineno-7-32" name="__codelineno-7-32" href="#__codelineno-7-32"></a>    <span class="p">),</span>
+<a id="__codelineno-7-33" name="__codelineno-7-33" href="#__codelineno-7-33"></a><span class="p">})</span>
+<a id="__codelineno-7-34" name="__codelineno-7-34" href="#__codelineno-7-34"></a><span class="c1"># 2 sites × 50 members = 100 runs</span>
+<a id="__codelineno-7-35" name="__codelineno-7-35" href="#__codelineno-7-35"></a><span class="nb">print</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">n_runs</span><span class="p">)</span>  <span class="c1"># 100</span>
+</code></pre></div>
+<p><code>sipnet_site_fields</code> returns a dict whose values are all <code>Grid</code> objects aligned
+on <code>sites</code>.  <code>sipnet_member_fields</code> returns a dict aligned on <code>members</code>.
+Because the two sets of fields use different axes, they are crossed — giving
+a full Cartesian product of sites and members.</p>
+<h3 id="running-in-parallel">Running in parallel</h3>
+<p>For large ensembles, use <code>LocalBackend</code> to distribute across CPU cores:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">model</span>          <span class="o">=</span> <span class="n">SIPNETModel</span><span class="p">(</span><span class="n">runner</span><span class="p">,</span> <span class="n">base_params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">ensemble_runner</span> <span class="o">=</span> <span class="n">EnsembleRunner</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">LocalBackend</span><span class="p">(</span><span class="n">n_workers</span><span class="o">=</span><span class="mi">8</span><span class="p">))</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">result</span>          <span class="o">=</span> <span class="n">ensemble_runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+</code></pre></div>
+<div class="admonition important">
+<p class="admonition-title">Pickling requirement</p>
+<p><code>LocalBackend</code> uses Python's <code>multiprocessing</code> module, which serialises
+the model callable and all field values with <code>pickle</code>.  <code>SIPNETModel</code> is
+picklable.  <code>ClimateDrivers</code> objects (which contain a pandas DataFrame)
+are also picklable.</p>
+<p>If you encounter a <code>PicklingError</code>, switch to <code>SequentialBackend</code> to
+reproduce the failure with a full traceback, fix the issue, then switch
+back.</p>
+</div>
+<hr />
+<h2 id="working-with-ensembleresult">Working with EnsembleResult</h2>
+<p><code>ensemble_runner.run()</code> returns an <code>EnsembleResult</code>.  Each record carries
+the coordinate (which axis values produced this run) and the output (a
+<code>SIPNETResult</code>, or an exception if the run failed).</p>
+<h3 id="checking-for-failures">Checking for failures</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">n_failed</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="k">for</span> <span class="n">rec</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">failed</span><span class="p">:</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed at </span><span class="si">{</span><span class="n">rec</span><span class="o">.</span><span class="n">coordinate</span><span class="si">!r}</span><span class="s2">: </span><span class="si">{</span><span class="n">rec</span><span class="o">.</span><span class="n">output</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>A failed run is one where the model callable raised an exception — for
+example, a <code>ValidationError</code> from an invalid parameter combination, or a
+<code>subprocess.CalledProcessError</code> if SIPNET itself exits non-zero.  Failed
+runs are stored in position rather than dropped, so the indices of <code>outputs</code>
+and <code>coordinates</code> always correspond.</p>
+<h3 id="extracting-outputs">Extracting outputs</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># Annual NEE for every successful run</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="k">for</span> <span class="n">rec</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">succeeded</span><span class="p">:</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">site</span>   <span class="o">=</span> <span class="n">rec</span><span class="o">.</span><span class="n">coordinate</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;site&quot;</span><span class="p">,</span> <span class="s2">&quot;?&quot;</span><span class="p">)</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="n">member</span> <span class="o">=</span> <span class="n">rec</span><span class="o">.</span><span class="n">coordinate</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;member&quot;</span><span class="p">,</span> <span class="s2">&quot;?&quot;</span><span class="p">)</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="n">annual_nee</span> <span class="o">=</span> <span class="n">rec</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">nee</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;site=</span><span class="si">{</span><span class="n">site</span><span class="si">}</span><span class="s2">, member=</span><span class="si">{</span><span class="n">member</span><span class="si">}</span><span class="s2">: NEE=</span><span class="si">{</span><span class="n">annual_nee</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> g C m⁻²&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="looking-up-a-specific-run">Looking up a specific run</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">record</span> <span class="o">=</span> <span class="n">result</span><span class="p">[{</span><span class="s2">&quot;site&quot;</span><span class="p">:</span> <span class="s2">&quot;harvard_forest&quot;</span><span class="p">,</span> <span class="s2">&quot;member&quot;</span><span class="p">:</span> <span class="mi">12</span><span class="p">}]</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="n">record</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">gpp</span><span class="p">()</span><span class="o">.</span><span class="n">plot</span><span class="p">()</span>
+</code></pre></div>
+<h3 id="collecting-outputs-into-a-dataframe">Collecting outputs into a DataFrame</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="k">for</span> <span class="n">rec</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">succeeded</span><span class="p">:</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>        <span class="o">**</span><span class="n">rec</span><span class="o">.</span><span class="n">coordinate</span><span class="p">,</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>        <span class="s2">&quot;annual_nee&quot;</span><span class="p">:</span> <span class="n">rec</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">nee</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>        <span class="s2">&quot;annual_gpp&quot;</span><span class="p">:</span> <span class="n">rec</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">gpp</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>    <span class="p">})</span>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span>
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;site&quot;</span><span class="p">)[[</span><span class="s2">&quot;annual_nee&quot;</span><span class="p">,</span> <span class="s2">&quot;annual_gpp&quot;</span><span class="p">]]</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>
+</code></pre></div>
+<hr />
+<h2 id="describing-the-ensemble-before-running">Describing the ensemble before running</h2>
+<p>Call <code>spec.describe()</code> to inspect the structure of the ensemble before
+committing to a run:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nb">print</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="c1"># EnsembleSpec</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="c1">#   Axes:</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="c1">#     site   (2 labels): harvard_forest, niwot_ridge</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="c1">#     member (50)</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="c1">#   Fields:</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="c1">#     climate    Grid along [site]</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="c1">#     plant_wood Grid along [site]</span>
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="c1">#     soil       Grid along [site]</span>
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="c1">#     a_max      Grid along [member]</span>
+<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="c1">#   Total runs: 100</span>
+</code></pre></div>
+<p>This is especially useful before submitting to an HPC cluster.</p>
+<hr />
+<h2 id="using-partialspec-for-iterative-workflows">Using PartialSpec for iterative workflows</h2>
+<p><code>EnsembleSpec.freeze()</code> returns a <code>PartialSpec</code> — a callable with some fields
+already fixed and others left open.  This is useful when the climate and site
+structure are known upfront but the parameter values will be supplied by a
+sampler in a loop:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">full_spec</span> <span class="o">=</span> <span class="n">EnsembleSpec</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">{</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="o">**</span><span class="n">sipnet_site_fields</span><span class="p">(</span><span class="n">sites</span><span class="p">,</span> <span class="n">climates</span><span class="o">=</span><span class="p">[</span><span class="n">clim_hf</span><span class="p">,</span> <span class="n">clim_nr</span><span class="p">]),</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>    <span class="s2">&quot;a_max&quot;</span><span class="p">:</span> <span class="o">...</span><span class="p">,</span>        <span class="c1"># to be filled in per iteration</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="p">})</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="n">param_map</span> <span class="o">=</span> <span class="n">full_spec</span><span class="o">.</span><span class="n">freeze</span><span class="p">(</span><span class="n">free</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;a_max&quot;</span><span class="p">])</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="k">for</span> <span class="n">iteration</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_iterations</span><span class="p">):</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>    <span class="n">theta</span> <span class="o">=</span> <span class="n">sampler</span><span class="o">.</span><span class="n">next_sample</span><span class="p">()</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>    <span class="n">runnable</span> <span class="o">=</span> <span class="n">param_map</span><span class="p">(</span><span class="n">a_max</span><span class="o">=</span><span class="n">Grid</span><span class="p">(</span><span class="n">theta</span><span class="p">,</span> <span class="n">along</span><span class="o">=</span><span class="n">members</span><span class="p">))</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>    <span class="n">result</span>   <span class="o">=</span> <span class="n">ensemble_runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runnable</span><span class="p">)</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>    <span class="n">sampler</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "navigation.top", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
