@@ -51,6 +51,32 @@ if TYPE_CHECKING:
     from pysipnet.parameters.v1 import ModelFlagsV1, SIPNETParametersV1
     from pysipnet.result import SIPNETResult
 
+
+class ClimateStaging(StrEnum):
+    """How the runner stages the climate file into each run's working directory.
+
+    +----------+--------------------------------------------------------------+
+    | Value    | Behaviour                                                    |
+    +==========+==============================================================+
+    | COPY     | Copies the source file with :func:`shutil.copy2`.  Safe on  |
+    |          | all platforms and across filesystem boundaries.  Default.    |
+    +----------+--------------------------------------------------------------+
+    | SYMLINK  | Creates a symbolic link pointing at the resolved source path.|
+    |          | Zero I/O overhead; requires the source file to remain        |
+    |          | accessible for the duration of the run.  Falls back to COPY  |
+    |          | with a warning if :func:`os.symlink` raises :class:`OSError`.|
+    +----------+--------------------------------------------------------------+
+
+    Only applies to file-backed :class:`~pysipnet.climate.ClimateDrivers`
+    instances created via :meth:`~pysipnet.climate.ClimateDrivers.from_path`.
+    In-memory instances are always written via the I/O layer regardless of
+    this setting.
+    """
+
+    COPY = "copy"
+    SYMLINK = "symlink"
+
+
 _DEFAULT_CACHE_DIR = Path(__file__).parent.parent / ".sipnet_cache"
 
 
@@ -120,12 +146,14 @@ class SIPNETRunner:
         self,
         preset: ModelPreset = ModelPreset.STANDARD,
         *,
+        climate_staging: ClimateStaging = ClimateStaging.COPY,
         cache_dir: Path | str | None = None,
         workdir_base: Path | str | None = None,
         keep_workdir: bool = False,
         timeout: float = 300.0,
     ) -> None:
         self.preset = preset
+        self.climate_staging = climate_staging
         self.cache_dir = Path(cache_dir) if cache_dir else _DEFAULT_CACHE_DIR
         self.workdir_base = Path(workdir_base) if workdir_base else Path(tempfile.gettempdir())
         self.keep_workdir = keep_workdir
@@ -142,6 +170,34 @@ class SIPNETRunner:
                 f"SIPNET binary not found at {self.binary_path}. "
                 "Run 'make sipnet' from the repo root to build it."
             )
+
+    def _stage_clim_file(self, climate: ClimateDrivers, dest: Path) -> None:
+        """Write or link the climate file into the run working directory.
+
+        For in-memory instances the data is serialised via the I/O layer.
+        For file-backed instances the behaviour is controlled by
+        :attr:`climate_staging`.
+        """
+        import shutil
+        import warnings
+
+        from pysipnet.io.clim_io import write_clim_file
+
+        if climate.source_path is None:
+            write_clim_file(climate, dest)
+            return
+
+        if self.climate_staging == ClimateStaging.SYMLINK:
+            try:
+                dest.symlink_to(climate.source_path.resolve())
+                return
+            except OSError:
+                warnings.warn(
+                    f"Symlinking climate file failed; falling back to copy. "
+                    f"Source: {climate.source_path}",
+                    stacklevel=2,
+                )
+        shutil.copy2(climate.source_path, dest)
 
     def run(
         self,
@@ -191,7 +247,6 @@ class SIPNETRunner:
         """
         import shutil
 
-        from pysipnet.io.clim_io import write_clim_file
         from pysipnet.io.param_io import write_param_file
         from pysipnet.result import RunProvenance, SIPNETResult
 
@@ -204,7 +259,7 @@ class SIPNETRunner:
 
         try:
             write_param_file(parameters, flags, workdir / "sipnet.param")
-            write_clim_file(climate, workdir / "sipnet.clim")
+            self._stage_clim_file(climate, workdir / "sipnet.clim")
 
             if events is not None:
                 events.to_file(workdir / "events.in")

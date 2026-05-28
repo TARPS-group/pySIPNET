@@ -60,7 +60,6 @@ behaviour while making the issue visible to the user.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -87,34 +86,57 @@ CLIM_COLUMNS_V1: list[str] = [
 CLIM_COLUMNS_V2: list[str] = CLIM_COLUMNS_V1  # same logical columns, different file format
 
 
-@dataclass
 class ClimateDrivers:
     """Meteorological forcing time series for a SIPNET run.
 
-    The ``data`` DataFrame uses :data:`CLIM_COLUMNS_V1` column names.  Rows
-    must be ordered chronologically with no missing values.
+    Instances are either *memory-backed* (holding a full DataFrame) or
+    *file-backed* (holding only a path, with data loaded lazily on first
+    access).  Use the factory methods to construct:
+
+    - :meth:`from_dataframe` — in-memory, with full column and data validation.
+    - :meth:`from_file` — reads an existing ``.clim`` file fully into memory.
+    - :meth:`from_path` — file-backed, defers loading until ``.data`` is
+      accessed.  Use this in ensemble workflows where the file already exists
+      on disk and you want to avoid a redundant read/write cycle.
 
     Parameters
     ----------
     data:
-        One row per model timestep.  Columns must match :data:`CLIM_COLUMNS_V1`.
+        One row per model timestep with columns matching :data:`CLIM_COLUMNS_V1`.
+        Mutually exclusive with *source_path*.
+    source_path:
+        Path to an existing ``.clim`` file.  Mutually exclusive with *data*.
     version:
-        SIPNET version this object is formatted for.  Controls the file format
-        used by :meth:`to_file`.
+        SIPNET version this object is formatted for.
     loc:
-        Location index written to column 1 of v1 climate files.  SIPNET
-        ignores this value; it exists for backward compatibility.
+        Location index written to column 1 of v1 climate files (memory-backed
+        only).  SIPNET ignores this value; it exists for backward compatibility.
     """
 
-    data: pd.DataFrame
-    version: Literal["v1", "v2"] = "v1"
-    loc: int = 0
+    def __init__(
+        self,
+        *,
+        data: pd.DataFrame | None = None,
+        source_path: Path | None = None,
+        version: Literal["v1", "v2"] = "v1",
+        loc: int = 0,
+    ) -> None:
+        if (data is None) == (source_path is None):
+            raise ValueError(
+                "Exactly one of 'data' or 'source_path' must be provided, not both or neither."
+            )
+        self._data: pd.DataFrame | None = data
+        self.source_path: Path | None = source_path
+        self.version: Literal["v1", "v2"] = version
+        self.loc: int = loc
+        self._n_timesteps: int | None = None
+        self._date_range: tuple[tuple[int, int], tuple[int, int]] | None = None
 
     # ── Construction ───────────────────────────────────────────────────────────
 
     @classmethod
     def from_file(cls, path: str | Path, version: Literal["v1", "v2"] = "v1") -> ClimateDrivers:
-        """Read a SIPNET climate file.
+        """Read a SIPNET climate file fully into memory.
 
         Parameters
         ----------
@@ -156,10 +178,62 @@ class ClimateDrivers:
         obj.validate()
         return obj
 
+    @classmethod
+    def from_path(cls, path: str | Path, version: Literal["v1", "v2"] = "v1") -> ClimateDrivers:
+        """Create a file-backed instance without loading data into memory.
+
+        The file is not read until :attr:`data` is accessed.  Lightweight
+        validation checks the column count of the first and last rows, and
+        caches :attr:`n_timesteps` and :attr:`date_range` from those rows.
+
+        .. note::
+            Chronological ordering is **assumed but not verified**.  The first
+            and last rows are used to populate :attr:`date_range`; if the file
+            is not sorted those values will be wrong.  Call :meth:`validate`
+            to perform a complete check, which will trigger a full data load.
+
+        Parameters
+        ----------
+        path:
+            Path to an existing ``.clim`` file.
+        version:
+            File format version.
+        """
+        from pysipnet.io.clim_io import peek_clim_file
+
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"Climate file not found: {path}")
+
+        n_rows, start, end = peek_clim_file(path, version=version)
+        obj = cls(source_path=path, version=version)
+        obj._n_timesteps = n_rows
+        obj._date_range = (start, end)
+        return obj
+
+    # ── Data access ────────────────────────────────────────────────────────────
+
+    @property
+    def data(self) -> pd.DataFrame:
+        """The climate time series as a DataFrame.
+
+        For file-backed instances, the first access reads and caches the full
+        file from :attr:`source_path`.  Subsequent accesses return the cached
+        copy at no cost.
+        """
+        if self._data is None:
+            from pysipnet.io.clim_io import read_clim_file
+
+            self._data = read_clim_file(self.source_path, version=self.version).data
+        return self._data
+
     # ── Validation ─────────────────────────────────────────────────────────────
 
     def validate(self) -> None:
         """Check the climate data for common errors.
+
+        For file-backed instances, calling this method triggers a full data
+        load from :attr:`source_path`.
 
         Raises
         ------
@@ -226,12 +300,34 @@ class ClimateDrivers:
 
     @property
     def n_timesteps(self) -> int:
-        """Number of timesteps in the driving data."""
+        """Number of timesteps in the driving data.
+
+        For file-backed instances created via :meth:`from_path`, this is
+        available without triggering a full data load.
+        """
+        if self._data is not None:
+            return len(self._data)
+        if self._n_timesteps is not None:
+            return self._n_timesteps
         return len(self.data)
 
     @property
     def date_range(self) -> tuple[tuple[int, int], tuple[int, int]]:
-        """``((start_year, start_doy), (end_year, end_doy))`` of the time series."""
+        """``((start_year, start_doy), (end_year, end_doy))`` of the time series.
+
+        For file-backed instances created via :meth:`from_path`, this is
+        available without triggering a full data load.  The values are read
+        from the first and last rows of the file and assume chronological order.
+        """
+        if self._data is not None:
+            first = self._data.iloc[0]
+            last = self._data.iloc[-1]
+            return (
+                (int(first["year"]), int(first["day"])),
+                (int(last["year"]), int(last["day"])),
+            )
+        if self._date_range is not None:
+            return self._date_range
         first = self.data.iloc[0]
         last = self.data.iloc[-1]
         return (

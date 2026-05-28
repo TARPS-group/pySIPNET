@@ -1,11 +1,22 @@
 """Read and write SIPNET climate (``.clim``) files.
 
-v1 format (14 columns, space-delimited, no header)
----------------------------------------------------
-The first column (location index) and the last column (soilWetness) are
-required by the file format but ignored by SIPNET.  They are written as
-constant values (``loc=0``, ``soil_wetness=0.6`` by convention) and discarded
-on read.
+SIPNET climate files are space-delimited with **no header row** — a convention
+shared by all SIPNET input files.  The file format constants below are the
+single source of truth for column counts and the positions of the year and day
+columns; all readers, writers, and peeks in this module derive their structure
+from those constants rather than encoding it locally.
+
+v1 format (14 columns)
+-----------------------
+Two column-count variants are accepted on read:
+
+* **14 columns (canonical)**: ``loc | year | day | time | length | tair |
+  tsoil | par | precip | vpd | vpd_soil | vpress | wspd | soil_wetness``
+* **13 columns (legacy)**: same layout but without the leading ``loc`` column.
+
+The writer always produces 14 columns.  The ``loc`` column (col 1) and the
+``soil_wetness`` column (col 14) are required by the file format but are never
+read by SIPNET; see :data:`_V1_SOIL_WETNESS_FILL` for details.
 
 Column 8 (``par``) units
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -21,7 +32,7 @@ not error on non-positive values, matching SIPNET's own tolerance.
 
 v2 format (12 columns)
 -----------------------
-The location and soilWetness columns are absent.  Column order is otherwise
+The ``loc`` and ``soil_wetness`` columns are absent.  Column order is otherwise
 the same for the 12 shared variables.
 """
 
@@ -34,6 +45,32 @@ import pandas as pd
 
 from pysipnet.climate import CLIM_COLUMNS_V1, ClimateDrivers
 
+# ── v1 file format constants ───────────────────────────────────────────────────
+
+_V1_N_COLS = 14  # canonical column count (with loc and soil_wetness)
+_V1_N_COLS_NO_LOC = 13  # accepted read variant (no leading loc column)
+
+# 0-indexed positions of year and day in each variant.
+_V1_YEAR_COL = 1
+_V1_DAY_COL = 2
+_V1_YEAR_COL_NO_LOC = 0
+_V1_DAY_COL_NO_LOC = 1
+
+# Slice of the 14-col row that contains the 12 logical data columns.
+_V1_DATA_START = 1
+_V1_DATA_END = 13
+
+# ── v2 file format constants ───────────────────────────────────────────────────
+
+_V2_N_COLS = 12
+_V2_YEAR_COL = 0
+_V2_DAY_COL = 1
+
+# ── Padding values ─────────────────────────────────────────────────────────────
+
+# The soilWetness column (col 14 in v1) is required by the v1 file format but
+# is never used by SIPNET.  Any float is valid; 0.6 is written as an innocuous
+# placeholder so files look plausible on manual inspection.
 _V1_SOIL_WETNESS_FILL = 0.6
 
 
@@ -53,6 +90,69 @@ def write_clim_file(climate: ClimateDrivers, path: Path) -> None:
         _write_v2(climate, path)
     else:
         raise ValueError(f"Unknown climate version: {climate.version!r}")
+
+
+def peek_clim_file(
+    path: Path, version: Literal["v1", "v2"] = "v1"
+) -> tuple[int, tuple[int, int], tuple[int, int]]:
+    """Read only the first and last rows of a climate file plus the row count.
+
+    This is a lightweight alternative to a full read, used by
+    :meth:`~pysipnet.climate.ClimateDrivers.from_path` to populate metadata
+    without loading the whole file.
+
+    SIPNET climate files have no header row, so every line in the file is a
+    data row.  The row count returned is therefore exact.
+
+    The year and day column positions are determined by the module-level format
+    constants (:data:`_V1_YEAR_COL`, :data:`_V1_DAY_COL`, etc.); this function
+    does not encode that structure locally.
+
+    Parameters
+    ----------
+    path:
+        Path to the ``.clim`` file.
+    version:
+        File format version.
+
+    Returns
+    -------
+    tuple
+        ``(n_rows, (start_year, start_doy), (end_year, end_doy))``.
+    """
+    with path.open() as fh:
+        n_rows = sum(1 for line in fh if line.strip())
+
+    if n_rows == 0:
+        raise ValueError(f"Climate file is empty: {path}")
+
+    first = pd.read_csv(path, sep=r"\s+", header=None, nrows=1, dtype=float)
+    last = pd.read_csv(path, sep=r"\s+", header=None, skiprows=n_rows - 1, nrows=1, dtype=float)
+
+    n_cols = first.shape[1]
+
+    if version == "v1":
+        if n_cols == _V1_N_COLS:
+            year_col, day_col = _V1_YEAR_COL, _V1_DAY_COL
+        elif n_cols == _V1_N_COLS_NO_LOC:
+            year_col, day_col = _V1_YEAR_COL_NO_LOC, _V1_DAY_COL_NO_LOC
+        else:
+            raise ValueError(
+                f"Expected {_V1_N_COLS_NO_LOC} or {_V1_N_COLS} columns in v1 climate "
+                f"file at {path}, got {n_cols}."
+            )
+    elif version == "v2":
+        if n_cols != _V2_N_COLS:
+            raise ValueError(
+                f"Expected {_V2_N_COLS} columns in v2 climate file at {path}, got {n_cols}."
+            )
+        year_col, day_col = _V2_YEAR_COL, _V2_DAY_COL
+    else:
+        raise ValueError(f"Unknown climate version: {version!r}")
+
+    start = (int(first.iloc[0, year_col]), int(first.iloc[0, day_col]))
+    end = (int(last.iloc[0, year_col]), int(last.iloc[0, day_col]))
+    return n_rows, start, end
 
 
 def read_clim_file(path: Path, version: Literal["v1", "v2"] = "v1") -> ClimateDrivers:
@@ -121,14 +221,14 @@ def _write_v2(climate: ClimateDrivers, path: Path) -> None:
 def _read_v1(path: Path) -> ClimateDrivers:
     raw = pd.read_csv(path, sep=r"\s+", header=None, dtype=float)
     n_cols = raw.shape[1]
-    if n_cols == 14:
-        data = raw.iloc[:, 1:13].copy()
-    elif n_cols == 13:
+    if n_cols == _V1_N_COLS:
+        data = raw.iloc[:, _V1_DATA_START:_V1_DATA_END].copy()
+    elif n_cols == _V1_N_COLS_NO_LOC:
         data = raw.iloc[:, :12].copy()
     else:
         raise ValueError(
-            f"Expected 13 or 14 columns in v1 climate file, got {n_cols}. "
-            "Ensure the file is in SIPNET v1 format."
+            f"Expected {_V1_N_COLS_NO_LOC} or {_V1_N_COLS} columns in v1 climate file, "
+            f"got {n_cols}. Ensure the file is in SIPNET v1 format."
         )
     data.columns = CLIM_COLUMNS_V1  # type: ignore[assignment]
     for col in ("year", "day"):
@@ -139,9 +239,9 @@ def _read_v1(path: Path) -> ClimateDrivers:
 def _read_v2(path: Path) -> ClimateDrivers:
     raw = pd.read_csv(path, sep=r"\s+", header=None, dtype=float)
     n_cols = raw.shape[1]
-    if n_cols != 12:
+    if n_cols != _V2_N_COLS:
         raise ValueError(
-            f"Expected 12 columns in v2 climate file, got {n_cols}. "
+            f"Expected {_V2_N_COLS} columns in v2 climate file, got {n_cols}. "
             "Ensure the file is in SIPNET v2 format."
         )
     data = raw.copy()
