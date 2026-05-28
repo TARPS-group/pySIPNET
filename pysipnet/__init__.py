@@ -3,7 +3,7 @@
 Quickstart::
 
     from pysipnet import (
-        SIPNETRunner, ModelPreset,
+        SIPNETRunner, ModelPreset, SIPNETModel,
         SIPNETParametersV1, ModelFlagsV1,
         ClimateDrivers,
     )
@@ -11,9 +11,10 @@ Quickstart::
     params  = SIPNETParametersV1(...)
     climate = ClimateDrivers.from_file("site.clim", version="v1")
     runner  = SIPNETRunner(preset=ModelPreset.STANDARD)
-    result  = runner.run(params, climate)
+    model   = SIPNETModel(runner, base_params=params, base_climate=climate)
 
-    print(result.outputs[["nee", "gpp"]].describe())
+    result = model()                    # baseline run
+    result = model(a_max=120.0)         # single parameter override
 
 With agronomic events::
 
@@ -23,7 +24,7 @@ With agronomic events::
         IrrigationEvent(year=2020, day=150, amount=5.0,
                         method=IrrigationMethod.SOIL),
     ])
-    result = runner.run(params, climate, events=events)
+    result = model(events=events)
 """
 
 # Runner
@@ -44,8 +45,11 @@ from pysipnet.events import (
     TillageEvent,
 )
 
+# Model (high-level interface)
+from pysipnet.model import SIPNETModel
+
 # Parameters (top-level groups available via pysipnet.parameters)
-from pysipnet.parameters.v1 import ModelFlagsV1, SIPNETParametersV1
+from pysipnet.parameters.v1 import SIPNET_PARAMS_BY_GROUP, ModelFlagsV1, SIPNETParametersV1
 
 # Results
 from pysipnet.result import RunProvenance, SIPNETResult
@@ -57,6 +61,8 @@ from pysipnet.version import PYSIPNET_VERSION, SIPNET_PINNED_COMMIT, SIPNET_TARG
 __version__ = PYSIPNET_VERSION
 
 __all__ = [
+    # Model (high-level interface)
+    "SIPNETModel",
     # Runner
     "SIPNETRunner",
     "ModelPreset",
@@ -66,6 +72,7 @@ __all__ = [
     # Parameters
     "SIPNETParametersV1",
     "ModelFlagsV1",
+    "SIPNET_PARAMS_BY_GROUP",
     # Climate
     "ClimateDrivers",
     # Events

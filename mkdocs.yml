@@ -44,7 +44,8 @@ nav:
   - SIPNET Version: sipnet-version.md
   - Design: design.md
   - User Guide:
-      - Quickstart: user-guide/quickstart.md
+      - Running a Model: user-guide/running-a-model.md
+      - Ensemble Runs: user-guide/ensemble-runs.md
   - API Reference:
       - Overview: api/index.md
 

@@ -1,5 +1,9 @@
 # API Reference
 
+## Model
+
+::: pysipnet.model
+
 ## Parameters
 
 ::: pysipnet.parameters.base

@@ -721,3 +721,81 @@ class SIPNETParametersV1(BaseModel):
             )
         if errors:
             raise ValueError("Parameter–flag mismatch:\n" + "\n".join(f"  • {e}" for e in errors))
+
+
+# ── Parameter group map ────────────────────────────────────────────────────────
+
+
+def _build_param_groups() -> dict[str, list[str]]:
+    """Return a mapping from group name to the list of parameter field names.
+
+    Asserts that all parameter names are unique across groups — a structural
+    invariant of :class:`SIPNETParametersV1`.
+    """
+    groups: dict[str, list[str]] = {}
+    seen: dict[str, str] = {}
+    for group_name, field_info in SIPNETParametersV1.model_fields.items():
+        annotation = field_info.annotation
+        if (
+            annotation is None
+            or not isinstance(annotation, type)
+            or not issubclass(annotation, BaseModel)
+        ):
+            continue
+        param_names = list(annotation.model_fields.keys())
+        for name in param_names:
+            assert name not in seen, (
+                f"Parameter '{name}' appears in both '{seen[name]}' and '{group_name}'. "
+                "Parameter names must be unique across all groups."
+            )
+            seen[name] = group_name
+        groups[group_name] = param_names
+    return groups
+
+
+SIPNET_PARAMS_BY_GROUP: dict[str, list[str]] = _build_param_groups()
+"""Mapping from parameter group name to the list of field names in that group.
+
+Built once at module import time by inspecting :class:`SIPNETParametersV1`.
+All parameter names are guaranteed unique across groups.
+
+Groups and their parameters:
+
+- ``initial_conditions`` — ``plant_wood``, ``lai``, ``litter``, ``soil``,
+  ``soil_water_frac``, ``litter_water_frac``, ``snow``, ``fine_root_frac``,
+  ``coarse_root_frac``
+- ``photosynthesis`` — ``a_max``, ``a_max_frac``, ``base_fol_resp_frac``,
+  ``psn_t_min``, ``psn_t_opt``, ``d_vpd_slope``, ``d_vpd_exp``,
+  ``half_sat_par``, ``attenuation``
+- ``phenology`` — ``leaf_on_day``, ``leaf_off_day``, ``gdd_leaf_on``,
+  ``soil_temp_leaf_on``, ``leaf_growth``, ``frac_leaf_fall``,
+  ``leaf_allocation``, ``leaf_turnover_rate``
+- ``respiration`` — ``base_veg_resp``, ``veg_resp_q10``,
+  ``growth_resp_frac``, ``frozen_soil_fol_r_eff``,
+  ``frozen_soil_threshold``, ``base_fine_root_resp``,
+  ``base_coarse_root_resp``, ``fine_root_q10``, ``coarse_root_q10``,
+  ``base_soil_resp``, ``soil_resp_q10``, ``soil_resp_moist_effect``,
+  ``litter_breakdown_rate``, ``frac_litter_respired``
+- ``allocation`` — ``fine_root_allocation``, ``fine_root_exudation``,
+  ``coarse_root_exudation``, ``wood_allocation``,
+  ``fine_root_turnover_rate``, ``coarse_root_turnover_rate``,
+  ``wood_turnover_rate``
+- ``water`` — ``water_remove_frac``, ``frozen_soil_eff``, ``wue_const``,
+  ``soil_whc``, ``immed_evap_frac``, ``fast_flow_frac``, ``snow_melt``,
+  ``rd_const``, ``r_soil_const1``, ``r_soil_const2``, ``litter_whc``,
+  ``leaf_pool_depth``
+- ``leaf`` — ``leaf_c_sp_wt``, ``c_frac_leaf``
+
+Examples
+--------
+List all photosynthesis parameter names::
+
+    from pysipnet.parameters import SIPNET_PARAMS_BY_GROUP
+    SIPNET_PARAMS_BY_GROUP["photosynthesis"]
+    # ['a_max', 'a_max_frac', 'base_fol_resp_frac', ...]
+
+Check which group a parameter belongs to::
+
+    group = next(g for g, ps in SIPNET_PARAMS_BY_GROUP.items() if "a_max" in ps)
+    # 'photosynthesis'
+"""

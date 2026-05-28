@@ -28,14 +28,41 @@ git submodule update --init sipnet/
 Using [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv sync                    # installs runtime + dev dependencies
-uv sync --extra xarray     # also install xarray for Dataset output
+uv sync                              # installs runtime + dev dependencies
+uv sync --extra xarray               # + xarray for Dataset output
+uv sync --extra viz                  # + plotly for the result dashboard
 ```
 
 Using pip:
 
 ```bash
-pip install -e ".[xarray]"
+pip install -e "."                   # runtime only
+pip install -e ".[xarray]"          # + xarray
+pip install -e ".[viz]"             # + plotly
+pip install -e ".[xarray,viz]"      # both optional extras
+```
+
+### Optional extras
+
+| Extra | Package | When you need it |
+|:------|:--------|:-----------------|
+| `xarray` | `xarray>=2023.0` | `SIPNETResult.to_xarray()` |
+| `viz` | `plotly>=5.3` | `pysipnet.viz.dashboard()` |
+| `examples` | matplotlib, jupyter | Running the example notebooks |
+
+### Ensemble module (PyEns)
+
+`pysipnet.ensemble` requires [PyEns](https://github.com/arob5/PyEns), which is
+not yet on PyPI.  Install it from source before using the ensemble module:
+
+```bash
+pip install git+https://github.com/arob5/PyEns.git
+```
+
+or, if you have a local clone:
+
+```bash
+pip install -e /path/to/pyens
 ```
 
 ## 3. Build the SIPNET binary
