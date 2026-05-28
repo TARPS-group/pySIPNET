@@ -261,15 +261,25 @@ runner = SIPNETRunner(
 
 ### Disk space with keep_workdir
 
+By default, working directories are deleted after each run.  The parsed
+outputs are already in the `SIPNETResult.outputs` DataFrame at that point,
+so in-memory data is not lost.  However, the raw `sipnet.out` file is gone.
+This matters if you later want lower-level output than what you extracted
+during the run — for example, if you summarised to annual totals and then
+realised you needed the full sub-daily timeseries.
+
 Each preserved working directory contains at minimum:
+
 - `sipnet.param` — ~2–3 kB
 - `sipnet.clim` — ~1 MB per year of daily data
 - `sipnet.in` — trivial
 - `sipnet.out` — ~500 kB per year of daily output
 
 For a 500-run ensemble with `keep_workdir=True`, budget ~1 GB per year of
-simulation.  Use `keep_workdir=True` only when debugging individual runs, not
-for production ensemble runs.
+simulation.  Whether that trade-off is worthwhile depends on your workflow —
+if you are confident the DataFrame captures everything you need, the default
+delete-on-completion is fine; if you want the raw files as an archival record
+or a fallback, set `keep_workdir=True`.
 
 ---
 
