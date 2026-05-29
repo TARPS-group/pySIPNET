@@ -12,7 +12,6 @@ from pysipnet.climate import ClimateDrivers
 from pysipnet.config import ClimateArchiveMode, RunConfig
 from pysipnet.runner import ModelPreset
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

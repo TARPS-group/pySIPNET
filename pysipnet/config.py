@@ -6,7 +6,7 @@ import hashlib
 import json
 import warnings
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -169,7 +169,7 @@ class RunConfig:
             "has_events": has_events,
             "sipnet_commit": SIPNET_PINNED_COMMIT,
             "pysipnet_version": PYSIPNET_VERSION,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }
         (path / "config.json").write_text(json.dumps(config_data, indent=2))
 
