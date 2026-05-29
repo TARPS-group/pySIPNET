@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -10,6 +10,7 @@ import pandas as pd
 
 if TYPE_CHECKING:
     from pysipnet.climate import ClimateDrivers
+    from pysipnet.events import EventSequence
     from pysipnet.parameters.v1 import ModelFlagsV1, SIPNETParametersV1
     from pysipnet.runner import ModelPreset
 
@@ -71,6 +72,9 @@ class SIPNETResult:
     provenance:
         Execution metadata: binary, run ID, working directory, return code,
         stdout/stderr.
+    events:
+        The :class:`~pysipnet.events.EventSequence` used for this run, or
+        ``None`` if no events were supplied.
     """
 
     outputs: pd.DataFrame
@@ -78,6 +82,7 @@ class SIPNETResult:
     climate: ClimateDrivers
     flags: ModelFlagsV1
     provenance: RunProvenance
+    events: EventSequence | None = field(default=None)
 
     @classmethod
     def from_workdir(
@@ -86,6 +91,7 @@ class SIPNETResult:
         climate: ClimateDrivers,
         flags: ModelFlagsV1,
         provenance: RunProvenance,
+        events: EventSequence | None = None,
     ) -> SIPNETResult:
         """Parse SIPNET output files and construct a result object.
 
@@ -100,6 +106,8 @@ class SIPNETResult:
         provenance:
             Execution provenance (binary path, return code, stdout/stderr, etc.).
             ``provenance.workdir`` is used to locate the ``sipnet.out`` file.
+        events:
+            Management event sequence used for the run, if any.
         """
         from pysipnet.io.output_reader import read_output_file
 
@@ -115,6 +123,7 @@ class SIPNETResult:
             climate=climate,
             flags=flags,
             provenance=provenance,
+            events=events,
         )
 
     def to_xarray(self):

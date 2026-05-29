@@ -293,6 +293,7 @@ class SIPNETRunner:
                 climate=climate,
                 flags=flags,
                 provenance=provenance,
+                events=events,
             )
         finally:
             if not self.keep_workdir:

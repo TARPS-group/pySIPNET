@@ -46,6 +46,7 @@ nav:
   - User Guide:
       - Running a Model: user-guide/running-a-model.md
       - Ensemble Runs: user-guide/ensemble-runs.md
+      - Reproducible Workflows: user-guide/reproducible-runs.md
       - File I/O and Working Directories: user-guide/file-io.md
   - API Reference:
       - Overview: api/index.md

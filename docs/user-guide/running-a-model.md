@@ -334,28 +334,6 @@ requires `respiration.litter_breakdown_rate` and `respiration.frac_litter_respir
 
 ---
 
-## Serialising a run configuration
-
-`SIPNETParametersV1` round-trips through plain Python dicts, making it easy
-to log, diff, or reconstruct parameter sets:
-
-```python
-import json
-
-config = {
-    "params": params.model_dump(),
-    "preset": ModelPreset.STANDARD.value,
-}
-json_str = json.dumps(config)
-
-# Reconstruct in another process or from a saved file
-config2 = json.loads(json_str)
-params2 = SIPNETParametersV1.model_validate(config2["params"])
-preset2 = ModelPreset(config2["preset"])
-```
-
----
-
 ## Querying parameter metadata
 
 ### SIPNET_PARAMS_BY_GROUP

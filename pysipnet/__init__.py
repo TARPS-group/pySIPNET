@@ -31,6 +31,9 @@ With agronomic events::
 # Build utilities
 from pysipnet.build import build_preset, ensure_binary
 
+# Config (reproducible workflows)
+from pysipnet.config import ClimateArchiveMode, RunConfig
+
 # Climate
 from pysipnet.climate import ClimateDrivers
 
@@ -67,6 +70,9 @@ __all__ = [
     "SIPNETRunner",
     "ModelPreset",
     "ClimateStaging",
+    # Config (reproducible workflows)
+    "RunConfig",
+    "ClimateArchiveMode",
     # Results
     "SIPNETResult",
     "RunProvenance",
