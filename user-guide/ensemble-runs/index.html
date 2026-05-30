@@ -16,7 +16,7 @@
         <link rel="prev" href="../running-a-model/">
       
       
-        <link rel="next" href="../file-io/">
+        <link rel="next" href="../reproducible-runs/">
       
       
         
@@ -682,6 +682,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../reproducible-runs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reproducible Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../file-io/" class="md-nav__link">
         
   
@@ -1088,10 +1116,11 @@ the ensemble runs every combination (Cartesian product).</p>
 <a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="p">})</span>
 <a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="c1"># 5 × 4 = 20 runs</span>
 </code></pre></div>
-<p>Two <code>Grid</code> fields that reference the <strong>same</strong> <code>Axis</code> instance are <em>aligned</em>:
-they co-vary and produce one run per axis position (zip semantics).  Use this
-when parameters or climate drivers naturally pair up — for example, site
-climate and site initial conditions.</p>
+<p>Two <code>Grid</code> fields that reference axes with the same name, size, and labels
+are <em>aligned</em>: they co-vary and produce one run per axis position (zip
+semantics).  In practice this means passing the same <code>Axis</code> object to both
+<code>Grid</code> calls.  Use this when parameters or climate drivers naturally pair up
+— for example, site climate and site initial conditions.</p>
 <hr />
 <h2 id="multi-site-multi-member-ensembles">Multi-site, multi-member ensembles</h2>
 <p>The helper functions <code>sipnet_site_fields</code> and <code>sipnet_member_fields</code> make it

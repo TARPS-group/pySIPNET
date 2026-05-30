@@ -701,17 +701,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#serialising-a-run-configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Serialising a run configuration
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#querying-parameter-metadata" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -774,6 +763,34 @@
     
   
     Ensemble Runs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reproducible-runs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reproducible Workflows
   
 
     
@@ -1155,17 +1172,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#serialising-a-run-configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Serialising a run configuration
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#querying-parameter-metadata" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1536,57 +1542,40 @@ any number of runs with different parameters and climate drivers.</p>
 <p>Use <code>FOREST</code> for sites with a distinct litter carbon layer.  It additionally
 requires <code>respiration.litter_breakdown_rate</code> and <code>respiration.frac_litter_respired</code>.</p>
 <hr />
-<h2 id="serialising-a-run-configuration">Serialising a run configuration</h2>
-<p><code>SIPNETParametersV1</code> round-trips through plain Python dicts, making it easy
-to log, diff, or reconstruct parameter sets:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
-<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="n">config</span> <span class="o">=</span> <span class="p">{</span>
-<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>    <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="n">params</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(),</span>
-<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>    <span class="s2">&quot;preset&quot;</span><span class="p">:</span> <span class="n">ModelPreset</span><span class="o">.</span><span class="n">STANDARD</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
-<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="p">}</span>
-<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="n">json_str</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>
-<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="c1"># Reconstruct in another process or from a saved file</span>
-<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="n">config2</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">json_str</span><span class="p">)</span>
-<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="n">params2</span> <span class="o">=</span> <span class="n">SIPNETParametersV1</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">config2</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">])</span>
-<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a><span class="n">preset2</span> <span class="o">=</span> <span class="n">ModelPreset</span><span class="p">(</span><span class="n">config2</span><span class="p">[</span><span class="s2">&quot;preset&quot;</span><span class="p">])</span>
-</code></pre></div>
-<hr />
 <h2 id="querying-parameter-metadata">Querying parameter metadata</h2>
 <h3 id="sipnet_params_by_group">SIPNET_PARAMS_BY_GROUP</h3>
 <p><code>SIPNET_PARAMS_BY_GROUP</code> maps each group name to the list of parameter names in
 that group.  It is useful for discovering available parameters and for
 building calibration tooling:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pysipnet</span><span class="w"> </span><span class="kn">import</span> <span class="n">SIPNET_PARAMS_BY_GROUP</span>
-<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>
-<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="c1"># What parameters are in the photosynthesis group?</span>
-<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="n">SIPNET_PARAMS_BY_GROUP</span><span class="p">[</span><span class="s2">&quot;photosynthesis&quot;</span><span class="p">]</span>
-<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="c1"># [&#39;a_max&#39;, &#39;a_max_frac&#39;, &#39;base_fol_resp_frac&#39;, &#39;psn_t_min&#39;, &#39;psn_t_opt&#39;,</span>
-<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="c1">#  &#39;d_vpd_slope&#39;, &#39;d_vpd_exp&#39;, &#39;half_sat_par&#39;, &#39;attenuation&#39;]</span>
-<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>
-<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="c1"># All groups</span>
-<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="nb">list</span><span class="p">(</span><span class="n">SIPNET_PARAMS_BY_GROUP</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="c1"># [&#39;initial_conditions&#39;, &#39;photosynthesis&#39;, &#39;phenology&#39;, &#39;respiration&#39;,</span>
-<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a><span class="c1">#  &#39;allocation&#39;, &#39;water&#39;, &#39;leaf&#39;]</span>
-<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a>
-<a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a><span class="c1"># Total parameter count</span>
-<a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a><span class="nb">sum</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ps</span><span class="p">)</span> <span class="k">for</span> <span class="n">ps</span> <span class="ow">in</span> <span class="n">SIPNET_PARAMS_BY_GROUP</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>  <span class="c1"># 61</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pysipnet</span><span class="w"> </span><span class="kn">import</span> <span class="n">SIPNET_PARAMS_BY_GROUP</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="c1"># What parameters are in the photosynthesis group?</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="n">SIPNET_PARAMS_BY_GROUP</span><span class="p">[</span><span class="s2">&quot;photosynthesis&quot;</span><span class="p">]</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="c1"># [&#39;a_max&#39;, &#39;a_max_frac&#39;, &#39;base_fol_resp_frac&#39;, &#39;psn_t_min&#39;, &#39;psn_t_opt&#39;,</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="c1">#  &#39;d_vpd_slope&#39;, &#39;d_vpd_exp&#39;, &#39;half_sat_par&#39;, &#39;attenuation&#39;]</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="c1"># All groups</span>
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="nb">list</span><span class="p">(</span><span class="n">SIPNET_PARAMS_BY_GROUP</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="c1"># [&#39;initial_conditions&#39;, &#39;photosynthesis&#39;, &#39;phenology&#39;, &#39;respiration&#39;,</span>
+<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="c1">#  &#39;allocation&#39;, &#39;water&#39;, &#39;leaf&#39;]</span>
+<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>
+<a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="c1"># Total parameter count</span>
+<a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a><span class="nb">sum</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ps</span><span class="p">)</span> <span class="k">for</span> <span class="n">ps</span> <span class="ow">in</span> <span class="n">SIPNET_PARAMS_BY_GROUP</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>  <span class="c1"># 61</span>
 </code></pre></div>
 <h3 id="get_parameter_specs">get_parameter_specs</h3>
 <p>For calibration and DA workflows, <code>get_parameter_specs</code> returns the full
 <code>ParameterSpec</code> for each parameter — including unit, mathematical domain, and
 whether the value is a per-year rate:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pysipnet.parameters.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_parameter_specs</span><span class="p">,</span> <span class="n">ParameterDomain</span>
-<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>
-<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="n">specs</span> <span class="o">=</span> <span class="n">get_parameter_specs</span><span class="p">(</span><span class="n">SIPNETParametersV1</span><span class="p">)</span>
-<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="c1"># {&quot;photosynthesis.a_max&quot;: ParameterSpec(unit=&quot;nmol / (g * s)&quot;, domain=POSITIVE, ...), ...}</span>
-<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>
-<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="c1"># Parameters requiring a log bijector for unconstrained optimisation</span>
-<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="n">log_params</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">specs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">domain</span> <span class="o">==</span> <span class="n">ParameterDomain</span><span class="o">.</span><span class="n">POSITIVE</span><span class="p">}</span>
-<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>
-<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a><span class="c1"># Per-year rate parameters</span>
-<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a><span class="n">annual_rates</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">specs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">per_year</span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pysipnet.parameters.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_parameter_specs</span><span class="p">,</span> <span class="n">ParameterDomain</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="n">specs</span> <span class="o">=</span> <span class="n">get_parameter_specs</span><span class="p">(</span><span class="n">SIPNETParametersV1</span><span class="p">)</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1"># {&quot;photosynthesis.a_max&quot;: ParameterSpec(unit=&quot;nmol / (g * s)&quot;, domain=POSITIVE, ...), ...}</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="c1"># Parameters requiring a log bijector for unconstrained optimisation</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="n">log_params</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">specs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">domain</span> <span class="o">==</span> <span class="n">ParameterDomain</span><span class="o">.</span><span class="n">POSITIVE</span><span class="p">}</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="c1"># Per-year rate parameters</span>
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="n">annual_rates</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">specs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">per_year</span><span class="p">}</span>
 </code></pre></div>
 
 
