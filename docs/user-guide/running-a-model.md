@@ -12,30 +12,26 @@ building the SIPNET binary with `make sipnet`.
 
 pySIPNET provides two interfaces for running SIPNET.
 
-**`SIPNETModel`** is the recommended entry point for most users.  You
-construct it once with a baseline parameter set and climate, then call it
-as a function — optionally supplying parameter or climate overrides for
-each run:
+**`SIPNETRunner`** is the subprocess manager that executes the SIPNET binary.
+Each call writes inputs to a fresh working directory, runs the binary there,
+and returns a `SIPNETResult`.  You can call it directly or use it as the
+foundation for `SIPNETModel`.
+
+**`SIPNETModel`** wraps a runner and a baseline parameter set.  You call it as
+a function — optionally supplying parameter or climate overrides for each run
+— which makes it the preferred entry point for most workflows:
 
 ```python
-model = SIPNETModel(runner, base_params=params, base_climate=climate)
+runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
 result        = model()                # baseline run
 result_tuned  = model(a_max=120.0)     # single parameter override
 result_site_b = model(climate=other)   # different climate drivers
 ```
 
-**`SIPNETRunner`** is the lower-level subprocess manager that `SIPNETModel`
-uses internally.  You can call it directly when you need control over
-execution details — keeping the working directory for debugging, setting a
-custom timeout, or passing an explicit run identifier:
-
-```python
-result = runner.run(params, climate)   # direct call
-```
-
-Both return the same `SIPNETResult`.  The rest of this guide covers how to
-use both, starting with `SIPNETModel`.
+Both return the same `SIPNETResult`.  The rest of this guide covers both,
+starting with `SIPNETRunner` since `SIPNETModel` builds on top of it.
 
 ---
 
@@ -56,10 +52,9 @@ print(climate)
 # ClimateDrivers(version='v1', timesteps=29200, range=2012-001 to 2023-365)
 ```
 
-`ClimateDrivers` validates the file on load: every row must be complete,
-timesteps must be monotonically increasing, and VPD and wind speed must be
-positive.  A failed validation raises `ValueError` with a message that
-identifies the offending row.
+`ClimateDrivers.from_file` loads the data into memory.  For ensemble
+workflows with pre-existing files, `ClimateDrivers.from_path` creates a
+lightweight file reference without loading the data — see [File I/O](file-io.md).
 
 ### Parameters
 
@@ -164,11 +159,63 @@ params.validate_for_flags(ModelPreset.STANDARD.flags)
 
 ---
 
+## Running with SIPNETRunner
+
+`SIPNETRunner` is the direct interface to the binary.  Construct it once and
+reuse it across any number of runs — the runner holds no per-run state.
+
+```python
+from pysipnet import SIPNETRunner, ModelPreset
+
+runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+result = runner.run(params, climate)
+
+print(result.provenance.success)   # True if returncode == 0
+print(result.provenance.stderr)    # SIPNET's stderr output, if any
+```
+
+### Key runner parameters
+
+| Parameter | Default | Purpose |
+|:----------|:--------|:--------|
+| `preset` | required | Binary preset (`STANDARD` or `FOREST`) |
+| `timeout` | 300 s | Maximum wall-clock time per run |
+| `run_id` | UUID hex | Identifier used in the working directory name |
+| `output_dir` | `None` | Copy `sipnet.out` here before workdir cleanup (lazy loading) |
+| `keep_workdir` | `False` | Suppress working directory cleanup for debugging |
+
+```python
+runner = SIPNETRunner(
+    preset=ModelPreset.STANDARD,
+    timeout=600.0,
+)
+
+result = runner.run(params, climate, run_id="my_baseline")
+
+print(result.provenance.workdir)    # path to the (deleted) working directory
+print(result.provenance.run_id)     # "my_baseline"
+```
+
+For I/O options — keeping files on disk, lazy output loading, climate staging
+— see [File I/O](file-io.md) and [Common Workflows](workflows.md).
+
+### Binary presets
+
+| Preset | Active flags |
+|:-------|:-------------|
+| `ModelPreset.STANDARD` | SNOW=1, GDD=1, WATER_HRESP=1 |
+| `ModelPreset.FOREST` | STANDARD + LITTER_POOL=1 |
+
+Use `FOREST` for sites with a distinct litter carbon layer.  It additionally
+requires `respiration.litter_breakdown_rate` and `respiration.frac_litter_respired`.
+
+---
+
 ## Running with SIPNETModel
 
-`SIPNETModel` is constructed from a `SIPNETRunner` plus a baseline parameter
-set and (optionally) a default climate.  The runner determines the binary
-preset; `SIPNETModel` handles the override logic.
+`SIPNETModel` wraps a `SIPNETRunner` and a baseline parameter set.  Each call
+applies overrides on top of the baseline and delegates the actual execution to
+the runner.
 
 ```python
 from pysipnet import SIPNETRunner, ModelPreset, SIPNETModel
@@ -183,14 +230,14 @@ Call `model()` with no arguments to run the baseline:
 
 ```python
 result = model()
-print(result.outputs[["nee", "gpp"]].sum())
+print(result.outputs.data[["nee", "gpp"]].sum())
 ```
 
 ### Parameter overrides
 
-Pass any SIPNET v1 parameter name as a keyword argument to override its
-value for that run.  All other parameters stay at their baseline values.
-The override is applied, Pydantic-validated, and discarded — `model.base_params`
+Pass any SIPNET v1 parameter name as a keyword argument to override its value
+for that run.  All other parameters stay at their baseline values.  The
+override is applied, Pydantic-validated, and discarded — `model.base_params`
 is never mutated.
 
 ```python
@@ -200,8 +247,7 @@ result_combined = model(a_max=140.0, psn_t_opt=28.0)
 ```
 
 Unrecognised parameter names raise `ValueError` immediately.  Invalid values
-(e.g., a negative `a_max`) raise `ValidationError` before the binary is
-called.
+(e.g., a negative `a_max`) raise `ValidationError` before the binary is called.
 
 ### Climate and event overrides
 
@@ -209,9 +255,9 @@ Pass `climate=` to replace the climate for a specific run, or `events=` to
 supply a management event sequence:
 
 ```python
-result_site_b = model(climate=other_climate)
+result_site_b      = model(climate=other_climate)
 result_with_events = model(events=event_sequence)
-result_full   = model(a_max=120.0, climate=other_climate, events=event_sequence)
+result_full        = model(a_max=120.0, climate=other_climate, events=event_sequence)
 ```
 
 ### Sensitivity exploration
@@ -237,10 +283,11 @@ Both `SIPNETModel` and `SIPNETRunner.run()` return a `SIPNETResult`.
 
 ### The outputs DataFrame
 
-`result.outputs` is a pandas DataFrame with one row per model timestep:
+`result.outputs` is a `SIPNETOutput` object.  Access the full DataFrame via
+`.data`:
 
 ```python
-print(result.outputs.columns.tolist())
+print(result.outputs.data.columns.tolist())
 # ['year', 'day', 'time',
 #  'plant_wood_c', 'plant_leaf_c', 'wood_creation',
 #  'soil_c', 'coarse_root_c', 'fine_root_c', 'litter_c',
@@ -275,7 +322,7 @@ result.et()    # pd.Series — evapotranspiration
 
 ```python
 annual = (
-    result.outputs
+    result.outputs.data
     .groupby("year")[["nee", "gpp", "evapotranspiration"]]
     .sum()
 )
@@ -289,48 +336,6 @@ and `time` as coordinates:
 ```python
 ds = result.to_xarray()
 ```
-
----
-
-## Using SIPNETRunner directly
-
-You will rarely need `SIPNETRunner.run()` directly — `SIPNETModel` covers
-most cases more cleanly.  The situations where direct access is useful:
-
-- **Inspecting the working directory.** Set `keep_workdir=True` on the runner
-  to preserve the temp directory after the run, then examine `sipnet.param`,
-  `sipnet.clim`, and `sipnet.out` directly.
-- **Custom timeout.** The default timeout is 300 s per run; set a different
-  value at construction time.
-- **Explicit run IDs.** Useful for correlating working directories with runs
-  in your own logging.
-
-```python
-runner = SIPNETRunner(
-    preset=ModelPreset.STANDARD,
-    keep_workdir=True,    # preserve temp dir for inspection
-    timeout=600.0,        # seconds
-)
-
-result = runner.run(params, climate, run_id="my_baseline")
-
-print(result.provenance.workdir)    # path to the preserved directory
-print(result.provenance.success)    # True if returncode == 0
-print(result.provenance.stderr)     # SIPNET's stderr, if any
-```
-
-`SIPNETRunner.run()` is stateless: the same runner instance can be used for
-any number of runs with different parameters and climate drivers.
-
-### Binary presets
-
-| Preset | Active flags |
-|:-------|:-------------|
-| `ModelPreset.STANDARD` | SNOW=1, GDD=1, WATER_HRESP=1 |
-| `ModelPreset.FOREST` | standard + LITTER_POOL=1 |
-
-Use `FOREST` for sites with a distinct litter carbon layer.  It additionally
-requires `respiration.litter_breakdown_rate` and `respiration.frac_litter_respired`.
 
 ---
 

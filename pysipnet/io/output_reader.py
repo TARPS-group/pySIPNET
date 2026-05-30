@@ -113,7 +113,7 @@ SIPNET_TO_PYTHON_OUTPUT: dict[str, str] = {
 }
 
 
-def read_output_file(path: Path) -> pd.DataFrame:
+def read_output_file(path: Path, columns: list[str] | None = None) -> pd.DataFrame:
     """Parse a SIPNET ``.out`` file into a DataFrame.
 
     Handles both ``HEADER=1`` (column names present) and ``HEADER=0`` (no
@@ -128,6 +128,12 @@ def read_output_file(path: Path) -> pd.DataFrame:
     ----------
     path:
         Path to the ``.out`` file.
+    columns:
+        Subset of snake_case column names to return.  The time-coordinate
+        columns ``year``, ``day``, and ``time`` are always included regardless
+        of this argument.  ``None`` returns all columns.  Column filtering is
+        only applied for ``HEADER=1`` output; ``HEADER=0`` files always return
+        all columns.
     """
     from io import StringIO
 
@@ -140,9 +146,17 @@ def read_output_file(path: Path) -> pd.DataFrame:
         sipnet_cols = lines[1].split()
         python_cols = [SIPNET_TO_PYTHON_OUTPUT.get(c, c) for c in sipnet_cols]
         data_text = "\n".join(lines[2:])
+
+        if columns is not None:
+            time_coords = {"year", "day", "time"}
+            requested = time_coords | set(columns)
+            usecols = [c for c in python_cols if c in requested]
+        else:
+            usecols = None
     else:
         # HEADER=0: no header, use positional integer column indices
         python_cols = None
+        usecols = None
         data_text = "\n".join(lines)
 
     df = pd.read_csv(
@@ -150,5 +164,6 @@ def read_output_file(path: Path) -> pd.DataFrame:
         sep=r"\s+",
         header=None,
         names=python_cols,
+        usecols=usecols,
     )
     return df

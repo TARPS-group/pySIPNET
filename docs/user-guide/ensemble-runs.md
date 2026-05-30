@@ -62,7 +62,7 @@ You can call it directly to verify it works before handing it to PyEns:
 
 ```python
 result = model(a_max=112.0, base_veg_resp=0.02)
-print(result.outputs[["nee", "gpp"]].sum())
+print(result.outputs.data[["nee", "gpp"]].sum())
 ```
 
 Any SIPNET v1 parameter name can be passed as a keyword argument.  The
@@ -191,8 +191,13 @@ result          = ensemble_runner.run(spec)
 !!! important "Pickling requirement"
     `LocalBackend` uses Python's `multiprocessing` module, which serialises
     the model callable and all field values with `pickle`.  `SIPNETModel` is
-    picklable.  `ClimateDrivers` objects (which contain a pandas DataFrame)
-    are also picklable.
+    picklable.
+
+    `ClimateDrivers` instances are also picklable, but the pickle size differs
+    significantly by construction mode: an in-memory instance (`from_file` or
+    `from_dataframe`) pickles the entire DataFrame, while a file-backed instance
+    (`from_path`) pickles only a file path.  For large multi-site ensembles,
+    prefer `from_path` — see [File I/O](file-io.md) for details.
 
     If you encounter a `PicklingError`, switch to `SequentialBackend` to
     reproduce the failure with a full traceback, fix the issue, then switch
@@ -276,6 +281,14 @@ print(spec.describe())
 ```
 
 This is especially useful before submitting to an HPC cluster.
+
+---
+
+---
+
+For concrete file I/O patterns suited to large ensemble runs — lazy output
+loading, column-selective post-processing, symlinked climate files — see
+[Common Workflows](workflows.md).
 
 ---
 
