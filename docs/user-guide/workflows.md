@@ -17,15 +17,18 @@ Everything lives in memory.  No files are created (beyond the transient
 working directory that pySIPNET manages automatically).
 
 ```python
-from pysipnet import SIPNETRunner, ModelPreset, SIPNETParametersV1, ClimateDrivers
-import pandas as pd
+from pysipnet import SIPNETRunner, SIPNETModel, ModelPreset, SIPNETParametersV1, ClimateDrivers
+
+# params: SIPNETParametersV1 = ...  (see Running a Model for full construction)
+params: SIPNETParametersV1 = ...
 
 # Load climate directly into memory
 climate = ClimateDrivers.from_file("data/era5_site1.clim", version="v1")
 
-# Run
 runner = SIPNETRunner(preset=ModelPreset.STANDARD)
-result = runner.run(params, climate)
+model  = SIPNETModel(runner, base_params=params, base_climate=climate)
+
+result = model()
 
 # Work with results — all in memory
 df = result.outputs.data
@@ -50,6 +53,7 @@ reading them all up front; single-site or small multi-site runs where output
 size is manageable.
 
 ```python
+from pathlib import Path
 from pysipnet import SIPNETRunner, ModelPreset, ClimateDrivers, ClimateStaging
 
 runner = SIPNETRunner(
@@ -256,4 +260,4 @@ and a SHA-256 hash of the climate file alongside the output.  See
 | Ensemble, moderate size | `from_path` | Lazy (`output_dir=`) | `COPY` |
 | Ensemble, large files, Linux/macOS | `from_path` | Lazy (`output_dir=`) | `SYMLINK` |
 | Need only select output columns | `from_path` | Lazy + `load(columns=)` | `SYMLINK` |
-| Full archival / reproducible pipeline | `from_path` | Lazy + `keep_workdir=True` | `SYMLINK` |
+| Full archival / reproducible pipeline | `from_path` | Lazy (`output_dir=`) + `keep_workdir=True` | `SYMLINK` |

@@ -287,9 +287,8 @@ result = model(a_max=row["a_max"], base_veg_resp=row["base_veg_resp"])
 ### Saving outputs selectively
 
 Storing full model output timeseries for every iteration is often infeasible.
-`SIPNETResult.outputs` is an in-memory DataFrame — nothing is written to disk
-unless you ask for it.  A practical pattern is to save only summary statistics
-per iteration:
+By default `SIPNETResult.outputs` holds data in memory and nothing is written
+to disk.  A practical pattern is to save only summary statistics per iteration:
 
 ```python
 writer.writerow({
@@ -303,7 +302,10 @@ writer.writerow({
 ```
 
 Full outputs can be recomputed on demand for any evaluation of interest by
-replaying it as shown above.
+replaying it as shown above.  Alternatively, set `output_dir` on the runner to
+automatically copy each run's `sipnet.out` to a stable location — full outputs
+are then available for any member without re-running.  See
+[File I/O](file-io.md#output-io) for details.
 
 ### PyEns PartialSpec for iterative ensemble workflows
 
