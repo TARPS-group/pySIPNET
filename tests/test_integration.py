@@ -201,9 +201,7 @@ class TestOutputIO:
         call_dir = tmp_path / "call_override"
 
         runner = SIPNETRunner(preset=ModelPreset.STANDARD, output_dir=runner_dir)
-        runner.run(
-            minimal_params, _make_climate(), run_id="override_run", output_dir=call_dir
-        )
+        runner.run(minimal_params, _make_climate(), run_id="override_run", output_dir=call_dir)
 
         assert (call_dir / "sipnet_override_run.out").exists()
         assert not runner_dir.exists(), "Runner-level dir should not be created when overridden"
@@ -255,9 +253,7 @@ class TestOutputIO:
     def test_n_timesteps(self, minimal_params, tmp_path):
         """n_timesteps is correct for both memory-backed and file-backed outputs."""
         runner_mem = SIPNETRunner(preset=ModelPreset.STANDARD)
-        runner_file = SIPNETRunner(
-            preset=ModelPreset.STANDARD, output_dir=tmp_path / "outputs"
-        )
+        runner_file = SIPNETRunner(preset=ModelPreset.STANDARD, output_dir=tmp_path / "outputs")
         result_mem = runner_mem.run(minimal_params, _make_climate(n_days=20))
         result_file = runner_file.run(minimal_params, _make_climate(n_days=20))
 

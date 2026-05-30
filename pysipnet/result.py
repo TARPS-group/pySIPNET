@@ -102,9 +102,7 @@ class SIPNETResult:
                 "xarray is required for SIPNETResult.to_xarray(). "
                 "Install with: pip install pysipnet[xarray]"
             ) from exc
-        return xr.Dataset.from_dataframe(
-            self.outputs.data.set_index(["year", "day", "time"])
-        )
+        return xr.Dataset.from_dataframe(self.outputs.data.set_index(["year", "day", "time"]))
 
     def nee(self) -> pd.Series:
         """Net ecosystem exchange time series (g C m⁻² per timestep, + = to atmosphere)."""
