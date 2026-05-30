@@ -2,7 +2,7 @@
 
 This guide covers how to record, save, and reload SIPNET run specifications
 so that results can be reproduced exactly — whether for a single exploratory
-run, a large ensemble, or an iterative parameter estimation workflow.
+run, a large ensemble, or an iterative workflow.
 
 ---
 
@@ -48,7 +48,7 @@ my_run/
 └── events.in      # only written when events were provided
 ```
 
-`config.json` includes versioning metadata that will be useful years from now:
+`config.json` records versioning metadata alongside the run specification:
 
 ```json
 {
@@ -93,28 +93,28 @@ config.save("interesting_run/")
 
 ---
 
-## Climate archiving: `COPY` vs `REFERENCE`
+## Climate archiving: default vs `reference_only`
 
-By default (`ClimateArchiveMode.COPY`), `save` writes the full climate data
-into the config directory.  This produces a self-contained archive that can be
-moved, zipped, or shared without any external dependencies.
+By default, `save` writes the full climate data into the config directory.
+This produces a self-contained archive that can be moved, zipped, or shared
+without any external dependencies.
 
 For workflows where the climate file is large and shared across many configs
 (ensemble or iterative runs — see below), writing a separate copy for each
-config would waste disk space.  `ClimateArchiveMode.REFERENCE` instead stores
+config would waste disk space.  Passing `reference_only=True` instead stores
 only the absolute path and a SHA-256 hash of the source file:
 
 ```python
-from pysipnet import ClimateArchiveMode, ClimateDrivers, RunConfig
+from pysipnet import ClimateDrivers, RunConfig
 
 climate = ClimateDrivers.from_path("data/era5_site1.clim")
 config = RunConfig(preset=..., params=..., climate=climate)
-config.save("context/", climate_archive=ClimateArchiveMode.REFERENCE)
+config.save("context/", reference_only=True)
 ```
 
-`REFERENCE` requires a file-backed `ClimateDrivers` instance (created via
-`from_path`).  In-memory instances have no source path and can only be saved
-with `COPY`.
+`reference_only=True` requires a file-backed `ClimateDrivers` instance
+(created via `from_path`).  In-memory instances have no source path and can
+only be saved without this flag.
 
 On load, pySIPNET checks that the referenced file still exists and verifies
 its SHA-256 hash.  If the hash has changed — indicating the file was modified
@@ -170,14 +170,16 @@ result = model(soil=row["soil_init"], soil_water_frac=row["soil_water_frac_init"
 
 If you are using PyEns, its `EnsembleSpec` is the structured override
 manifest: it describes the ensemble axes and the parameter grids along them.
-The `RunConfig` captures the shared context; the `EnsembleSpec` captures what
-varies.  Serialisation of the `EnsembleSpec` is PyEns' responsibility.
+`EnsembleSpec` has its own `dump` and `load` methods for serialisation.
+Save the shared context and the spec together so that the full specification
+is self-contained:
 
 ```python
-from pyens import Axis, EnsembleRunner
+from pyens import Axis, EnsembleSpec, EnsembleRunner
 from pyens.backends import LocalBackend
 from pysipnet.ensemble import sipnet_member_fields
 
+# Build and run the ensemble
 members = Axis("member", size=500)
 fields  = sipnet_member_fields(
     members,
@@ -188,24 +190,29 @@ spec = EnsembleSpec(inputs={**fields})
 
 ensemble_runner = EnsembleRunner(model, LocalBackend(n_workers=8))
 results = ensemble_runner.run(spec)
-```
 
-Save the shared context alongside your ensemble outputs so the specification
-is complete:
-
-```python
+# Archive: shared context + ensemble spec
 context = RunConfig(preset=..., params=base_params, climate=climate)
 context.save("my_ensemble/context/")
+spec.dump("my_ensemble/spec.json")
+```
+
+Reload for replay or further analysis:
+
+```python
+context = RunConfig.load("my_ensemble/context/")
+spec    = EnsembleSpec.load("my_ensemble/spec.json")
 ```
 
 ---
 
-## Iterative runs: MCMC and optimisation
+## Iterative Runs
 
-In parameter estimation workflows, an external algorithm (an MCMC sampler, an
-optimiser) drives the sequence of model evaluations.  The number of runs is
-not known in advance, and the parameters evaluated at each step are determined
-by the algorithm at runtime.
+Some workflows involve many sequential model evaluations driven by an
+external algorithm, where the inputs to each evaluation depend on the results
+of previous ones.  Examples include MCMC samplers, optimisation routines, and
+data assimilation / state estimation algorithms such as ensemble Kalman
+filters or particle filters.
 
 ### Separating responsibilities
 
@@ -215,27 +222,27 @@ stateless, and the same parameter set and climate always produce the same
 output.
 
 The external algorithm's responsibility is to record its own state — the
-random seed, the step history, the acceptance decisions.  pySIPNET does not
-provide classes for this.
+random seed, the step history, the acceptance decisions, the filter weights.
+pySIPNET does not provide classes for this.
 
 ### The two-artefact pattern
 
-For a typical MCMC run, two artefacts together make the workflow fully
+For a typical iterative run, two artefacts together make the workflow fully
 reproducible:
 
 **1. A shared `RunConfig`** — written once at the start, capturing the preset,
-the fixed (non-varying) parameters, and the climate.  Use `REFERENCE` mode to
-avoid copying the climate file for every iteration.
+the fixed (non-varying) parameters, and the climate.  Use `reference_only=True`
+to avoid copying the climate file for every evaluation.
 
 ```python
 climate = ClimateDrivers.from_path("data/era5_site1.clim")
 context = RunConfig(preset=ModelPreset.STANDARD, params=base_params, climate=climate)
-context.save("experiment/context/", climate_archive=ClimateArchiveMode.REFERENCE)
+context.save("experiment/context/", reference_only=True)
 ```
 
 **2. A run log** — a table appended to during the run, with one row per model
 evaluation.  The columns are whatever the algorithm needs: iteration index,
-parameter values sampled, log-posterior, acceptance flag, etc.
+parameter values sampled, log-posterior or likelihood, acceptance flag, etc.
 
 ```python
 import csv
@@ -252,7 +259,7 @@ for i, (a_max, bvr) in enumerate(sampler):
 
 ### Replaying any evaluation
 
-Given the two artefacts, replaying iteration 42 is straightforward:
+Given the two artefacts, replaying evaluation 42 is straightforward:
 
 ```python
 import pandas as pd
@@ -270,10 +277,10 @@ result = model(a_max=row["a_max"], base_veg_resp=row["base_veg_resp"])
 
 ### Saving outputs selectively
 
-Storing full model output timeseries for every MCMC iteration is typically
-infeasible.  `SIPNETResult.outputs` is an in-memory DataFrame — nothing is
-written to disk unless you ask for it.  A practical pattern is to save only
-summary statistics per iteration:
+Storing full model output timeseries for every iteration is often infeasible.
+`SIPNETResult.outputs` is an in-memory DataFrame — nothing is written to disk
+unless you ask for it.  A practical pattern is to save only summary statistics
+per iteration:
 
 ```python
 writer.writerow({
@@ -286,8 +293,18 @@ writer.writerow({
 })
 ```
 
-Full outputs can be recomputed on demand for any iteration of interest by
-replaying that evaluation as shown above.
+Full outputs can be recomputed on demand for any evaluation of interest by
+replaying it as shown above.
+
+### PyEns PartialSpec for iterative ensemble workflows
+
+When each iteration of an external algorithm requires an *ensemble* of model
+runs (e.g. an ensemble Kalman filter, where each iteration updates an ensemble
+of state vectors), PyEns' `PartialSpec` is the appropriate tool.  It fixes the
+structural parts of the spec (site layout, climate) while leaving parameter
+fields open to be filled in per iteration.  See
+[Ensemble Runs](ensemble-runs.md#using-partialspec-for-iterative-workflows)
+for the `PartialSpec` pattern.
 
 ---
 
@@ -302,7 +319,8 @@ When reproducing results months or years later, the metadata fields in
 | `pysipnet_version` | pySIPNET version at save time.  Useful for identifying API or file-format differences if behaviour seems to differ. |
 | `created_at` | ISO 8601 UTC timestamp of when the config was written. |
 
-For `REFERENCE`-mode configs, the `sha256` field in `config.json` lets you
-verify that the climate file has not been modified since the config was saved.
-If you are archiving a complete experiment for long-term storage, prefer
-`COPY` mode so the climate data travels with the specification.
+For `reference_only=True` configs, the `sha256` field in `config.json` lets
+you verify that the climate file has not been modified since the config was
+saved.  If you are archiving a complete experiment for long-term storage,
+prefer the default (copy) mode so the climate data travels with the
+specification.

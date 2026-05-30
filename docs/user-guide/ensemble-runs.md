@@ -121,10 +121,11 @@ spec = EnsembleSpec(inputs={
 # 5 × 4 = 20 runs
 ```
 
-Two `Grid` fields that reference the **same** `Axis` instance are *aligned*:
-they co-vary and produce one run per axis position (zip semantics).  Use this
-when parameters or climate drivers naturally pair up — for example, site
-climate and site initial conditions.
+Two `Grid` fields that reference axes with the same name, size, and labels
+are *aligned*: they co-vary and produce one run per axis position (zip
+semantics).  In practice this means passing the same `Axis` object to both
+`Grid` calls.  Use this when parameters or climate drivers naturally pair up
+— for example, site climate and site initial conditions.
 
 ---
 

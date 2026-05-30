@@ -7,7 +7,6 @@ import json
 import warnings
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,30 +17,8 @@ if TYPE_CHECKING:
     from pysipnet.result import SIPNETResult
     from pysipnet.runner import ModelPreset
 
-
-class ClimateArchiveMode(StrEnum):
-    """How climate data is archived when saving a :class:`RunConfig`.
-
-    +----------+----------------------------------------------------------------+
-    | Value    | Behaviour                                                      |
-    +==========+================================================================+
-    | COPY     | The climate data is written as ``sipnet.clim`` inside the     |
-    |          | config directory.  Produces a fully self-contained archive.    |
-    |          | Default.                                                       |
-    +----------+----------------------------------------------------------------+
-    | REFERENCE| No climate file is written.  ``config.json`` records the      |
-    |          | absolute path of the original ``.clim`` file together with a  |
-    |          | SHA-256 hash for integrity verification on load.  Use when     |
-    |          | the climate file is large and shared across many configs       |
-    |          | (e.g. ensemble or iterative workflows).  Requires a file-      |
-    |          | backed :class:`~pysipnet.climate.ClimateDrivers` instance      |
-    |          | (created via                                                   |
-    |          | :meth:`~pysipnet.climate.ClimateDrivers.from_path`).           |
-    +----------+----------------------------------------------------------------+
-    """
-
-    COPY = "copy"
-    REFERENCE = "reference"
+_MODE_COPY = "copy"
+_MODE_REFERENCE = "reference"
 
 
 @dataclass
@@ -95,7 +72,7 @@ class RunConfig:
         self,
         path: str | Path,
         *,
-        climate_archive: ClimateArchiveMode = ClimateArchiveMode.COPY,
+        reference_only: bool = False,
     ) -> Path:
         """Write this configuration to a directory.
 
@@ -109,18 +86,24 @@ class RunConfig:
 
             <path>/
             ├── config.json   # preset, params, climate mode, metadata
-            ├── sipnet.clim   # present only when climate_archive=COPY
+            ├── sipnet.clim   # present only when reference_only=False (default)
             └── events.in     # present only when events were supplied
 
         Parameters
         ----------
         path:
             Directory to write into.
-        climate_archive:
-            How to archive the climate data.  See :class:`ClimateArchiveMode`.
-            ``COPY`` (default) writes ``sipnet.clim`` inside the directory.
-            ``REFERENCE`` stores only the absolute path and SHA-256 hash of
-            the source file — no data is copied.
+        reference_only:
+            When ``False`` (default), the climate data is written as
+            ``sipnet.clim`` inside the directory, producing a fully
+            self-contained archive.  When ``True``, no climate file is
+            written; ``config.json`` instead records the absolute path and
+            SHA-256 hash of the source file for integrity verification on
+            load.  Use ``reference_only=True`` when the climate file is large
+            and shared across many configs (e.g. ensemble or iterative
+            workflows).  Requires a file-backed
+            :class:`~pysipnet.climate.ClimateDrivers` instance (created via
+            :meth:`~pysipnet.climate.ClimateDrivers.from_path`).
 
         Returns
         -------
@@ -130,8 +113,8 @@ class RunConfig:
         Raises
         ------
         ValueError
-            If ``climate_archive=ClimateArchiveMode.REFERENCE`` is requested
-            but the climate instance has no source path (i.e. was created via
+            If ``reference_only=True`` is requested but the climate instance
+            has no source path (i.e. was created via
             :meth:`~pysipnet.climate.ClimateDrivers.from_dataframe`).
         """
         from pysipnet.io.clim_io import write_clim_file
@@ -140,23 +123,23 @@ class RunConfig:
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
 
-        if climate_archive == ClimateArchiveMode.REFERENCE:
+        if reference_only:
             if self.climate.source_path is None:
                 raise ValueError(
-                    "ClimateArchiveMode.REFERENCE requires a file-backed ClimateDrivers "
+                    "reference_only=True requires a file-backed ClimateDrivers "
                     "(created via ClimateDrivers.from_path()). This instance has no "
-                    "source path. Use ClimateArchiveMode.COPY (the default) to write "
+                    "source path. Use reference_only=False (the default) to write "
                     "the climate data into the config directory."
                 )
             clim_path = self.climate.source_path.resolve()
             climate_meta = {
-                "mode": ClimateArchiveMode.REFERENCE.value,
+                "mode": _MODE_REFERENCE,
                 "path": str(clim_path),
                 "sha256": _sha256(clim_path),
             }
         else:
             write_clim_file(self.climate, path / "sipnet.clim")
-            climate_meta = {"mode": ClimateArchiveMode.COPY.value}
+            climate_meta = {"mode": _MODE_COPY}
 
         has_events = self.events is not None and len(self.events) > 0
         if has_events:
@@ -179,9 +162,11 @@ class RunConfig:
     def load(cls, path: str | Path) -> RunConfig:
         """Reconstruct a :class:`RunConfig` from a directory written by :meth:`save`.
 
-        For ``COPY``-mode configs, the climate is loaded lazily via
+        For configs saved with ``reference_only=False`` (the default), the
+        climate is loaded lazily via
         :meth:`~pysipnet.climate.ClimateDrivers.from_path` — no data is read
-        until :attr:`~pysipnet.climate.ClimateDrivers.data` is first accessed.
+        from disk until :attr:`~pysipnet.climate.ClimateDrivers.data` is first
+        accessed.
 
         Parameters
         ----------
@@ -195,13 +180,13 @@ class RunConfig:
         Raises
         ------
         FileNotFoundError
-            If ``config.json`` is absent, or if a ``REFERENCE``-mode config
+            If ``config.json`` is absent, or if a ``reference_only`` config
             points to a climate file that no longer exists at the recorded path.
 
         Warns
         -----
         UserWarning
-            If a ``REFERENCE``-mode climate file has a different SHA-256 digest
+            If a ``reference_only`` climate file has a different SHA-256 digest
             from the one recorded at save time, indicating the file has changed.
         """
         from pysipnet.climate import ClimateDrivers
@@ -222,8 +207,7 @@ class RunConfig:
         params = SIPNETParametersV1.model_validate(data["params"])
 
         clim_meta = data["climate"]
-        mode = ClimateArchiveMode(clim_meta["mode"])
-        if mode == ClimateArchiveMode.COPY:
+        if clim_meta["mode"] == _MODE_COPY:
             climate = ClimateDrivers.from_path(path / "sipnet.clim")
         else:
             clim_path = Path(clim_meta["path"])

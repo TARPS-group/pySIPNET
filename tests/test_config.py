@@ -1,4 +1,4 @@
-"""Unit tests for RunConfig and ClimateArchiveMode."""
+"""Unit tests for RunConfig."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from pysipnet.climate import ClimateDrivers
-from pysipnet.config import ClimateArchiveMode, RunConfig
+from pysipnet.config import RunConfig
 from pysipnet.runner import ModelPreset
 
 # ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ def file_backed_climate(tmp_path, in_memory_climate) -> ClimateDrivers:
 
 
 # ---------------------------------------------------------------------------
-# ClimateArchiveMode.COPY (default)
+# Default mode (reference_only=False): climate data copied into directory
 # ---------------------------------------------------------------------------
 
 
@@ -92,7 +92,7 @@ class TestCopyMode:
         )
         config.save(tmp_path / "run")
         data = json.loads((tmp_path / "run" / "config.json").read_text())
-        assert data["climate"]["mode"] == ClimateArchiveMode.COPY
+        assert data["climate"]["mode"] == "copy"
 
     def test_metadata_fields_present(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
@@ -205,18 +205,18 @@ class TestCopyMode:
 
 
 # ---------------------------------------------------------------------------
-# ClimateArchiveMode.REFERENCE
+# reference_only=True: path + hash stored, no climate file written
 # ---------------------------------------------------------------------------
 
 
-class TestReferenceMode:
+class TestReferenceOnly:
     def test_no_clim_file_written(self, tmp_path, minimal_params, file_backed_climate):
         config = RunConfig(
             preset=ModelPreset.STANDARD,
             params=minimal_params,
             climate=file_backed_climate,
         )
-        config.save(tmp_path / "run", climate_archive=ClimateArchiveMode.REFERENCE)
+        config.save(tmp_path / "run", reference_only=True)
         assert not (tmp_path / "run" / "sipnet.clim").exists()
 
     def test_config_json_records_path_and_hash(
@@ -227,9 +227,9 @@ class TestReferenceMode:
             params=minimal_params,
             climate=file_backed_climate,
         )
-        config.save(tmp_path / "run", climate_archive=ClimateArchiveMode.REFERENCE)
+        config.save(tmp_path / "run", reference_only=True)
         data = json.loads((tmp_path / "run" / "config.json").read_text())
-        assert data["climate"]["mode"] == ClimateArchiveMode.REFERENCE
+        assert data["climate"]["mode"] == "reference"
         assert "path" in data["climate"]
         assert "sha256" in data["climate"]
         assert len(data["climate"]["sha256"]) == 64  # hex SHA-256
@@ -240,7 +240,7 @@ class TestReferenceMode:
             params=minimal_params,
             climate=file_backed_climate,
         )
-        config.save(tmp_path / "run", climate_archive=ClimateArchiveMode.REFERENCE)
+        config.save(tmp_path / "run", reference_only=True)
         loaded = RunConfig.load(tmp_path / "run")
         assert loaded.preset == ModelPreset.STANDARD
         assert loaded.params.model_dump() == minimal_params.model_dump()
@@ -251,7 +251,7 @@ class TestReferenceMode:
             params=minimal_params,
             climate=file_backed_climate,
         )
-        config.save(tmp_path / "run", climate_archive=ClimateArchiveMode.REFERENCE)
+        config.save(tmp_path / "run", reference_only=True)
         loaded = RunConfig.load(tmp_path / "run")
         assert loaded.climate.n_timesteps == _CLIM_ROWS
 
@@ -261,8 +261,8 @@ class TestReferenceMode:
             params=minimal_params,
             climate=in_memory_climate,
         )
-        with pytest.raises(ValueError, match="REFERENCE requires a file-backed"):
-            config.save(tmp_path / "run", climate_archive=ClimateArchiveMode.REFERENCE)
+        with pytest.raises(ValueError, match="reference_only=True requires a file-backed"):
+            config.save(tmp_path / "run", reference_only=True)
 
     def test_load_raises_if_file_missing(self, tmp_path, minimal_params, file_backed_climate):
         config = RunConfig(
@@ -270,7 +270,7 @@ class TestReferenceMode:
             params=minimal_params,
             climate=file_backed_climate,
         )
-        config.save(tmp_path / "run", climate_archive=ClimateArchiveMode.REFERENCE)
+        config.save(tmp_path / "run", reference_only=True)
 
         cfg_path = tmp_path / "run" / "config.json"
         data = json.loads(cfg_path.read_text())
@@ -286,7 +286,7 @@ class TestReferenceMode:
             params=minimal_params,
             climate=file_backed_climate,
         )
-        config.save(tmp_path / "run", climate_archive=ClimateArchiveMode.REFERENCE)
+        config.save(tmp_path / "run", reference_only=True)
 
         cfg_path = tmp_path / "run" / "config.json"
         data = json.loads(cfg_path.read_text())
@@ -302,9 +302,9 @@ class TestReferenceMode:
             params=minimal_params,
             climate=file_backed_climate,
         )
-        config.save(tmp_path / "run", climate_archive=ClimateArchiveMode.REFERENCE)
-        # Should not warn — hash is correct
+        config.save(tmp_path / "run", reference_only=True)
         import warnings
+
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             RunConfig.load(tmp_path / "run")

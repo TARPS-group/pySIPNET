@@ -35,7 +35,7 @@ from pysipnet.build import build_preset, ensure_binary
 from pysipnet.climate import ClimateDrivers
 
 # Config (reproducible workflows)
-from pysipnet.config import ClimateArchiveMode, RunConfig
+from pysipnet.config import RunConfig
 
 # Events
 from pysipnet.events import (
@@ -72,7 +72,6 @@ __all__ = [
     "ClimateStaging",
     # Config (reproducible workflows)
     "RunConfig",
-    "ClimateArchiveMode",
     # Results
     "SIPNETResult",
     "RunProvenance",
