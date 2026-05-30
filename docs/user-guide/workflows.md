@@ -91,6 +91,10 @@ post-processing, or where memory is constrained.
 from pathlib import Path
 from pysipnet import SIPNETRunner, ModelPreset
 
+# param_samples is a list of SIPNETParametersV1 objects, one per ensemble member
+# (e.g. produced by a parameter sampling routine)
+param_samples: list[SIPNETParametersV1] = [...]
+
 output_dir = Path("ensemble_outputs")
 
 runner = SIPNETRunner(
@@ -98,7 +102,7 @@ runner = SIPNETRunner(
     output_dir=output_dir,        # each run copies sipnet.out here
 )
 
-# Run 100 members — no DataFrames created yet
+# Run all members — no DataFrames created yet
 results = [
     runner.run(params_i, climate, run_id=f"member_{i:04d}")
     for i, params_i in enumerate(param_samples)
@@ -129,6 +133,9 @@ Column-selective loading avoids parsing columns you will never use.
 from pathlib import Path
 import pandas as pd
 from pysipnet import SIPNETRunner, ModelPreset
+
+# param_samples is a list of SIPNETParametersV1 objects, one per ensemble member
+param_samples: list[SIPNETParametersV1] = [...]
 
 runner = SIPNETRunner(
     preset=ModelPreset.STANDARD,
@@ -163,6 +170,9 @@ and shared across many members; maximum I/O throughput.
 ```python
 from pathlib import Path
 from pysipnet import SIPNETRunner, ModelPreset, ClimateDrivers, ClimateStaging
+
+# param_samples is a list of SIPNETParametersV1 objects, one per ensemble member
+param_samples: list[SIPNETParametersV1] = [...]
 
 # One shared climate file for all members
 climate = ClimateDrivers.from_path("data/era5_site1.clim", version="v1")
