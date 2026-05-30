@@ -198,8 +198,7 @@ class RunConfig:
         config_path = path / "config.json"
         if not config_path.exists():
             raise FileNotFoundError(
-                f"No config.json found in {path}. "
-                "Pass the directory written by RunConfig.save()."
+                f"No config.json found in {path}. Pass the directory written by RunConfig.save()."
             )
         data = json.loads(config_path.read_text())
 

@@ -161,9 +161,7 @@ class TestCopyMode:
 
         events = EventSequence(
             events=[
-                IrrigationEvent(
-                    year=2020, day=5, amount=3.0, method=IrrigationMethod.SOIL
-                ),
+                IrrigationEvent(year=2020, day=5, amount=3.0, method=IrrigationMethod.SOIL),
             ]
         )
         config = RunConfig(
@@ -219,9 +217,7 @@ class TestReferenceOnly:
         config.save(tmp_path / "run", reference_only=True)
         assert not (tmp_path / "run" / "sipnet.clim").exists()
 
-    def test_config_json_records_path_and_hash(
-        self, tmp_path, minimal_params, file_backed_climate
-    ):
+    def test_config_json_records_path_and_hash(self, tmp_path, minimal_params, file_backed_climate):
         config = RunConfig(
             preset=ModelPreset.STANDARD,
             params=minimal_params,
@@ -332,9 +328,7 @@ class TestLoadErrors:
 
 
 class TestFromResult:
-    def test_from_result_copies_preset_params_climate(
-        self, minimal_params, in_memory_climate
-    ):
+    def test_from_result_copies_preset_params_climate(self, minimal_params, in_memory_climate):
         from pysipnet.parameters.v1 import ModelFlagsV1
         from pysipnet.result import RunProvenance, SIPNETResult
 
@@ -367,11 +361,7 @@ class TestFromResult:
         from pysipnet.result import RunProvenance, SIPNETResult
 
         events = EventSequence(
-            events=[
-                IrrigationEvent(
-                    year=2020, day=10, amount=5.0, method=IrrigationMethod.CANOPY
-                )
-            ]
+            events=[IrrigationEvent(year=2020, day=10, amount=5.0, method=IrrigationMethod.CANOPY)]
         )
         provenance = RunProvenance(
             preset=ModelPreset.FOREST,
