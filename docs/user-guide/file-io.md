@@ -58,35 +58,6 @@ result = runner.run(params, climate, run_id="baseline_2020")
     contents overwritten.  Use distinct `run_id` values across runs if you
     need to preserve them all.
 
-### Preserving the working directory
-
-Set `keep_workdir=True` on the runner to suppress cleanup:
-
-```python
-runner = SIPNETRunner(
-    preset=ModelPreset.STANDARD,
-    keep_workdir=True,
-)
-
-result = runner.run(params, climate, run_id="debug_run")
-
-print(result.provenance.workdir)
-# /tmp/sipnet_debug_run
-
-import os
-for f in os.listdir(result.provenance.workdir):
-    print(f)
-# sipnet.param  sipnet.clim  sipnet.in  sipnet.out
-```
-
-The preserved directory contains exactly the files SIPNET saw, so you can
-reproduce the run manually:
-
-```bash
-cd /tmp/sipnet_debug_run
-./path/to/sipnet_standard
-```
-
 ### Climate data: in-memory vs. file-backed
 
 `ClimateDrivers` supports two construction modes.
@@ -172,7 +143,8 @@ After each run, pySIPNET packages the SIPNET output (`sipnet.out`) as a
 `result.outputs`.  There are two modes:
 
 **Eager (default):** the output file is parsed immediately and held in memory.
-The working directory is then deleted.  No files are retained.
+The working directory is then deleted.  If you also want the raw file retained
+on disk, set `keep_workdir=True` (see [Keeping the working directory](#keeping-the-working-directory)).
 
 ```python
 runner = SIPNETRunner(preset=ModelPreset.STANDARD)
@@ -251,6 +223,45 @@ subset = result.outputs.load(columns=["nee", "gpp"])
 
 On a memory-backed instance, `load(columns=[...])` slices the in-memory
 DataFrame — no file I/O occurs.
+
+### Keeping the working directory
+
+As an alternative to `output_dir`, you can tell the runner to skip workdir
+cleanup entirely:
+
+```python
+runner = SIPNETRunner(
+    preset=ModelPreset.STANDARD,
+    keep_workdir=True,
+)
+
+result = runner.run(params, climate, run_id="debug_run")
+
+print(result.provenance.workdir)
+# /tmp/sipnet_debug_run
+
+import os
+for f in os.listdir(result.provenance.workdir):
+    print(f)
+# sipnet.param  sipnet.clim  sipnet.in  sipnet.out
+```
+
+The preserved directory contains exactly the files SIPNET saw, so you can
+reproduce the run manually:
+
+```bash
+cd /tmp/sipnet_debug_run
+./path/to/sipnet_standard
+```
+
+`output_dir` and `keep_workdir=True` serve different purposes and can be used
+together:
+
+| | `output_dir` | `keep_workdir=True` |
+|:--|:--|:--|
+| What is kept | Only `sipnet.out`, copied to a named location | The entire working directory: param, clim, in, and out files |
+| Primary use | Ensemble post-processing; lazy loading | Debugging; reproducibility audits |
+| File naming | `sipnet_<run_id>.out` in your chosen directory | All files in `sipnet_<run_id>/` under `workdir_base` |
 
 ### Summary: choosing an output mode
 
