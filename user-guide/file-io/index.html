@@ -16,7 +16,7 @@
         <link rel="prev" href="../reproducible-runs/">
       
       
-        <link rel="next" href="../../api/">
+        <link rel="next" href="../workflows/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>File I/O and Working Directories - pySIPNET</title>
+        <title>File I/O - pySIPNET</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#file-io-and-working-directories" class="md-skip">
+        <a href="#file-io" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              File I/O and Working Directories
+              File I/O
             
           </span>
         </div>
@@ -424,6 +424,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../running-a-model/" class="md-nav__link">
         
   
@@ -524,7 +552,7 @@
   <span class="md-ellipsis">
     
   
-    File I/O and Working Directories
+    File I/O
   
 
     
@@ -542,7 +570,7 @@
   <span class="md-ellipsis">
     
   
-    File I/O and Working Directories
+    File I/O
   
 
     
@@ -579,6 +607,18 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#input-io" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input I/O
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Input I/O">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
   <a href="#working-directory-location-and-naming" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -588,19 +628,8 @@
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#preserving-files-after-a-run" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Preserving files after a run
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#climate-data-in-memory-vs-file-backed" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -613,10 +642,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#in-memory-default" class="md-nav__link">
+  <a href="#in-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
-        In-memory (default)
+        In-memory
       
     </span>
   </a>
@@ -638,8 +667,8 @@
     </nav>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#climate-file-staging-modes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -648,29 +677,6 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Climate file staging modes">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#symlink-fallback" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Symlink fallback
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#staging-applies-only-to-file-backed-instances" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Staging applies only to file-backed instances
-      
-    </span>
-  </a>
-  
 </li>
         
       </ul>
@@ -679,22 +685,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ensemble-file-io-considerations" class="md-nav__link">
+  <a href="#output-io" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Ensemble file I/O considerations
+        Output I/O
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Ensemble file I/O considerations">
+    <nav class="md-nav" aria-label="Output I/O">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#use-from_path-for-pre-existing-climate-files" class="md-nav__link">
+  <a href="#eager-vs-lazy-output" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Use from_path for pre-existing climate files
+        Eager vs. lazy output
       
     </span>
   </a>
@@ -702,10 +708,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#avoid-loading-climate-data-on-worker-processes" class="md-nav__link">
+  <a href="#output_dir-runner-level-and-per-call" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Avoid loading climate data on worker processes
+        output_dir: runner-level and per-call
       
     </span>
   </a>
@@ -713,10 +719,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#workdir_base-on-fast-local-storage" class="md-nav__link">
+  <a href="#column-selective-loading" class="md-nav__link">
     <span class="md-ellipsis">
       
-        workdir_base on fast local storage
+        Column-selective loading
       
     </span>
   </a>
@@ -724,10 +730,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#disk-space-with-keep_workdir" class="md-nav__link">
+  <a href="#keeping-the-working-directory" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Disk space with keep_workdir
+        Keeping the working directory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summary-choosing-an-output-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary: choosing an output mode
       
     </span>
   </a>
@@ -736,28 +753,6 @@
         
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#serialising-run-configurations" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Serialising run configurations
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#summary-choosing-a-construction-method" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Summary: choosing a construction method
-      
-    </span>
-  </a>
   
 </li>
       
@@ -765,6 +760,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Common Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -904,6 +927,18 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#input-io" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input I/O
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Input I/O">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
   <a href="#working-directory-location-and-naming" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -913,19 +948,8 @@
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#preserving-files-after-a-run" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Preserving files after a run
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#climate-data-in-memory-vs-file-backed" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -938,10 +962,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#in-memory-default" class="md-nav__link">
+  <a href="#in-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
-        In-memory (default)
+        In-memory
       
     </span>
   </a>
@@ -963,8 +987,8 @@
     </nav>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#climate-file-staging-modes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -973,29 +997,6 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Climate file staging modes">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#symlink-fallback" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Symlink fallback
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#staging-applies-only-to-file-backed-instances" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Staging applies only to file-backed instances
-      
-    </span>
-  </a>
-  
 </li>
         
       </ul>
@@ -1004,22 +1005,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ensemble-file-io-considerations" class="md-nav__link">
+  <a href="#output-io" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Ensemble file I/O considerations
+        Output I/O
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Ensemble file I/O considerations">
+    <nav class="md-nav" aria-label="Output I/O">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#use-from_path-for-pre-existing-climate-files" class="md-nav__link">
+  <a href="#eager-vs-lazy-output" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Use from_path for pre-existing climate files
+        Eager vs. lazy output
       
     </span>
   </a>
@@ -1027,10 +1028,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#avoid-loading-climate-data-on-worker-processes" class="md-nav__link">
+  <a href="#output_dir-runner-level-and-per-call" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Avoid loading climate data on worker processes
+        output_dir: runner-level and per-call
       
     </span>
   </a>
@@ -1038,10 +1039,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#workdir_base-on-fast-local-storage" class="md-nav__link">
+  <a href="#column-selective-loading" class="md-nav__link">
     <span class="md-ellipsis">
       
-        workdir_base on fast local storage
+        Column-selective loading
       
     </span>
   </a>
@@ -1049,10 +1050,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#disk-space-with-keep_workdir" class="md-nav__link">
+  <a href="#keeping-the-working-directory" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Disk space with keep_workdir
+        Keeping the working directory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summary-choosing-an-output-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary: choosing an output mode
       
     </span>
   </a>
@@ -1061,28 +1073,6 @@
         
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#serialising-run-configurations" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Serialising run configurations
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#summary-choosing-a-construction-method" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Summary: choosing a construction method
-      
-    </span>
-  </a>
   
 </li>
       
@@ -1106,11 +1096,11 @@
   
 
 
-<h1 id="file-io-and-working-directories">File I/O and Working Directories</h1>
-<p>This guide covers everything related to how pySIPNET interacts with the
-filesystem: how run inputs are staged, where temporary files land, how to
-preserve or inspect them, and how to avoid unnecessary I/O in ensemble
-workflows.</p>
+<h1 id="file-io">File I/O</h1>
+<p>This guide covers how pySIPNET interacts with the filesystem — both for
+inputs (climate data) and outputs (model results).</p>
+<p>For concrete end-to-end examples that combine these options, see
+<a href="../workflows/">Common Workflows</a>.</p>
 <hr />
 <h2 id="how-a-run-uses-the-filesystem">How a run uses the filesystem</h2>
 <p>Every call to <code>SIPNETRunner.run()</code> (and by extension <code>SIPNETModel.__call__</code>)
@@ -1121,123 +1111,79 @@ follows the same file lifecycle:</p>
 <li><strong>Stage inputs</strong> — write <code>sipnet.param</code>, <code>sipnet.clim</code>, and (optionally)
    <code>events.in</code> into the working directory.</li>
 <li><strong>Write <code>sipnet.in</code></strong> — the two-line config file that tells SIPNET where to
-   find its inputs and whether to load an events file.</li>
+   find its inputs.</li>
 <li><strong>Execute the binary</strong> — SIPNET reads the staged files and writes
    <code>sipnet.out</code> in the same directory.</li>
-<li><strong>Parse outputs</strong> — <code>sipnet.out</code> is read back into a
-   <code>SIPNETResult.outputs</code> DataFrame.</li>
+<li><strong>Package outputs</strong> — <code>sipnet.out</code> is either parsed immediately into memory
+   or copied to a persistent location (see <a href="#output-io">Output I/O</a>).</li>
 <li><strong>Clean up</strong> — the working directory is deleted unless <code>keep_workdir=True</code>.</li>
 </ol>
 <p>This design is intentional: each run is self-contained and stateless.  Two
 runs never share a working directory, so they can be parallelised safely with
 any executor.</p>
 <hr />
-<h2 id="working-directory-location-and-naming">Working directory location and naming</h2>
+<h2 id="input-io">Input I/O</h2>
+<h3 id="working-directory-location-and-naming">Working directory location and naming</h3>
 <p>By default, working directories are placed in <code>tempfile.gettempdir()</code> (usually
-<code>/tmp</code> on Linux/macOS or <code>C:\Users\...\AppData\Local\Temp</code> on Windows) and
-named <code>sipnet_&lt;run_id&gt;</code> where <code>&lt;run_id&gt;</code> is a random UUID hex string.</p>
+<code>/tmp</code> on Linux/macOS) and named <code>sipnet_&lt;run_id&gt;</code> where <code>&lt;run_id&gt;</code> is a
+random UUID hex string.</p>
 <p>You can control both:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pysipnet</span><span class="w"> </span><span class="kn">import</span> <span class="n">SIPNETRunner</span><span class="p">,</span> <span class="n">ModelPreset</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">SIPNETRunner</span><span class="p">(</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">preset</span><span class="o">=</span><span class="n">ModelPreset</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">,</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">workdir_base</span><span class="o">=</span><span class="s2">&quot;/scratch/my_runs&quot;</span><span class="p">,</span>   <span class="c1"># custom parent directory</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">workdir_base</span><span class="o">=</span><span class="s2">&quot;/scratch/my_runs&quot;</span><span class="p">,</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">climate</span><span class="p">,</span> <span class="n">run_id</span><span class="o">=</span><span class="s2">&quot;baseline_2020&quot;</span><span class="p">)</span>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># working directory: /scratch/my_runs/sipnet_baseline_2020/</span>
 </code></pre></div>
-<p>Supplying an explicit <code>run_id</code> is useful when you want the directory name to
-correspond to something meaningful in your own logging (e.g., a site name, an
-ensemble member index, or a timestamp).</p>
 <div class="admonition note">
 <p class="admonition-title">run_id reuse</p>
-<p>If the directory <code>sipnet_&lt;run_id&gt;</code> already exists, it is reused and
-its contents overwritten.  This is safe but means the previous run's
-files are not recoverable.  Use distinct <code>run_id</code> values across runs
-if you need to preserve them all.</p>
+<p>If the directory <code>sipnet_&lt;run_id&gt;</code> already exists, it is reused and its
+contents overwritten.  Use distinct <code>run_id</code> values across runs if you
+need to preserve them all.</p>
 </div>
-<hr />
-<h2 id="preserving-files-after-a-run">Preserving files after a run</h2>
-<p>Set <code>keep_workdir=True</code> on the runner to suppress cleanup:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">SIPNETRunner</span><span class="p">(</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">preset</span><span class="o">=</span><span class="n">ModelPreset</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">,</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">keep_workdir</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="p">)</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">climate</span><span class="p">,</span> <span class="n">run_id</span><span class="o">=</span><span class="s2">&quot;debug_run&quot;</span><span class="p">)</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1"># Inspect the preserved directory</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">provenance</span><span class="o">.</span><span class="n">workdir</span><span class="p">)</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">provenance</span><span class="o">.</span><span class="n">workdir</span><span class="p">):</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># sipnet.param</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="c1"># sipnet.clim</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="c1"># sipnet.in</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="c1"># sipnet.out</span>
-</code></pre></div>
-<p>The preserved directory contains exactly the files SIPNET saw, so you can
-reproduce the run manually:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">cd</span><span class="w"> </span>/tmp/sipnet_debug_run
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>./path/to/sipnet_standard
-</code></pre></div>
-<p><code>keep_workdir=True</code> applies to every run on that runner instance.  If you only
-want to preserve a specific run for debugging, construct a one-off runner for
-that call.</p>
-<hr />
-<h2 id="climate-data-in-memory-vs-file-backed">Climate data: in-memory vs. file-backed</h2>
+<h3 id="climate-data-in-memory-vs-file-backed">Climate data: in-memory vs. file-backed</h3>
 <p><code>ClimateDrivers</code> supports two construction modes.</p>
-<h3 id="in-memory-default">In-memory (default)</h3>
+<h4 id="in-memory">In-memory</h4>
 <p><code>from_dataframe</code> and <code>from_file</code> load all climate data into a pandas DataFrame
-at construction time.  When the runner stages this for SIPNET, it serialises
-the DataFrame to disk by writing a new <code>.clim</code> file in the working directory.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Full data in memory — good for interactive use and data manipulation</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">climate</span> <span class="o">=</span> <span class="n">ClimateDrivers</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="s2">&quot;data/era5_site1.clim&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">&quot;v1&quot;</span><span class="p">)</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">climate</span><span class="o">.</span><span class="n">data</span>        <span class="c1"># DataFrame always available</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">climate</span><span class="o">.</span><span class="n">validate</span><span class="p">()</span>  <span class="c1"># full validation runs immediately</span>
+at construction time.  The runner serialises this to disk as a new <code>.clim</code> file
+in the working directory.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Full data in memory — good for interactive use and data manipulation</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">climate</span> <span class="o">=</span> <span class="n">ClimateDrivers</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="s2">&quot;data/era5_site1.clim&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">&quot;v1&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">climate</span><span class="o">.</span><span class="n">data</span>        <span class="c1"># DataFrame always available</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">climate</span><span class="o">.</span><span class="n">validate</span><span class="p">()</span>  <span class="c1"># full validation runs immediately</span>
 </code></pre></div>
-<h3 id="file-backed-lazy">File-backed (lazy)</h3>
-<p><code>from_path</code> creates a lightweight reference to an existing <code>.clim</code> file
-without reading it into memory.  The runner can stage it by copying or
-linking the original file directly, skipping the read-then-write cycle
-entirely.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># No data loaded — good for ensemble workflows with pre-existing files</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">climate</span> <span class="o">=</span> <span class="n">ClimateDrivers</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;data/era5_site1.clim&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">&quot;v1&quot;</span><span class="p">)</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="nb">print</span><span class="p">(</span><span class="n">climate</span><span class="o">.</span><span class="n">n_timesteps</span><span class="p">)</span>  <span class="c1"># available without loading data</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nb">print</span><span class="p">(</span><span class="n">climate</span><span class="o">.</span><span class="n">date_range</span><span class="p">)</span>   <span class="c1"># also available without loading data</span>
+<h4 id="file-backed-lazy">File-backed (lazy)</h4>
+<p><code>from_path</code> creates a lightweight reference to an existing <code>.clim</code> file without
+reading it into memory.  The runner can stage it by copying or linking the
+original file directly, skipping the read-then-write cycle entirely.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># No data loaded — good for ensemble workflows with pre-existing files</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">climate</span> <span class="o">=</span> <span class="n">ClimateDrivers</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;data/era5_site1.clim&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">&quot;v1&quot;</span><span class="p">)</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="nb">print</span><span class="p">(</span><span class="n">climate</span><span class="o">.</span><span class="n">n_timesteps</span><span class="p">)</span>  <span class="c1"># available without loading data</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nb">print</span><span class="p">(</span><span class="n">climate</span><span class="o">.</span><span class="n">date_range</span><span class="p">)</span>   <span class="c1"># also available without loading data</span>
 </code></pre></div>
-<p>Accessing <code>climate.data</code> on a file-backed instance triggers a full load and
-caches the result — subsequent accesses are free.</p>
+<p>Accessing <code>climate.data</code> triggers a full load and caches the result.</p>
 <div class="admonition warning">
 <p class="admonition-title">Chronological ordering assumption</p>
-<p><code>from_path</code> validates the column count of the first and last rows and
-uses them to populate <code>n_timesteps</code> and <code>date_range</code>.  It <strong>assumes the
-file is sorted chronologically</strong> — this is not verified without loading
-the full file.</p>
-<p>If you are not certain about the ordering of a file you did not produce
-yourself, call <code>.validate()</code> after construction.  This triggers a full
-load and checks monotonicity:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">climate</span> <span class="o">=</span> <span class="n">ClimateDrivers</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;unknown_source.clim&quot;</span><span class="p">)</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">climate</span><span class="o">.</span><span class="n">validate</span><span class="p">()</span>   <span class="c1"># raises ValueError if not monotone</span>
+<p><code>from_path</code> validates the column count of the first and last rows but
+<strong>assumes the file is sorted chronologically</strong>.  Call <code>.validate()</code> to
+perform a complete check (triggers a full load):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">climate</span> <span class="o">=</span> <span class="n">ClimateDrivers</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;unknown_source.clim&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">climate</span><span class="o">.</span><span class="n">validate</span><span class="p">()</span>   <span class="c1"># raises ValueError if not monotone</span>
 </code></pre></div>
 </div>
-<hr />
-<h2 id="climate-file-staging-modes">Climate file staging modes</h2>
-<p>When <code>SIPNETRunner</code> stages a file-backed climate instance into the working
-directory, it can either <strong>copy</strong> the file or create a <strong>symlink</strong>.  Set
-<code>climate_staging</code> at runner construction time:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pysipnet</span><span class="w"> </span><span class="kn">import</span> <span class="n">SIPNETRunner</span><span class="p">,</span> <span class="n">ModelPreset</span><span class="p">,</span> <span class="n">ClimateStaging</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># Default: copy (safe on all platforms)</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">SIPNETRunner</span><span class="p">(</span><span class="n">preset</span><span class="o">=</span><span class="n">ModelPreset</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">)</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="c1"># Symlink: zero I/O for large files (Linux/macOS only)</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">SIPNETRunner</span><span class="p">(</span>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">preset</span><span class="o">=</span><span class="n">ModelPreset</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">,</span>
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">climate_staging</span><span class="o">=</span><span class="n">ClimateStaging</span><span class="o">.</span><span class="n">SYMLINK</span><span class="p">,</span>
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="p">)</span>
+<h3 id="climate-file-staging-modes">Climate file staging modes</h3>
+<p>When staging a file-backed climate instance, the runner can either <strong>copy</strong>
+the file or create a <strong>symlink</strong>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pysipnet</span><span class="w"> </span><span class="kn">import</span> <span class="n">SIPNETRunner</span><span class="p">,</span> <span class="n">ModelPreset</span><span class="p">,</span> <span class="n">ClimateStaging</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">SIPNETRunner</span><span class="p">(</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">preset</span><span class="o">=</span><span class="n">ModelPreset</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">climate_staging</span><span class="o">=</span><span class="n">ClimateStaging</span><span class="o">.</span><span class="n">SYMLINK</span><span class="p">,</span>   <span class="c1"># zero I/O for large files</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">)</span>
 </code></pre></div>
 <table>
 <thead>
@@ -1250,8 +1196,8 @@ directory, it can either <strong>copy</strong> the file or create a <strong>syml
 <tbody>
 <tr>
 <td style="text-align: left;"><code>COPY</code> (default)</td>
-<td style="text-align: left;"><code>shutil.copy2</code> — physical copy of the file</td>
-<td style="text-align: left;">All platforms; when source files may move or be modified during a run</td>
+<td style="text-align: left;"><code>shutil.copy2</code> — physical copy</td>
+<td style="text-align: left;">All platforms; when source files may move during a run</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>SYMLINK</code></td>
@@ -1260,21 +1206,17 @@ directory, it can either <strong>copy</strong> the file or create a <strong>syml
 </tr>
 </tbody>
 </table>
-<h3 id="symlink-fallback">Symlink fallback</h3>
-<p>If <code>SYMLINK</code> is requested but <code>os.symlink</code> raises <code>OSError</code> (e.g., on Windows
-without elevated privileges, or across filesystem boundaries), the runner
-falls back to <code>COPY</code> and emits a <code>UserWarning</code>.  Python's warning system
-deduplicates by call site, so in a long ensemble run you will see at most one
-warning rather than one per run.</p>
-<h3 id="staging-applies-only-to-file-backed-instances">Staging applies only to file-backed instances</h3>
-<p><code>climate_staging</code> has no effect when climate data is in memory.  In-memory
-instances are always serialised by the I/O layer regardless of this setting:</p>
+<p>If <code>SYMLINK</code> is requested but <code>os.symlink</code> raises <code>OSError</code> (e.g. on Windows
+or across filesystem boundaries), the runner falls back to <code>COPY</code> and emits a
+<code>UserWarning</code>.</p>
+<p><code>climate_staging</code> has no effect on in-memory <code>ClimateDrivers</code> instances —
+they are always serialised through the I/O layer regardless of this setting.</p>
 <table>
 <thead>
 <tr>
 <th style="text-align: left;"><code>ClimateDrivers</code> type</th>
-<th style="text-align: left;"><code>ClimateStaging.COPY</code></th>
-<th style="text-align: left;"><code>ClimateStaging.SYMLINK</code></th>
+<th style="text-align: left;"><code>COPY</code></th>
+<th style="text-align: left;"><code>SYMLINK</code></th>
 </tr>
 </thead>
 <tbody>
@@ -1291,133 +1233,156 @@ instances are always serialised by the I/O layer regardless of this setting:</p>
 </tbody>
 </table>
 <hr />
-<h2 id="ensemble-file-io-considerations">Ensemble file I/O considerations</h2>
-<p>In large ensemble runs, file I/O can dominate wall time if not managed
-carefully.  The following recommendations apply whether you are using PyEns,
-Dask, Parsl, or a simple <code>ProcessPoolExecutor</code>.</p>
-<h3 id="use-from_path-for-pre-existing-climate-files">Use <code>from_path</code> for pre-existing climate files</h3>
-<p>If your climate files already exist on disk (e.g., pre-processed ERA5 or
-FLUXNET data), use <code>from_path</code> instead of <code>from_file</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyens</span><span class="w"> </span><span class="kn">import</span> <span class="n">Axis</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pysipnet</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClimateDrivers</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pysipnet.ensemble</span><span class="w"> </span><span class="kn">import</span> <span class="n">sipnet_site_fields</span>
+<h2 id="output-io">Output I/O</h2>
+<h3 id="eager-vs-lazy-output">Eager vs. lazy output</h3>
+<p>After each run, pySIPNET packages the SIPNET output (<code>sipnet.out</code>) as a
+:class:<code>~pysipnet.output.SIPNETOutput</code> object stored in
+<code>result.outputs</code>.  There are two modes:</p>
+<p><strong>Eager (default):</strong> the output file is parsed immediately and held in memory.
+The working directory is then deleted.  If you also want the raw file retained
+on disk, set <code>keep_workdir=True</code> (see <a href="#keeping-the-working-directory">Keeping the working directory</a>).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">SIPNETRunner</span><span class="p">(</span><span class="n">preset</span><span class="o">=</span><span class="n">ModelPreset</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">)</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">climate</span><span class="p">)</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># Data is already in memory:</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">df</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">outputs</span><span class="o">.</span><span class="n">data</span>          <span class="c1"># pandas DataFrame</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">nee_series</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">nee</span><span class="p">()</span>         <span class="c1"># convenience accessor</span>
+</code></pre></div>
+<p><strong>Lazy (file-backed):</strong> set <code>output_dir</code> on the runner.  Before the working
+directory is deleted, <code>sipnet.out</code> is copied to
+<code>&lt;output_dir&gt;/sipnet_&lt;run_id&gt;.out</code>.  The result holds a file-backed
+<code>SIPNETOutput</code> — no DataFrame is created until you explicitly access the data.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">SIPNETRunner</span><span class="p">(</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">preset</span><span class="o">=</span><span class="n">ModelPreset</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">,</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">output_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;run_outputs&quot;</span><span class="p">),</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="p">)</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">climate</span><span class="p">,</span> <span class="n">run_id</span><span class="o">=</span><span class="s2">&quot;baseline&quot;</span><span class="p">)</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="c1"># No data in memory yet:</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">outputs</span><span class="o">.</span><span class="n">source_path</span><span class="p">)</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="c1"># PosixPath(&#39;run_outputs/sipnet_baseline.out&#39;)</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="c1"># Trigger load on demand:</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="n">df</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">outputs</span><span class="o">.</span><span class="n">data</span>
+</code></pre></div>
+<h3 id="output_dir-runner-level-and-per-call">output_dir: runner-level and per-call</h3>
+<p><code>output_dir</code> can be set at the runner level (applies to all runs) or
+overridden per call:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">SIPNETRunner</span><span class="p">(</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="n">preset</span><span class="o">=</span><span class="n">ModelPreset</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">,</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">output_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;default_outputs&quot;</span><span class="p">),</span>   <span class="c1"># runner-level default</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="p">)</span>
 <a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="n">site_paths</span> <span class="o">=</span> <span class="p">[</span>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="s2">&quot;data/harvard_forest.clim&quot;</span><span class="p">,</span>
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="s2">&quot;data/niwot_ridge.clim&quot;</span><span class="p">,</span>
-<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="s2">&quot;data/howland_forest.clim&quot;</span><span class="p">,</span>
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="p">]</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="c1"># Uses runner default:</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="n">r1</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">climate</span><span class="p">,</span> <span class="n">run_id</span><span class="o">=</span><span class="s2">&quot;run_a&quot;</span><span class="p">)</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="c1"># Overrides runner default for this call only:</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="n">r2</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">climate</span><span class="p">,</span> <span class="n">run_id</span><span class="o">=</span><span class="s2">&quot;run_b&quot;</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;special&quot;</span><span class="p">))</span>
 <a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>
-<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="c1"># Lightweight references — no data loaded yet</span>
-<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="n">climates</span> <span class="o">=</span> <span class="p">[</span><span class="n">ClimateDrivers</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">site_paths</span><span class="p">]</span>
-<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>
-<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="n">sites</span> <span class="o">=</span> <span class="n">Axis</span><span class="p">(</span><span class="s2">&quot;site&quot;</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;hf&quot;</span><span class="p">,</span> <span class="s2">&quot;nr&quot;</span><span class="p">,</span> <span class="s2">&quot;hl&quot;</span><span class="p">])</span>
-<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="n">fields</span> <span class="o">=</span> <span class="n">sipnet_site_fields</span><span class="p">(</span><span class="n">sites</span><span class="p">,</span> <span class="n">climates</span><span class="o">=</span><span class="n">climates</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="c1"># Suppresses output persistence entirely for this call:</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="n">r3</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">climate</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
 </code></pre></div>
-<p>With <code>ClimateStaging.COPY</code> (default), each run copies the file once into its
-working directory.  With <code>ClimateStaging.SYMLINK</code>, no data is ever moved — the
-SIPNET binary reads directly from the original path.</p>
-<h3 id="avoid-loading-climate-data-on-worker-processes">Avoid loading climate data on worker processes</h3>
-<p>When using multiprocessing backends, the model callable and all its arguments
-are pickled and sent to worker processes.  In-memory <code>ClimateDrivers</code> objects
-pickle their full DataFrame; file-backed instances pickle only a path.  For an
-ensemble of 500 sites each with 30 years of daily data (~11 000 rows × 12
-columns), the difference is roughly 5 MB vs. a few bytes per site.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Preferred: file-backed — only a path is pickled per site</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">climates</span> <span class="o">=</span> <span class="p">[</span><span class="n">ClimateDrivers</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">site_paths</span><span class="p">]</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Avoid for large ensembles: entire DataFrame pickled per site</span>
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="n">climates</span> <span class="o">=</span> <span class="p">[</span><span class="n">ClimateDrivers</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">site_paths</span><span class="p">]</span>
+<div class="admonition warning">
+<p class="admonition-title">output_dir must be outside the working directory</p>
+<p>The working directory is deleted after each run, so <code>output_dir</code> must
+not be the same as, or a subdirectory of, the working directory.
+pySIPNET checks this <strong>before</strong> the binary runs and raises <code>ValueError</code>
+immediately if the paths overlap:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># workdir will be /tmp/sipnet_myrun/</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="c1"># This raises ValueError before anything runs:</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">climate</span><span class="p">,</span> <span class="n">run_id</span><span class="o">=</span><span class="s2">&quot;myrun&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>           <span class="n">output_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/tmp/sipnet_myrun/outputs&quot;</span><span class="p">))</span>
 </code></pre></div>
-<h3 id="workdir_base-on-fast-local-storage">workdir_base on fast local storage</h3>
-<p>If your project data lives on network-attached or high-latency storage, set
-<code>workdir_base</code> to a fast local disk.  SIPNET reads and writes its working
-directory files at high frequency relative to its compute time:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">SIPNETRunner</span><span class="p">(</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="n">preset</span><span class="o">=</span><span class="n">ModelPreset</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">,</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="n">climate_staging</span><span class="o">=</span><span class="n">ClimateStaging</span><span class="o">.</span><span class="n">SYMLINK</span><span class="p">,</span>   <span class="c1"># source files stay on NFS</span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="n">workdir_base</span><span class="o">=</span><span class="s2">&quot;/local/scratch&quot;</span><span class="p">,</span>            <span class="c1"># SIPNET I/O on fast local disk</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="p">)</span>
+</div>
+<h3 id="column-selective-loading">Column-selective loading</h3>
+<p>For large ensemble outputs it is often wasteful to load every column.
+<code>SIPNETOutput.load(columns=[...])</code> reads only the named columns from the file,
+without caching the result:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Load just NEE and GPP — year/day/time are always included:</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">subset</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">outputs</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;nee&quot;</span><span class="p">,</span> <span class="s2">&quot;gpp&quot;</span><span class="p">])</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="c1"># Returns a DataFrame with columns: year, day, time, nee, gpp</span>
 </code></pre></div>
-<h3 id="disk-space-with-keep_workdir">Disk space with keep_workdir</h3>
-<p>By default, working directories are deleted after each run.  The parsed
-outputs are already in the <code>SIPNETResult.outputs</code> DataFrame at that point,
-so in-memory data is not lost.  However, the raw <code>sipnet.out</code> file is gone.
-This matters if you later want lower-level output than what you extracted
-during the run — for example, if you summarised to annual totals and then
-realised you needed the full sub-daily timeseries.</p>
-<p>Each preserved working directory contains at minimum:</p>
-<ul>
-<li><code>sipnet.param</code> — ~2–3 kB</li>
-<li><code>sipnet.clim</code> — ~1 MB per year of daily data</li>
-<li><code>sipnet.in</code> — trivial</li>
-<li><code>sipnet.out</code> — ~500 kB per year of daily output</li>
-</ul>
-<p>For a 500-run ensemble with <code>keep_workdir=True</code>, budget ~1 GB per year of
-simulation.  Whether that trade-off is worthwhile depends on your workflow —
-if you are confident the DataFrame captures everything you need, the default
-delete-on-completion is fine; if you want the raw files as an archival record
-or a fallback, set <code>keep_workdir=True</code>.</p>
-<hr />
-<h2 id="serialising-run-configurations">Serialising run configurations</h2>
-<p><code>SIPNETParametersV1</code> round-trips through plain Python dicts, making it
-straightforward to log the full specification of every run:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">config</span> <span class="o">=</span> <span class="p">{</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="s2">&quot;preset&quot;</span><span class="p">:</span> <span class="n">runner</span><span class="o">.</span><span class="n">preset</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="n">params</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(),</span>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    <span class="s2">&quot;climate_path&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">climate</span><span class="o">.</span><span class="n">source_path</span><span class="p">),</span>  <span class="c1"># for file-backed instances</span>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="p">}</span>
-<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;run_log.json&quot;</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>    <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<p>On a memory-backed instance, <code>load(columns=[...])</code> slices the in-memory
+DataFrame — no file I/O occurs.</p>
+<h3 id="keeping-the-working-directory">Keeping the working directory</h3>
+<p>As an alternative to <code>output_dir</code>, you can tell the runner to skip workdir
+cleanup entirely:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">SIPNETRunner</span><span class="p">(</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="n">preset</span><span class="o">=</span><span class="n">ModelPreset</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">,</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">keep_workdir</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="p">)</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">climate</span><span class="p">,</span> <span class="n">run_id</span><span class="o">=</span><span class="s2">&quot;debug_run&quot;</span><span class="p">)</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">provenance</span><span class="o">.</span><span class="n">workdir</span><span class="p">)</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="c1"># /tmp/sipnet_debug_run</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">provenance</span><span class="o">.</span><span class="n">workdir</span><span class="p">):</span>
+<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+<a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a><span class="c1"># sipnet.param  sipnet.clim  sipnet.in  sipnet.out</span>
 </code></pre></div>
-<p>For in-memory climate data, serialise the DataFrame:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">config</span><span class="p">[</span><span class="s2">&quot;climate_data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">climate</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(</span><span class="n">orient</span><span class="o">=</span><span class="s2">&quot;records&quot;</span><span class="p">)</span>
+<p>The preserved directory contains exactly the files SIPNET saw, so you can
+reproduce the run manually:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nb">cd</span><span class="w"> </span>/tmp/sipnet_debug_run
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>./path/to/sipnet_standard
 </code></pre></div>
-<p>Note that a file-backed <code>ClimateDrivers</code> is not fully self-contained as a
-serialised object — it is a reference to an external file.  Store the path
-alongside a content hash (e.g., SHA-256 of the file) if you need long-term
-reproducibility:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">file_sha256</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="n">h</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">()</span>
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">h</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
-<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="k">return</span> <span class="n">h</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
-<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>
-<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="n">config</span><span class="p">[</span><span class="s2">&quot;climate_sha256&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">file_sha256</span><span class="p">(</span><span class="n">climate</span><span class="o">.</span><span class="n">source_path</span><span class="p">)</span>
-</code></pre></div>
-<hr />
-<h2 id="summary-choosing-a-construction-method">Summary: choosing a construction method</h2>
+<p><code>output_dir</code> and <code>keep_workdir=True</code> serve different purposes and can be used
+together:</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Situation</th>
-<th style="text-align: left;">Recommended method</th>
+<th style="text-align: left;"></th>
+<th style="text-align: left;"><code>output_dir</code></th>
+<th style="text-align: left;"><code>keep_workdir=True</code></th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">Interactive exploration, data manipulation</td>
-<td style="text-align: left;"><code>ClimateDrivers.from_file</code></td>
+<td style="text-align: left;">What is kept</td>
+<td style="text-align: left;">Only <code>sipnet.out</code>, copied to a named location</td>
+<td style="text-align: left;">The entire working directory: param, clim, in, and out files</td>
 </tr>
 <tr>
-<td style="text-align: left;">Constructing climate data programmatically</td>
-<td style="text-align: left;"><code>ClimateDrivers.from_dataframe</code></td>
+<td style="text-align: left;">Primary use</td>
+<td style="text-align: left;">Ensemble post-processing; lazy loading</td>
+<td style="text-align: left;">Debugging; reproducibility audits</td>
 </tr>
 <tr>
-<td style="text-align: left;">File already exists on disk, single run</td>
-<td style="text-align: left;"><code>ClimateDrivers.from_path</code></td>
+<td style="text-align: left;">File naming</td>
+<td style="text-align: left;"><code>sipnet_&lt;run_id&gt;.out</code> in your chosen directory</td>
+<td style="text-align: left;">All files in <code>sipnet_&lt;run_id&gt;/</code> under <code>workdir_base</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="summary-choosing-an-output-mode">Summary: choosing an output mode</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Situation</th>
+<th style="text-align: left;">Recommended approach</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Interactive exploration, single run</td>
+<td style="text-align: left;">Default (no <code>output_dir</code>) — data in memory</td>
 </tr>
 <tr>
-<td style="text-align: left;">Large ensemble, files pre-exist on disk</td>
-<td style="text-align: left;"><code>ClimateDrivers.from_path</code> + <code>ClimateStaging.SYMLINK</code></td>
+<td style="text-align: left;">Need the raw file for archival</td>
+<td style="text-align: left;"><code>output_dir=</code> on runner or <code>keep_workdir=True</code></td>
 </tr>
 <tr>
-<td style="text-align: left;">Need to validate a file you did not produce</td>
-<td style="text-align: left;"><code>ClimateDrivers.from_path</code> then <code>.validate()</code></td>
+<td style="text-align: left;">Large ensemble, full outputs needed</td>
+<td style="text-align: left;"><code>output_dir=</code> — lazy-load member by member</td>
+</tr>
+<tr>
+<td style="text-align: left;">Large ensemble, only a few columns needed</td>
+<td style="text-align: left;"><code>output_dir=</code> + <code>result.outputs.load(columns=[...])</code></td>
+</tr>
+<tr>
+<td style="text-align: left;">Debugging a failing run</td>
+<td style="text-align: left;"><code>keep_workdir=True</code> — inspect all files in <code>provenance.workdir</code></td>
 </tr>
 </tbody>
 </table>

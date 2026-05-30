@@ -424,6 +424,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../running-a-model/" class="md-nav__link">
         
   
@@ -745,7 +773,35 @@
   <span class="md-ellipsis">
     
   
-    File I/O and Working Directories
+    File I/O
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Common Workflows
   
 
     
@@ -1300,9 +1356,8 @@ parameter values sampled, log-posterior or likelihood, acceptance flag, etc.</p>
 </code></pre></div>
 <h3 id="saving-outputs-selectively">Saving outputs selectively</h3>
 <p>Storing full model output timeseries for every iteration is often infeasible.
-<code>SIPNETResult.outputs</code> is an in-memory DataFrame — nothing is written to disk
-unless you ask for it.  A practical pattern is to save only summary statistics
-per iteration:</p>
+By default <code>SIPNETResult.outputs</code> holds data in memory and nothing is written
+to disk.  A practical pattern is to save only summary statistics per iteration:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">writer</span><span class="o">.</span><span class="n">writerow</span><span class="p">({</span>
 <a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="s2">&quot;iter&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span>
 <a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>    <span class="s2">&quot;a_max&quot;</span><span class="p">:</span> <span class="n">a_max</span><span class="p">,</span>
@@ -1313,7 +1368,10 @@ per iteration:</p>
 <a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="p">})</span>
 </code></pre></div>
 <p>Full outputs can be recomputed on demand for any evaluation of interest by
-replaying it as shown above.</p>
+replaying it as shown above.  Alternatively, set <code>output_dir</code> on the runner to
+automatically copy each run's <code>sipnet.out</code> to a stable location — full outputs
+are then available for any member without re-running.  See
+<a href="../file-io/#output-io">File I/O</a> for details.</p>
 <h3 id="pyens-partialspec-for-iterative-ensemble-workflows">PyEns PartialSpec for iterative ensemble workflows</h3>
 <p>When each iteration of an external algorithm requires an <em>ensemble</em> of model
 runs (e.g. an ensemble Kalman filter, where each iteration updates an ensemble

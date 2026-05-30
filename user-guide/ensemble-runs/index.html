@@ -424,6 +424,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../running-a-model/" class="md-nav__link">
         
   
@@ -717,7 +745,35 @@
   <span class="md-ellipsis">
     
   
-    File I/O and Working Directories
+    File I/O
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Common Workflows
   
 
     
@@ -1072,7 +1128,7 @@ call applies a dict of overrides on top of that baseline:</p>
 </code></pre></div>
 <p>You can call it directly to verify it works before handing it to PyEns:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">a_max</span><span class="o">=</span><span class="mf">112.0</span><span class="p">,</span> <span class="n">base_veg_resp</span><span class="o">=</span><span class="mf">0.02</span><span class="p">)</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">outputs</span><span class="p">[[</span><span class="s2">&quot;nee&quot;</span><span class="p">,</span> <span class="s2">&quot;gpp&quot;</span><span class="p">]]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">outputs</span><span class="o">.</span><span class="n">data</span><span class="p">[[</span><span class="s2">&quot;nee&quot;</span><span class="p">,</span> <span class="s2">&quot;gpp&quot;</span><span class="p">]]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
 </code></pre></div>
 <p>Any SIPNET v1 parameter name can be passed as a keyword argument.  The
 reserved names <code>climate</code> and <code>events</code> pass a <code>ClimateDrivers</code> or
@@ -1176,8 +1232,12 @@ a full Cartesian product of sites and members.</p>
 <p class="admonition-title">Pickling requirement</p>
 <p><code>LocalBackend</code> uses Python's <code>multiprocessing</code> module, which serialises
 the model callable and all field values with <code>pickle</code>.  <code>SIPNETModel</code> is
-picklable.  <code>ClimateDrivers</code> objects (which contain a pandas DataFrame)
-are also picklable.</p>
+picklable.</p>
+<p><code>ClimateDrivers</code> instances are also picklable, but the pickle size differs
+significantly by construction mode: an in-memory instance (<code>from_file</code> or
+<code>from_dataframe</code>) pickles the entire DataFrame, while a file-backed instance
+(<code>from_path</code>) pickles only a file path.  For large multi-site ensembles,
+prefer <code>from_path</code> — see <a href="../file-io/">File I/O</a> for details.</p>
 <p>If you encounter a <code>PicklingError</code>, switch to <code>SequentialBackend</code> to
 reproduce the failure with a full traceback, fix the issue, then switch
 back.</p>
@@ -1239,6 +1299,11 @@ committing to a run:</p>
 <a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="c1">#   Total runs: 100</span>
 </code></pre></div>
 <p>This is especially useful before submitting to an HPC cluster.</p>
+<hr />
+<hr />
+<p>For concrete file I/O patterns suited to large ensemble runs — lazy output
+loading, column-selective post-processing, symlinked climate files — see
+<a href="../workflows/">Common Workflows</a>.</p>
 <hr />
 <h2 id="using-partialspec-for-iterative-workflows">Using PartialSpec for iterative workflows</h2>
 <p><code>EnsembleSpec.freeze()</code> returns a <code>PartialSpec</code> — a callable with some fields
