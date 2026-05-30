@@ -242,7 +242,8 @@ df = result.outputs.data
 
 For even stronger reproducibility guarantees, combine this with
 [`RunConfig.save()`](reproducible-runs.md) to record the full parameter set
-and a SHA-256 hash of the climate file alongside the output.
+and a SHA-256 hash of the climate file alongside the output.  See
+[Reproducible Workflows](reproducible-runs.md) for details.
 
 ---
 
