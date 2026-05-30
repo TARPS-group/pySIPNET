@@ -105,10 +105,10 @@ config would waste disk space.  Passing `reference_only=True` instead stores
 only the absolute path and a SHA-256 hash of the source file:
 
 ```python
-from pysipnet import ClimateDrivers, RunConfig
+from pysipnet import ClimateDrivers, ModelPreset, RunConfig
 
 climate = ClimateDrivers.from_path("data/era5_site1.clim")
-config = RunConfig(preset=..., params=..., climate=climate)
+config = RunConfig(preset=ModelPreset.STANDARD, params=params, climate=climate)
 config.save("context/", reference_only=True)
 ```
 
@@ -177,7 +177,13 @@ is self-contained:
 ```python
 from pyens import Axis, EnsembleSpec, EnsembleRunner
 from pyens.backends import LocalBackend
+from pysipnet import ModelPreset, RunConfig, SIPNETModel, SIPNETRunner
 from pysipnet.ensemble import sipnet_member_fields
+
+# Define the shared context first — it is the source of truth for the run
+context = RunConfig(preset=ModelPreset.STANDARD, params=base_params, climate=climate)
+runner  = SIPNETRunner(preset=context.preset)
+model   = SIPNETModel(runner, base_params=context.params, base_climate=context.climate)
 
 # Build and run the ensemble
 members = Axis("member", size=500)
@@ -191,8 +197,7 @@ spec = EnsembleSpec(inputs={**fields})
 ensemble_runner = EnsembleRunner(model, LocalBackend(n_workers=8))
 results = ensemble_runner.run(spec)
 
-# Archive: shared context + ensemble spec
-context = RunConfig(preset=..., params=base_params, climate=climate)
+# Archive — context was already defined; save it alongside the spec
 context.save("my_ensemble/context/")
 spec.dump("my_ensemble/spec.json")
 ```
@@ -235,8 +240,12 @@ the fixed (non-varying) parameters, and the climate.  Use `reference_only=True`
 to avoid copying the climate file for every evaluation.
 
 ```python
+from pysipnet import ClimateDrivers, ModelPreset, RunConfig, SIPNETModel, SIPNETRunner
+
 climate = ClimateDrivers.from_path("data/era5_site1.clim")
 context = RunConfig(preset=ModelPreset.STANDARD, params=base_params, climate=climate)
+runner  = SIPNETRunner(preset=context.preset)
+model   = SIPNETModel(runner, base_params=context.params, base_climate=context.climate)
 context.save("experiment/context/", reference_only=True)
 ```
 
