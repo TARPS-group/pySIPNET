@@ -6,11 +6,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import pandas as pd
-
 if TYPE_CHECKING:
+    import pandas as pd
+
     from pysipnet.climate import ClimateDrivers
     from pysipnet.events import EventSequence
+    from pysipnet.output import SIPNETOutput
     from pysipnet.parameters.v1 import ModelFlagsV1, SIPNETParametersV1
     from pysipnet.runner import ModelPreset
 
@@ -57,10 +58,10 @@ class SIPNETResult:
     Attributes
     ----------
     outputs:
-        Parsed ``.out`` file as a DataFrame.  One row per model timestep,
-        columns named by SIPNET output variable (e.g., ``nee``, ``gpp``,
-        ``plant_wood_c``).  Column names use snake_case translations of
-        SIPNET's camelCase output headers.
+        Parsed ``.out`` file as a :class:`~pysipnet.output.SIPNETOutput`.
+        Access the underlying DataFrame via ``result.outputs.data``, or use
+        ``result.outputs.load(columns=[...])`` to read only a subset of
+        columns from a file-backed instance.
     parameters:
         The :class:`~pysipnet.parameters.v1.SIPNETParametersV1` used for
         this run.
@@ -77,57 +78,15 @@ class SIPNETResult:
         ``None`` if no events were supplied.
     """
 
-    outputs: pd.DataFrame
+    outputs: SIPNETOutput
     parameters: SIPNETParametersV1
     climate: ClimateDrivers
     flags: ModelFlagsV1
     provenance: RunProvenance
     events: EventSequence | None = field(default=None)
 
-    @classmethod
-    def from_workdir(
-        cls,
-        parameters: SIPNETParametersV1,
-        climate: ClimateDrivers,
-        flags: ModelFlagsV1,
-        provenance: RunProvenance,
-        events: EventSequence | None = None,
-    ) -> SIPNETResult:
-        """Parse SIPNET output files and construct a result object.
-
-        Parameters
-        ----------
-        parameters:
-            Model parameter set used for the run.
-        climate:
-            Climate drivers used for the run.
-        flags:
-            Compile-time model flags for the run.
-        provenance:
-            Execution provenance (binary path, return code, stdout/stderr, etc.).
-            ``provenance.workdir`` is used to locate the ``sipnet.out`` file.
-        events:
-            Management event sequence used for the run, if any.
-        """
-        from pysipnet.io.output_reader import read_output_file
-
-        out_path = provenance.workdir / "sipnet.out"
-        if provenance.returncode == 0 and out_path.exists():
-            outputs = read_output_file(out_path)
-        else:
-            outputs = pd.DataFrame()
-
-        return cls(
-            outputs=outputs,
-            parameters=parameters,
-            climate=climate,
-            flags=flags,
-            provenance=provenance,
-            events=events,
-        )
-
     def to_xarray(self):
-        """Convert ``outputs`` to an :class:`xarray.Dataset`.
+        """Convert the output timeseries to an :class:`xarray.Dataset`.
 
         The returned Dataset uses ``(year, day, time)`` as a multi-level
         index so they appear as coordinates rather than data variables.
@@ -143,16 +102,18 @@ class SIPNETResult:
                 "xarray is required for SIPNETResult.to_xarray(). "
                 "Install with: pip install pysipnet[xarray]"
             ) from exc
-        return xr.Dataset.from_dataframe(self.outputs.set_index(["year", "day", "time"]))
+        return xr.Dataset.from_dataframe(
+            self.outputs.data.set_index(["year", "day", "time"])
+        )
 
     def nee(self) -> pd.Series:
         """Net ecosystem exchange time series (g C m⁻² per timestep, + = to atmosphere)."""
-        return self.outputs["nee"]
+        return self.outputs.data["nee"]
 
     def gpp(self) -> pd.Series:
         """Gross primary production time series (g C m⁻² per timestep)."""
-        return self.outputs["gpp"]
+        return self.outputs.data["gpp"]
 
     def et(self) -> pd.Series:
         """Evapotranspiration time series (cm per timestep)."""
-        return self.outputs["evapotranspiration"]
+        return self.outputs.data["evapotranspiration"]

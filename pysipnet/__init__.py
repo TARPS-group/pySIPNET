@@ -55,6 +55,7 @@ from pysipnet.model import SIPNETModel
 from pysipnet.parameters.v1 import SIPNET_PARAMS_BY_GROUP, ModelFlagsV1, SIPNETParametersV1
 
 # Results
+from pysipnet.output import SIPNETOutput
 from pysipnet.result import RunProvenance, SIPNETResult
 from pysipnet.runner import ClimateStaging, ModelPreset, SIPNETRunner
 
@@ -74,6 +75,7 @@ __all__ = [
     "RunConfig",
     # Results
     "SIPNETResult",
+    "SIPNETOutput",
     "RunProvenance",
     # Parameters
     "SIPNETParametersV1",
