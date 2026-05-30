@@ -65,8 +65,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pysipnet.climate import ClimateDrivers
     from pysipnet.events import EventSequence
+    from pysipnet.output import SIPNETOutput
     from pysipnet.parameters.v1 import ModelFlagsV1, SIPNETParametersV1
-    from pysipnet.result import SIPNETResult
+    from pysipnet.result import RunProvenance, SIPNETResult
 
 # Sentinel used to distinguish "not passed" from None in output_dir overrides.
 _UNSET = object()
@@ -300,7 +301,6 @@ class SIPNETRunner:
         import shutil
 
         from pysipnet.io.param_io import write_param_file
-        from pysipnet.output import SIPNETOutput
         from pysipnet.result import RunProvenance, SIPNETResult
 
         self._check_binary()

@@ -10,8 +10,6 @@ Build the binary with::
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -203,7 +201,7 @@ class TestOutputIO:
         call_dir = tmp_path / "call_override"
 
         runner = SIPNETRunner(preset=ModelPreset.STANDARD, output_dir=runner_dir)
-        result = runner.run(
+        runner.run(
             minimal_params, _make_climate(), run_id="override_run", output_dir=call_dir
         )
 
