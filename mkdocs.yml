@@ -1,8 +1,9 @@
 site_name: pySIPNET
 site_description: Clean Python interface to the SIPNET land surface model
 site_author: Andrew Roberts
-repo_url: https://github.com/andrewroberts/pySIPNET
-repo_name: andrewroberts/pySIPNET
+site_url: https://tarps-group.github.io/pySIPNET/
+repo_url: https://github.com/TARPS-group/pySIPNET
+repo_name: TARPS-group/pySIPNET
 
 theme:
   name: material
