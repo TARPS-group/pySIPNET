@@ -16,5 +16,6 @@ calendar year 1999, used by [`mcmc_calibration.ipynb`](../mcmc_calibration.ipynb
 
 The result is a standard 14-column SIPNET v1 `.clim` file with 365 daily rows.
 Pairing this site's meteorology with the nominal Niwot parameters (in the
-notebook) gives a physically sensible seasonal NEE cycle — a mid-summer sink and
-a shoulder/winter source.
+notebook) gives a physically sensible seasonal NEE cycle — a mid-summer carbon
+sink and net release during the colder shoulder seasons (spring/autumn) and
+winter.
