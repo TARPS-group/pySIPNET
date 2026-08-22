@@ -275,3 +275,85 @@ class TestRoundtrip:
             parts = line.split()
             assert len(parts) >= 2, f"Unparseable line: {raw_line!r}"
             float(parts[1])  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# read_output_file — header detection
+# ---------------------------------------------------------------------------
+
+
+class TestOutputHeaderDetection:
+    """The reader must find the header in all three layouts SIPNET produces.
+
+    Getting this wrong is quiet rather than loud. When the reader mistakes the
+    header for something else it falls back to numbered columns, so every
+    lookup by name fails later and far from the cause — or worse, the header
+    row is parsed as data and every column is off by one row.
+    """
+
+    HEADER = "year day time plantWoodC nee"
+    ROW_1 = "1998 305 0.00 5759.61 0.742"
+    ROW_2 = "1998 306 0.00 5760.10 0.751"
+
+    def _write(self, tmp_path, *lines):
+        path = tmp_path / "sipnet.out"
+        path.write_text("\n".join(lines) + "\n")
+        return path
+
+    def test_header_then_data(self, tmp_path):
+        """The layout the pinned SIPNET version writes."""
+        from pysipnet.io.output_reader import read_output_file
+
+        df = read_output_file(self._write(tmp_path, self.HEADER, self.ROW_1, self.ROW_2))
+        assert list(df.columns) == ["year", "day", "time", "plant_wood_c", "nee"]
+        assert len(df) == 2
+
+    def test_notes_line_then_header_then_data(self, tmp_path):
+        """The layout SIPNET wrote up to and including v2.0.0."""
+        from pysipnet.io.output_reader import read_output_file
+
+        df = read_output_file(
+            self._write(tmp_path, "Notes: (PlantWoodC in g C/m^2;", self.HEADER, self.ROW_1)
+        )
+        assert list(df.columns) == ["year", "day", "time", "plant_wood_c", "nee"]
+        assert len(df) == 1
+
+    def test_data_only(self, tmp_path):
+        """A binary run with --no-print-header; columns can only be positional."""
+        from pysipnet.io.output_reader import read_output_file
+
+        df = read_output_file(self._write(tmp_path, self.ROW_1, self.ROW_2))
+        assert list(df.columns) == [0, 1, 2, 3, 4]
+        assert len(df) == 2
+
+    def test_header_row_is_not_counted_as_data(self, tmp_path):
+        """The classic off-by-one: a header parsed as a timestep."""
+        from pysipnet.io.output_reader import read_output_file
+
+        df = read_output_file(self._write(tmp_path, self.HEADER, self.ROW_1, self.ROW_2))
+        assert df["year"].tolist() == [1998, 1998]
+
+    def test_unmapped_column_keeps_its_sipnet_name(self, tmp_path):
+        """A column added by a future SIPNET version must still be readable."""
+        from pysipnet.io.output_reader import read_output_file
+
+        df = read_output_file(
+            self._write(tmp_path, "year day time somethingNew", "1998 305 0.00 1.5")
+        )
+        assert "somethingNew" in df.columns
+
+    def test_empty_file_gives_an_empty_frame(self, tmp_path):
+        from pysipnet.io.output_reader import read_output_file
+
+        path = tmp_path / "sipnet.out"
+        path.write_text("")
+        assert read_output_file(path).empty
+
+    def test_column_selection_keeps_the_time_coordinates(self, tmp_path):
+        """year/day/time identify each row, so they survive any selection."""
+        from pysipnet.io.output_reader import read_output_file
+
+        df = read_output_file(
+            self._write(tmp_path, self.HEADER, self.ROW_1), columns=["nee"]
+        )
+        assert set(df.columns) == {"year", "day", "time", "nee"}

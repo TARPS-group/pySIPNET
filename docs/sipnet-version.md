@@ -66,6 +66,6 @@ When SIPNET v2 stabilises, the extension path is:
 2. Implement `pysipnet/io/clim_io_v2.py` with the 12-column reader/writer.
 3. Implement `pysipnet/parameters/v2.py` with the updated parameter set.
 4. Add any new model flags to `ModelFlags`, along with the restrictions SIPNET enforces on them.
-5. Route `ClimateDrivers(version="v2")` and `SIPNETParametersV2` through the new adapters.
+5. Route `ClimateDrivers(n_columns=12)` and `SIPNETParametersV2` through the new adapters.
 
 The public API (`SIPNETRunner.run(params, climate)`) does not need to change.

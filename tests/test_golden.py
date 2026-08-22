@@ -59,8 +59,8 @@ def _run_baseline() -> pd.DataFrame:
     """Run the frozen baseline input through the wrapper and return its output."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # upstream data has a few vpd ≤ 0 rows
-        full = read_clim_file(REFERENCE_CLIM, version="v1")
-    climate = ClimateDrivers.from_dataframe(full.data.head(_N_TIMESTEPS).copy(), version="v1")
+        full = read_clim_file(REFERENCE_CLIM, n_columns=14)
+    climate = ClimateDrivers.from_dataframe(full.data.head(_N_TIMESTEPS).copy(), n_columns=14)
     params = params_from_sipnet_file(REFERENCE_PARAM)
     result = SIPNETRunner(flags=ModelFlags.standard()).run(params, climate, run_id="golden")
     assert result.provenance.success, result.provenance.stderr

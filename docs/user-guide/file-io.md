@@ -70,7 +70,7 @@ in the working directory.
 
 ```python
 # Full data in memory — good for interactive use and data manipulation
-climate = ClimateDrivers.from_file("data/era5_site1.clim", version="v1")
+climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
 climate.data        # DataFrame always available
 climate.validate()  # full validation runs immediately
 ```
@@ -83,7 +83,7 @@ original file directly, skipping the read-then-write cycle entirely.
 
 ```python
 # No data loaded — good for ensemble workflows with pre-existing files
-climate = ClimateDrivers.from_path("data/era5_site1.clim", version="v1")
+climate = ClimateDrivers.from_path("data/era5_site1.clim", n_columns=14)
 
 print(climate.n_timesteps)  # available without loading data
 print(climate.date_range)   # also available without loading data

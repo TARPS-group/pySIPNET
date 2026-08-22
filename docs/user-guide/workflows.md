@@ -23,7 +23,7 @@ from pysipnet import SIPNETRunner, SIPNETModel, ModelFlags, SIPNETParameters, Cl
 params: SIPNETParameters = ...
 
 # Load climate directly into memory
-climate = ClimateDrivers.from_file("data/era5_site1.clim", version="v1")
+climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
 
 runner = SIPNETRunner(flags=ModelFlags.standard())
 model  = SIPNETModel(runner, base_params=params, base_climate=climate)
@@ -70,7 +70,7 @@ site_files = [
 results = {}
 for path in site_files:
     # Climate file is not read into Python memory — only staged to the workdir
-    climate = ClimateDrivers.from_path(path, version="v1")
+    climate = ClimateDrivers.from_path(path, n_columns=14)
     result = runner.run(params, climate, run_id=Path(path).stem)
 
     # Output is eagerly parsed into memory (default behaviour)
@@ -179,7 +179,7 @@ from pysipnet import SIPNETRunner, ModelFlags, ClimateDrivers, ClimateStaging
 param_samples: list[SIPNETParameters] = [...]
 
 # One shared climate file for all members
-climate = ClimateDrivers.from_path("data/era5_site1.clim", version="v1")
+climate = ClimateDrivers.from_path("data/era5_site1.clim", n_columns=14)
 
 runner = SIPNETRunner(
     flags=ModelFlags.standard(),
@@ -222,7 +222,7 @@ runner = SIPNETRunner(
     workdir_base=run_dir / "workdirs",
 )
 
-climate = ClimateDrivers.from_path("data/era5_site1.clim", version="v1")
+climate = ClimateDrivers.from_path("data/era5_site1.clim", n_columns=14)
 result = runner.run(params, climate, run_id="baseline")
 
 # After the run, the directory tree looks like:

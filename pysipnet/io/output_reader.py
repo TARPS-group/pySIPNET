@@ -1,76 +1,44 @@
-"""Parse SIPNET ``.out`` output files.
+"""Read SIPNET's ``.out`` output file into a pandas DataFrame.
 
-Output file format
-------------------
-When compiled with ``HEADER=1`` (as done by the pySIPNET build system), the
-``.out`` file begins with a space-delimited header row followed by one data
-row per timestep.
+File layout
+-----------
+pySIPNET always asks SIPNET for a header row (``PRINT_HEADER = 1`` in the
+generated ``sipnet.in``), so the file is a row of column names followed by one
+row per timestep, all space-separated.
 
-The output column names use SIPNET's camelCase conventions.  This module
-translates them to snake_case for the Python side.
+Columns are matched by name rather than by position. That matters because the
+set of columns depends on which processes are switched on, and it changes
+between SIPNET versions, so anything positional would silently read the wrong
+values after a change.
 
-Column layout (v1, HEADER=1)
+Older SIPNET versions, up to and including v2.0.0, wrote an extra ``Notes:``
+line above the header. v2.1.0 removed it. Both layouts are handled, along with
+files that have no header at all, which is what an externally compiled binary
+run with ``--no-print-header`` produces.
+
+Columns at the pinned version
 -----------------------------
-All columns are always present regardless of active compile-time flags;
-inactive features output zeros.
+36 columns, always all present: SIPNET writes a column even for a process that
+is switched off, filling it with zeros. Grouped by what they describe:
 
-+----+-------------------------+--------+----------------------------------------+
-| #  | SIPNET name             | Unit   | Notes                                  |
-+====+=========================+========+========================================+
-|  1 | year                    | —      |                                        |
-+----+-------------------------+--------+----------------------------------------+
-|  2 | day                     | —      | Day of year                            |
-+----+-------------------------+--------+----------------------------------------+
-|  3 | time                    | hours  | Fractional                             |
-+----+-------------------------+--------+----------------------------------------+
-|  4 | plantWoodC              | g C/m² |                                        |
-+----+-------------------------+--------+----------------------------------------+
-|  5 | plantLeafC              | g C/m² |                                        |
-+----+-------------------------+--------+----------------------------------------+
-|  6 | woodCreation            | g C/m² | C allocated to wood this step          |
-+----+-------------------------+--------+----------------------------------------+
-|  7 | soil                    | g C/m² |                                        |
-+----+-------------------------+--------+----------------------------------------+
-|  8 | coarseRootC             | g C/m² |                                        |
-+----+-------------------------+--------+----------------------------------------+
-|  9 | fineRootC               | g C/m² |                                        |
-+----+-------------------------+--------+----------------------------------------+
-| 10 | litter                  | g C/m² | 0 when LITTER_POOL=0                  |
-+----+-------------------------+--------+----------------------------------------+
-| 11 | soilWater               | cm     |                                        |
-+----+-------------------------+--------+----------------------------------------+
-| 12 | soilWetnessFrac         | —      | soilWater / soilWHC                    |
-+----+-------------------------+--------+----------------------------------------+
-| 13 | snow                    | cm     | Water equivalent; 0 when SNOW=0       |
-+----+-------------------------+--------+----------------------------------------+
-| 14 | npp                     | g C/m² | Per timestep                           |
-+----+-------------------------+--------+----------------------------------------+
-| 15 | nee                     | g C/m² | Positive = flux to atmosphere          |
-+----+-------------------------+--------+----------------------------------------+
-| 16 | cumNEE                  | g C/m² | Cumulative                             |
-+----+-------------------------+--------+----------------------------------------+
-| 17 | gpp                     | g C/m² |                                        |
-+----+-------------------------+--------+----------------------------------------+
-| 18 | rAboveground            | g C/m² | Aboveground autotrophic respiration    |
-+----+-------------------------+--------+----------------------------------------+
-| 19 | rSoil                   | g C/m² | Soil respiration (Rh + root)           |
-+----+-------------------------+--------+----------------------------------------+
-| 20 | rRoot                   | g C/m² | Root respiration                       |
-+----+-------------------------+--------+----------------------------------------+
-| 21 | ra                      | g C/m² | Total autotrophic respiration          |
-+----+-------------------------+--------+----------------------------------------+
-| 22 | rh                      | g C/m² | Heterotrophic respiration              |
-+----+-------------------------+--------+----------------------------------------+
-| 23 | rtot                    | g C/m² | Total ecosystem respiration (Ra + Rh)  |
-+----+-------------------------+--------+----------------------------------------+
-| 24 | evapotranspiration      | cm     |                                        |
-+----+-------------------------+--------+----------------------------------------+
-| 25 | fluxestranspiration     | cm/day | Transpiration component                |
-+----+-------------------------+--------+----------------------------------------+
-| 26 | fPAR                    | —      | Fraction of PAR absorbed               |
-+----+-------------------------+--------+----------------------------------------+
+- **Time**: ``year``, ``day``, ``time``
+- **Carbon pools**: ``plantWoodC``, ``plantLeafC``, ``soil``, ``coarseRootC``,
+  ``fineRootC``, ``litter``
+- **Carbon fluxes**: ``woodCreation``, ``npp``, ``nee``, ``cumNEE``, ``gpp``,
+  ``nppStorage``
+- **Respiration**: ``rAboveground``, ``rSoil``, ``rRoot``, ``ra``, ``rh``,
+  ``rtot``
+- **Water**: ``soilWater``, ``soilWetnessFrac``, ``snow``,
+  ``evapotranspiration``, ``fluxestranspiration``
+- **Nitrogen** (zero unless the nitrogen cycle is on): ``minN``, ``soilOrgN``,
+  ``litterN``, ``n2o``, ``nLeaching``, ``nFixation``, ``nUptake``
+- **Methane** (zero unless anaerobic processes are on): ``ch4``
+- **Mass-balance checks**: ``bcdeltaC``, ``bcdeltaN``, the carbon and nitrogen
+  closure errors SIPNET computes for itself. Both should stay at or near zero;
+  a drift away from zero indicates a problem inside the model run.
 
-Note: ``fPAR`` and ``microbeC`` appear in v1 output but not v2.
+``microbeC``, ``litterWater`` and ``fPAR`` were written by older versions and
+are retained in the name mapping so previously saved output still reads.
 """
 
 from __future__ import annotations
@@ -106,34 +74,78 @@ SIPNET_TO_PYTHON_OUTPUT: dict[str, str] = {
     "rtot": "rtot",
     "evapotranspiration": "evapotranspiration",
     "fluxestranspiration": "transpiration",
+    # Nitrogen cycle; zero unless ModelFlags.nitrogen_cycle is on.
+    "minN": "mineral_n",
+    "soilOrgN": "soil_organic_n",
+    "litterN": "litter_n",
+    "n2o": "n2o",
+    "nLeaching": "n_leaching",
+    "nFixation": "n_fixation",
+    "nUptake": "n_uptake",
+    # Methane; zero unless ModelFlags.anaerobic is on.
+    "ch4": "ch4",
+    # Carbon held back from allocation to represent storage lag.
+    "nppStorage": "npp_storage",
+    # SIPNET's own mass-balance closure errors; should stay near zero.
+    "bcdeltaC": "balance_delta_c",
+    "bcdeltaN": "balance_delta_n",
+    # Written by SIPNET versions older than the pinned one; kept so that
+    # previously saved output files still read.
     "fPAR": "f_par",
-    # v1 only
     "microbeC": "microbe_c",
     "litterWater": "litter_water",
 }
 
 
+def _split_header(lines: list[str]) -> tuple[list[str] | None, int]:
+    """Work out where the header is and where the data starts.
+
+    Returns the column names (or ``None`` when the file has no header) and the
+    index of the first data row.
+
+    Three layouts occur in practice:
+
+    - a ``Notes:`` line, then the header, then data (SIPNET up to v2.0.0)
+    - the header, then data (the pinned version)
+    - data only, no header (a binary run with ``--no-print-header``)
+
+    The first field of a data row is the year, so a first field that does not
+    parse as a number means the line is a header.
+    """
+    if lines[0].startswith("Notes:"):
+        return lines[1].split(), 2
+
+    first_field = lines[0].split()[0] if lines[0].split() else ""
+    try:
+        float(first_field)
+    except ValueError:
+        return lines[0].split(), 1
+
+    return None, 0
+
+
 def read_output_file(path: Path, columns: list[str] | None = None) -> pd.DataFrame:
-    """Parse a SIPNET ``.out`` file into a DataFrame.
+    """Read a SIPNET ``.out`` file into a DataFrame.
 
-    Handles both ``HEADER=1`` (column names present) and ``HEADER=0`` (no
-    header, positional columns assumed) output formats.  The pySIPNET build
-    system always compiles with ``HEADER=1``, so the no-header path is
-    provided only for compatibility with externally compiled binaries.
-
-    Column names in the returned DataFrame use the snake_case names from
-    :data:`SIPNET_TO_PYTHON_OUTPUT`.
+    Column names in the result are the snake_case names from
+    :data:`SIPNET_TO_PYTHON_OUTPUT`. A SIPNET column with no entry in that
+    mapping keeps its original name, so a column added by a future SIPNET
+    version is still readable.
 
     Parameters
     ----------
     path:
-        Path to the ``.out`` file.
+        The ``.out`` file to read.
     columns:
-        Subset of snake_case column names to return.  The time-coordinate
-        columns ``year``, ``day``, and ``time`` are always included regardless
-        of this argument.  ``None`` returns all columns.  Column filtering is
-        only applied for ``HEADER=1`` output; ``HEADER=0`` files always return
-        all columns.
+        Which columns to keep, using the snake_case names. ``year``, ``day``
+        and ``time`` are always kept because they identify each row. Pass
+        ``None`` for everything. Ignored for files with no header row, where
+        columns cannot be selected by name.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per timestep. Empty if the file is empty.
     """
     from io import StringIO
 
@@ -141,23 +153,22 @@ def read_output_file(path: Path, columns: list[str] | None = None) -> pd.DataFra
     if not lines:
         return pd.DataFrame()
 
-    if lines[0].startswith("Notes:"):
-        # HEADER=1: line 0 is "Notes: ...", line 1 is space-separated column names
-        sipnet_cols = lines[1].split()
-        python_cols = [SIPNET_TO_PYTHON_OUTPUT.get(c, c) for c in sipnet_cols]
-        data_text = "\n".join(lines[2:])
+    sipnet_cols, data_start = _split_header(lines)
+    data_text = "\n".join(lines[data_start:])
 
+    if sipnet_cols is None:
+        # No header row: fall back to positional integer column labels, since
+        # there is no reliable way to name columns whose order we cannot check.
+        python_cols = None
+        usecols = None
+    else:
+        python_cols = [SIPNET_TO_PYTHON_OUTPUT.get(c, c) for c in sipnet_cols]
         if columns is not None:
-            time_coords = {"year", "day", "time"}
-            requested = time_coords | set(columns)
+            # The time coordinates identify each row, so they are always kept.
+            requested = {"year", "day", "time"} | set(columns)
             usecols = [c for c in python_cols if c in requested]
         else:
             usecols = None
-    else:
-        # HEADER=0: no header, use positional integer column indices
-        python_cols = None
-        usecols = None
-        data_text = "\n".join(lines)
 
     df = pd.read_csv(
         StringIO(data_text),

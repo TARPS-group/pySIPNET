@@ -47,9 +47,9 @@ Climate forcing is stored in a SIPNET `.clim` file — one row per timestep,
 ```python
 from pysipnet import ClimateDrivers
 
-climate = ClimateDrivers.from_file("data/era5_site1.clim", version="v1")
+climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
 print(climate)
-# ClimateDrivers(version='v1', timesteps=29200, range=2012-001 to 2023-365)
+# ClimateDrivers(n_columns=14, timesteps=29200, range=2012-001 to 2023-365)
 ```
 
 `ClimateDrivers.from_file` loads the data into memory.  For ensemble

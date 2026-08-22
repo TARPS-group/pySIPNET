@@ -53,7 +53,7 @@ def _make_climate(n_days: int = 30, year: int = 2010, start_doy: int = 150):
             }
         )
     df = pd.DataFrame(rows)
-    return ClimateDrivers.from_dataframe(df, version="v1")
+    return ClimateDrivers.from_dataframe(df, n_columns=14)
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +143,7 @@ class TestEndToEnd:
         climate = _make_climate(n_days=10)
         clim_path = tmp_path / "test.clim"
         write_clim_file(climate, clim_path)
-        climate2 = read_clim_file(clim_path, version="v1")
+        climate2 = read_clim_file(clim_path, n_columns=14)
 
         pd.testing.assert_frame_equal(
             climate.data.reset_index(drop=True),

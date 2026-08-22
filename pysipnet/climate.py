@@ -1,7 +1,7 @@
 """Climate driver data structure and I/O.
 
 The :class:`ClimateDrivers` class holds the meteorological forcing time series
-required by SIPNET.  It is version-aware: the column layout differs between
+required by SIPNET.  It is layout-aware: the column layout differs between
 SIPNET v1 (14 columns) and v2 (12 columns).
 
 Column conventions
@@ -68,7 +68,7 @@ import pandas as pd
 # Canonical column names for the Python representation.
 # The loc and soil_wetness columns from v1 are not included here —
 # they are written/read by the IO layer as padding, not stored in the DataFrame.
-CLIM_COLUMNS_V1: list[str] = [
+CLIM_COLUMNS: list[str] = [
     "year",
     "day",
     "time",
@@ -83,7 +83,6 @@ CLIM_COLUMNS_V1: list[str] = [
     "wspd",
 ]
 
-CLIM_COLUMNS_V2: list[str] = CLIM_COLUMNS_V1  # same logical columns, different file format
 
 
 class ClimateDrivers:
@@ -102,12 +101,14 @@ class ClimateDrivers:
     Parameters
     ----------
     data:
-        One row per model timestep with columns matching :data:`CLIM_COLUMNS_V1`.
+        One row per model timestep with columns matching :data:`CLIM_COLUMNS`.
         Mutually exclusive with *source_path*.
     source_path:
         Path to an existing ``.clim`` file.  Mutually exclusive with *data*.
-    version:
-        SIPNET version this object is formatted for.
+    n_columns:
+        Which climate file layout this object writes: 12 or 14 columns. Both
+        carry the same 12 values; the 14-column layout adds two SIPNET
+        ignores.
     loc:
         Location index written to column 1 of v1 climate files (memory-backed
         only).  SIPNET ignores this value; it exists for backward compatibility.
@@ -118,7 +119,7 @@ class ClimateDrivers:
         *,
         data: pd.DataFrame | None = None,
         source_path: Path | None = None,
-        version: Literal["v1", "v2"] = "v1",
+        n_columns: Literal[12, 14] = 14,
         loc: int = 0,
     ) -> None:
         if (data is None) == (source_path is None):
@@ -127,7 +128,7 @@ class ClimateDrivers:
             )
         self._data: pd.DataFrame | None = data
         self.source_path: Path | None = source_path
-        self.version: Literal["v1", "v2"] = version
+        self.n_columns: Literal[12, 14] = n_columns
         self.loc: int = loc
         self._n_timesteps: int | None = None
         self._date_range: tuple[tuple[int, int], tuple[int, int]] | None = None
@@ -135,51 +136,51 @@ class ClimateDrivers:
     # ── Construction ───────────────────────────────────────────────────────────
 
     @classmethod
-    def from_file(cls, path: str | Path, version: Literal["v1", "v2"] = "v1") -> ClimateDrivers:
+    def from_file(cls, path: str | Path, n_columns: Literal[12, 14] = 14) -> ClimateDrivers:
         """Read a SIPNET climate file fully into memory.
 
         Parameters
         ----------
         path:
             Path to the ``.clim`` file.
-        version:
-            File format version.  ``"v1"`` expects 14 columns (location index
+        n_columns:
+            Which layout to expect.  ``14`` expects 14 columns (site index
             in col 1, soil-wetness in col 14); ``"v2"`` expects 12 columns.
         """
         from pysipnet.io.clim_io import read_clim_file
 
-        return read_clim_file(Path(path), version=version)
+        return read_clim_file(Path(path), n_columns=n_columns)
 
     @classmethod
     def from_dataframe(
         cls,
         df: pd.DataFrame,
-        version: Literal["v1", "v2"] = "v1",
+        n_columns: Literal[12, 14] = 14,
         loc: int = 0,
     ) -> ClimateDrivers:
         """Construct from a pre-built DataFrame.
 
-        The DataFrame must contain columns matching :data:`CLIM_COLUMNS_V1`.
+        The DataFrame must contain columns matching :data:`CLIM_COLUMNS`.
         Extra columns are ignored.
 
         Parameters
         ----------
         df:
             Input DataFrame with climate variables.
-        version:
-            Target file format version for serialisation.
+        n_columns:
+            Which layout to use when this object is written to a file.
         loc:
             Location index (v1 only).
         """
-        missing = set(CLIM_COLUMNS_V1) - set(df.columns)
+        missing = set(CLIM_COLUMNS) - set(df.columns)
         if missing:
             raise ValueError(f"DataFrame is missing required columns: {sorted(missing)}")
-        obj = cls(data=df[CLIM_COLUMNS_V1].copy(), version=version, loc=loc)
+        obj = cls(data=df[CLIM_COLUMNS].copy(), n_columns=n_columns, loc=loc)
         obj.validate()
         return obj
 
     @classmethod
-    def from_path(cls, path: str | Path, version: Literal["v1", "v2"] = "v1") -> ClimateDrivers:
+    def from_path(cls, path: str | Path, n_columns: Literal[12, 14] = 14) -> ClimateDrivers:
         """Create a file-backed instance without loading data into memory.
 
         The file is not read until :attr:`data` is accessed.  Lightweight
@@ -196,8 +197,8 @@ class ClimateDrivers:
         ----------
         path:
             Path to an existing ``.clim`` file.
-        version:
-            File format version.
+        n_columns:
+            Which layout to expect.
         """
         from pysipnet.io.clim_io import peek_clim_file
 
@@ -205,8 +206,8 @@ class ClimateDrivers:
         if not path.exists():
             raise FileNotFoundError(f"Climate file not found: {path}")
 
-        n_rows, start, end = peek_clim_file(path, version=version)
-        obj = cls(source_path=path, version=version)
+        n_rows, start, end = peek_clim_file(path, n_columns=n_columns)
+        obj = cls(source_path=path, n_columns=n_columns)
         obj._n_timesteps = n_rows
         obj._date_range = (start, end)
         return obj
@@ -224,7 +225,7 @@ class ClimateDrivers:
         if self._data is None:
             from pysipnet.io.clim_io import read_clim_file
 
-            self._data = read_clim_file(self.source_path, version=self.version).data
+            self._data = read_clim_file(self.source_path, n_columns=self.n_columns).data
         return self._data
 
     # ── Validation ─────────────────────────────────────────────────────────────
@@ -338,7 +339,7 @@ class ClimateDrivers:
     def __repr__(self) -> str:
         (y0, d0), (y1, d1) = self.date_range
         return (
-            f"ClimateDrivers(version={self.version!r}, "
+            f"ClimateDrivers(n_columns={self.n_columns!r}, "
             f"timesteps={self.n_timesteps}, "
             f"range={y0}-{d0:03d} to {y1}-{d1:03d})"
         )
