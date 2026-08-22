@@ -99,7 +99,9 @@ class TestSipnetRecognisesEveryParameter:
         assert not unknown, "SIPNET did not recognise some parameters:\n" + "\n".join(unknown)
 
     @pytest.mark.parametrize("flags", FLAG_CASES)
-    def test_no_required_parameter_is_missing(self, tmp_path, params_for, reference_clim_path, flags):
+    def test_no_required_parameter_is_missing(
+        self, tmp_path, params_for, reference_clim_path, flags
+    ):
         """SIPNET must not report a required parameter as absent.
 
         Complements ``validate_for_flags``: that checks our own idea of what is
