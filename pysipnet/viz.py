@@ -93,7 +93,7 @@ def _provenance_table(result: SIPNETResult) -> go.Table:
 
     prov = result.provenance
     try:
-        preset = str(prov.preset)
+        flags = prov.flags.name or "custom"
         rid = str(prov.run_id)
         run_id = (rid[:10] + "…") if len(rid) > 11 else rid
         binary = (
@@ -101,10 +101,10 @@ def _provenance_table(result: SIPNETResult) -> go.Table:
         )
         status = "✓ Success" if prov.returncode == 0 else f"✗ Failed (returncode {prov.returncode})"
     except Exception:
-        preset = run_id = binary = status = "N/A"
+        flags = run_id = binary = status = "N/A"
 
-    keys = ["Preset", "Run ID", "Binary", "Status"]
-    vals = [preset, run_id, str(binary), status]
+    keys = ["Model flags", "Run ID", "Binary", "Status"]
+    vals = [flags, run_id, str(binary), status]
     colors = [_ROW_A if i % 2 == 0 else _ROW_B for i in range(len(keys))]
 
     return go.Table(
@@ -193,7 +193,7 @@ def dashboard(
 
     The figure has six sections arranged vertically:
 
-    * **Run Configuration**: provenance table (preset, run ID, binary, status)
+    * **Run Configuration**: provenance table (flags, run ID, binary, status)
       and grouped parameter table (non-``None`` fields only)
     * **Climate Inputs** (2 × 2 grid): air temperature, PAR, precipitation, VPD
     * **Model Outputs**: flux panel (NEE, GPP, ET, Rₐ, Rₕ) with a

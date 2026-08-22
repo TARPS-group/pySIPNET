@@ -17,7 +17,7 @@ from pysipnet.io.param_io import (
     read_param_file,
     write_param_file,
 )
-from pysipnet.parameters.v1 import ModelFlagsV1
+from pysipnet.parameters.model import ModelFlags
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -26,7 +26,7 @@ from pysipnet.parameters.v1 import ModelFlagsV1
 
 @pytest.fixture
 def flags():
-    return ModelFlagsV1.standard()
+    return ModelFlags.standard()
 
 
 # ---------------------------------------------------------------------------
@@ -135,18 +135,18 @@ class TestWriteParamFile:
 
     def test_validate_for_flags_called(self, tmp_path, flags):
         """write_param_file must fail if snow_melt is missing with SNOW=1."""
-        from pysipnet.parameters.v1 import (
+        from pysipnet.parameters.model import (
             AllocationParams,
             InitialConditions,
             LeafPhysiologyParams,
             PhenologyParams,
             PhotosynthesisParams,
             RespirationParams,
-            SIPNETParametersV1,
+            SIPNETParameters,
             WaterParams,
         )
 
-        params = SIPNETParametersV1(
+        params = SIPNETParameters(
             initial_conditions=InitialConditions(
                 plant_wood=1.0,
                 lai=0.0,

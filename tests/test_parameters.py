@@ -7,17 +7,17 @@ import pytest
 from pydantic import ValidationError
 
 from pysipnet.parameters.base import ParameterDomain, get_parameter_specs
-from pysipnet.parameters.v1 import (
+from pysipnet.parameters.model import (
     AllocationParams,
-    ModelFlagsV1,
+    ModelFlags,
     PhotosynthesisParams,
-    SIPNETParametersV1,
+    SIPNETParameters,
 )
 
 
 class TestParameterSpec:
     def test_all_fields_have_spec(self):
-        specs = get_parameter_specs(SIPNETParametersV1)
+        specs = get_parameter_specs(SIPNETParameters)
         assert len(specs) > 0
         for path, spec in specs.items():
             assert spec.unit, f"{path}: unit string is empty"
@@ -25,7 +25,7 @@ class TestParameterSpec:
             assert spec.description, f"{path}: description is empty"
 
     def test_per_year_params_are_flagged(self):
-        specs = get_parameter_specs(SIPNETParametersV1)
+        specs = get_parameter_specs(SIPNETParameters)
         per_year = {k for k, s in specs.items() if s.per_year}
         expected = {
             "respiration.base_veg_resp",
@@ -65,33 +65,149 @@ class TestParameterSpec:
             )
 
 
-class TestModelFlagsV1:
-    def test_standard_preset(self):
-        flags = ModelFlagsV1.standard()
+class TestModelFlagsDefaults:
+    def test_standard_named_constructor(self):
+        flags = ModelFlags.standard()
         assert flags.snow
         assert flags.gdd
         assert flags.water_hresp
         assert not flags.litter_pool
         assert not flags.growth_resp
 
-    def test_forest_preset(self):
-        flags = ModelFlagsV1.forest()
-        assert flags.litter_pool
+    def test_forest_named_constructor(self):
+        assert ModelFlags.forest().litter_pool
 
-    def test_gdd_soil_phenol_exclusive(self):
+    def test_bare_constructor_matches_standard_flags(self):
+        """ModelFlags() and ModelFlags.standard() differ only by the label."""
+        assert ModelFlags().to_config_keys() == ModelFlags.standard().to_config_keys()
+
+    def test_new_processes_are_off_by_default(self):
+        """Nitrogen, methane and flooding must stay opt-in.
+
+        These arrived with the SIPNET v2.1.0 pin. If any of them defaulted on,
+        existing parameter sets would suddenly be incomplete.
+        """
+        flags = ModelFlags()
+        assert not flags.nitrogen_cycle
+        assert not flags.anaerobic
+        assert not flags.flooding
+
+
+class TestModelFlagsRestrictions:
+    """SIPNET refuses three flag combinations; we must refuse them first.
+
+    Each of these mirrors a check in ``validateContext()`` in SIPNET's
+    ``src/common/context.c``. Catching them in Python turns an opaque exit
+    code into a message naming the flags involved.
+    """
+
+    def test_gdd_and_soil_phenol_are_mutually_exclusive(self):
+        with pytest.raises(ValidationError, match="cannot both be on"):
+            ModelFlags(gdd=True, soil_phenol=True)
+
+    def test_soil_phenol_alone_is_allowed(self):
+        assert ModelFlags(gdd=False, soil_phenol=True).soil_phenol
+
+    def test_anaerobic_requires_water_hresp(self):
+        with pytest.raises(ValidationError, match="anaerobic requires water_hresp"):
+            ModelFlags(anaerobic=True, water_hresp=False)
+
+    def test_anaerobic_with_water_hresp_is_allowed(self):
+        assert ModelFlags(anaerobic=True, water_hresp=True).anaerobic
+
+    def test_nitrogen_cycle_requires_litter_pool_and_anaerobic(self):
+        with pytest.raises(ValidationError, match="nitrogen_cycle requires"):
+            ModelFlags(nitrogen_cycle=True)
+
+    def test_nitrogen_cycle_requires_anaerobic_too(self):
+        with pytest.raises(ValidationError, match="nitrogen_cycle requires"):
+            ModelFlags(nitrogen_cycle=True, litter_pool=True)
+
+    def test_full_nitrogen_configuration_is_allowed(self):
+        flags = ModelFlags(nitrogen_cycle=True, litter_pool=True, anaerobic=True)
+        assert flags.nitrogen_cycle
+
+    def test_all_problems_are_reported_together(self):
+        """A caller fixing several mistakes should see them in one message."""
+        with pytest.raises(ValidationError) as exc:
+            ModelFlags(gdd=True, soil_phenol=True, anaerobic=True, water_hresp=False)
+        message = str(exc.value)
+        assert "cannot both be on" in message
+        assert "anaerobic requires water_hresp" in message
+
+
+class TestModelFlagsConfigKeys:
+    """to_config_keys produces what SIPNET actually reads from sipnet.in."""
+
+    def test_every_flag_is_written(self):
+        """Writing all keys, not just the non-default ones, keeps runs reproducible."""
+        keys = ModelFlags().to_config_keys()
+        flag_fields = {
+            name for name in ModelFlags.model_fields if name != "name"
+        }
+        assert len(keys) == len(flag_fields)
+
+    def test_keys_are_sipnet_uppercase_names(self):
+        keys = ModelFlags().to_config_keys()
+        assert "LITTER_POOL" in keys
+        assert "WATER_HRESP" in keys
+        assert "NITROGEN_CYCLE" in keys
+
+    def test_values_are_integers_not_booleans(self):
+        """SIPNET parses these with strtol, so they must render as 1/0."""
+        for value in ModelFlags().to_config_keys().values():
+            assert value in (0, 1)
+            assert not isinstance(value, bool) or isinstance(value, int)
+
+    def test_reflects_the_flag_values(self):
+        assert ModelFlags.standard().to_config_keys()["LITTER_POOL"] == 0
+        assert ModelFlags.forest().to_config_keys()["LITTER_POOL"] == 1
+
+    def test_label_is_not_a_config_key(self):
+        """The name is for humans; SIPNET would reject it as an unknown key."""
+        keys = ModelFlags(name="my-site").to_config_keys()
+        assert "NAME" not in keys
+        assert "my-site" not in keys.values()
+
+
+class TestModelFlagsName:
+    def test_defaults_to_unset(self):
+        assert ModelFlags().name is None
+
+    def test_named_constructors_set_it(self):
+        assert ModelFlags.standard().name == "standard"
+        assert ModelFlags.forest().name == "forest"
+
+    def test_can_be_set_directly(self):
+        assert ModelFlags(litter_pool=True, name="niwot-forest").name == "niwot-forest"
+
+    def test_does_not_change_the_model_configuration(self):
+        labelled = ModelFlags(litter_pool=True, name="anything")
+        unlabelled = ModelFlags(litter_pool=True)
+        assert labelled.to_config_keys() == unlabelled.to_config_keys()
+
+    def test_participates_in_equality(self):
+        """Documented consequence of keeping the label on the model itself."""
+        assert ModelFlags(name="a") != ModelFlags(name="b")
+        assert ModelFlags.standard() != ModelFlags()
+
+
+class TestModelFlagsSerialisation:
+    def test_roundtrips_through_a_dict(self):
+        flags = ModelFlags.forest()
+        assert ModelFlags.model_validate(flags.model_dump()) == flags
+
+    def test_roundtrips_through_json(self):
+        flags = ModelFlags(nitrogen_cycle=True, litter_pool=True, anaerobic=True, name="n-cycle")
+        assert ModelFlags.model_validate_json(flags.model_dump_json()) == flags
+
+    def test_restrictions_are_enforced_on_load(self):
+        """A hand-edited or corrupted saved config must not load silently."""
         with pytest.raises(ValidationError):
-            ModelFlagsV1(gdd=True, soil_phenol=True)
-
-    def test_gdd_off_soil_phenol_on(self):
-        flags = ModelFlagsV1(gdd=False, soil_phenol=True)
-        assert flags.soil_phenol
-
-    def test_serialisation_roundtrip(self):
-        flags = ModelFlagsV1.forest()
-        assert ModelFlagsV1.model_validate(flags.model_dump()) == flags
+            ModelFlags.model_validate({"gdd": True, "soil_phenol": True})
 
 
-class TestSIPNETParametersV1:
+class TestSIPNETParameters:
     def test_construction(self, minimal_params):
         assert minimal_params.photosynthesis.a_max == 112.0
 
@@ -100,27 +216,27 @@ class TestSIPNETParametersV1:
         data["allocation"]["fine_root_allocation"] = 0.8
         data["allocation"]["wood_allocation"] = 0.3
         with pytest.raises(ValidationError):
-            SIPNETParametersV1.model_validate(data)
+            SIPNETParameters.model_validate(data)
 
     def test_serialisation_roundtrip(self, minimal_params):
         dumped = minimal_params.model_dump()
-        restored = SIPNETParametersV1.model_validate(dumped)
+        restored = SIPNETParameters.model_validate(dumped)
         assert restored.photosynthesis.a_max == minimal_params.photosynthesis.a_max
         assert restored.water.snow_melt == minimal_params.water.snow_melt
 
     def test_validate_for_flags_snow_missing(self, minimal_params):
         data = minimal_params.model_dump()
         data["water"]["snow_melt"] = None
-        params = SIPNETParametersV1.model_validate(data)
+        params = SIPNETParameters.model_validate(data)
         with pytest.raises(ValueError, match="snow_melt"):
-            params.validate_for_flags(ModelFlagsV1.standard())
+            params.validate_for_flags(ModelFlags.standard())
 
     def test_validate_for_flags_litter_missing(self, minimal_params):
         data = minimal_params.model_dump()
         data["respiration"]["litter_breakdown_rate"] = None
-        params = SIPNETParametersV1.model_validate(data)
+        params = SIPNETParameters.model_validate(data)
         with pytest.raises(ValueError, match="litter_breakdown_rate"):
-            params.validate_for_flags(ModelFlagsV1.forest())
+            params.validate_for_flags(ModelFlags.forest())
 
     def test_validate_for_flags_standard_ok(self, minimal_params):
-        minimal_params.validate_for_flags(ModelFlagsV1.standard())
+        minimal_params.validate_for_flags(ModelFlags.standard())

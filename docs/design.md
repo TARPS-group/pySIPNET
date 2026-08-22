@@ -7,7 +7,7 @@
 All inputs are organised into domain-grouped Pydantic models:
 
 ```
-SIPNETParametersV1
+SIPNETParameters
 ├── initial_conditions: InitialConditions
 ├── photosynthesis:     PhotosynthesisParams
 ├── phenology:          PhenologyParams
@@ -50,9 +50,9 @@ Retrieve domains programmatically:
 
 ```python
 from pysipnet.parameters.base import get_parameter_specs, ParameterDomain
-from pysipnet.parameters.v1 import SIPNETParametersV1
+from pysipnet.parameters.model import SIPNETParameters
 
-specs = get_parameter_specs(SIPNETParametersV1)
+specs = get_parameter_specs(SIPNETParameters)
 log_params = [k for k, s in specs.items() if s.domain == ParameterDomain.POSITIVE]
 ```
 
@@ -68,7 +68,7 @@ config_dict = {
     "climate": climate.data.to_dict(orient="list"),
     "flags":   flags.model_dump(),
 }
-params2  = SIPNETParametersV1.model_validate(config_dict["params"])
+params2  = SIPNETParameters.model_validate(config_dict["params"])
 ```
 
 This enables:
@@ -103,18 +103,18 @@ pySIPNET is intentionally scoped to single runs.  The ensemble layer is separate
 
 The key design property that enables all of these: `SIPNETRunner.run()` is a pure function from a serialisable config to a serialisable result.
 
-## Binary preset system
+## Model options
 
-SIPNET v1 uses compile-time `#define` switches.  pySIPNET patches the source with `#ifndef` guards (see `patches/apply_flags_patch.py`) and compiles named binaries:
+From SIPNET v2.0.0 onward, model options are chosen at run time rather than compiled in. pySIPNET therefore builds one binary and expresses the configuration as data: a `ModelFlags` instance, written into the `sipnet.in` file generated for each run.
 
-| Preset | Binary | `LITTER_POOL` | `SNOW` | `GDD` | `WATER_HRESP` |
-|:-------|:-------|:-------------|:-------|:------|:--------------|
-| `standard` | `sipnet_standard` | 0 | 1 | 1 | 1 |
-| `forest` | `sipnet_forest` | 1 | 1 | 1 | 1 |
+`ModelFlags` carries two responsibilities:
 
-`ModelPreset` in `pysipnet/runner.py` maps preset names to binaries and to the corresponding `ModelFlagsV1` instance.
+- **Configuring SIPNET.** `to_config_keys()` renders the flags as the uppercase `sipnet.in` keys SIPNET reads. Every flag is written, including defaults, so a saved run does not depend on the binary's built-in defaults.
+- **Deciding which parameters are required.** `SIPNETParameters.validate_for_flags()` uses the flags to check the parameter set before SIPNET is invoked, so a mismatch is a Python error naming the missing field rather than an exit code from the binary.
 
-To add a new preset: add a Makefile target, register it in `ModelPreset`, and implement `ModelPreset.flags` for it.
+`ModelFlags` also rejects the three combinations SIPNET itself refuses (`gdd` with `soil_phenol`; `anaerobic` without `water_hresp`; `nitrogen_cycle` without both `litter_pool` and `anaerobic`), mirroring `validateContext()` in SIPNET's `src/common/context.c`.
+
+Earlier versions of pySIPNET compiled one binary per option combination and shipped a `ModelPreset` enum to select between them. Both are gone: arbitrary combinations are now free, so a closed set of presets would only get in the way. `ModelFlags.standard()` and `ModelFlags.forest()` remain as named starting points, and an optional `name` field carries that label into the run record.
 
 ## Per-year rate parameters
 

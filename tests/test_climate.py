@@ -8,7 +8,8 @@ import pandas as pd
 import pytest
 
 from pysipnet.climate import CLIM_COLUMNS_V1, ClimateDrivers
-from pysipnet.runner import ClimateStaging, ModelPreset, SIPNETRunner
+from pysipnet.runner import ClimateStaging, SIPNETRunner
+from pysipnet.parameters.model import ModelFlags
 
 
 def _make_df(
@@ -372,7 +373,7 @@ class TestFromPath:
 
 class TestClimateStaging:
     def _runner(self, staging: ClimateStaging) -> SIPNETRunner:
-        return SIPNETRunner(preset=ModelPreset.STANDARD, climate_staging=staging)
+        return SIPNETRunner(flags=ModelFlags.standard(), climate_staging=staging)
 
     def test_in_memory_writes_file(self, tmp_path):
         runner = self._runner(ClimateStaging.COPY)
@@ -433,5 +434,5 @@ class TestClimateStaging:
         assert dest.resolve() == src.resolve()
 
     def test_default_staging_is_copy(self):
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        runner = SIPNETRunner(flags=ModelFlags.standard())
         assert runner.climate_staging == ClimateStaging.COPY

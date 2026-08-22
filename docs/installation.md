@@ -71,31 +71,29 @@ The `Makefile` at the repo root compiles SIPNET from the pinned submodule
 source.  Binaries are placed in `.sipnet_cache/`.
 
 ```bash
-make sipnet           # builds all presets (standard + forest)
-make sipnet-standard  # build only the standard preset
-make sipnet-forest    # build only the forest preset
+make sipnet           # builds the one SIPNET binary
 ```
 
-!!! note "What the build does"
-    Before compiling, the build applies a small source patch
-    (`patches/apply_flags_patch.py`) that wraps SIPNET's compile-time flag
-    `#define` statements with `#ifndef` guards.  This enables the preset
-    system to override flags via `-D` compiler arguments without modifying
-    the SIPNET source permanently.  The patch is idempotent and does not
-    change model behaviour.
+!!! note "One binary, no compiler flags"
+    The build passes no configuration to the compiler. Every model option is
+    chosen when a run starts, not when SIPNET is compiled, so a single binary
+    covers every configuration pySIPNET can ask for.
 
-### Available presets
+### Choosing model options
 
-| Preset       | Binary name          | Active flags                         |
-|:-------------|:---------------------|:-------------------------------------|
-| `standard`   | `sipnet_standard`    | SNOW=1, GDD=1, WATER_HRESP=1         |
-| `forest`     | `sipnet_forest`      | standard + LITTER_POOL=1             |
+Options are set per run, through
+[`ModelFlags`](api/index.md), and pySIPNET writes them into the
+`sipnet.in` file it generates for each run:
 
-### Custom presets
+```python
+from pysipnet import ModelFlags, SIPNETRunner
 
-To add a new flag combination, extend the `Makefile` with a new target and
-register it in `pysipnet/runner.py` (`ModelPreset` enum).  See the existing
-`sipnet-forest` target as a template.
+runner = SIPNETRunner(flags=ModelFlags.forest())          # named starting point
+runner = SIPNETRunner(flags=ModelFlags(litter_pool=True))  # or build your own
+```
+
+`ModelFlags.standard()` and `ModelFlags.forest()` are conveniences, not a
+closed list — any valid combination of flags works without rebuilding.
 
 ## 4. Verify the installation
 
@@ -120,5 +118,5 @@ To update the pin:
 
 !!! warning "Regenerate documentation after any version change"
     If file formats or parameters change with the new SIPNET pin, update
-    `pysipnet/parameters/v1.py`, `pysipnet/io/`, and `docs/sipnet-version.md`
+    `pysipnet/parameters/model.py`, `pysipnet/io/`, and `docs/sipnet-version.md`
     accordingly.

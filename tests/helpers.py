@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 def params_from_sipnet_file(path: Path):
-    """Reconstruct a ``SIPNETParametersV1`` from a SIPNET ``.param`` file.
+    """Reconstruct a ``SIPNETParameters`` from a SIPNET ``.param`` file.
 
     Inverse of :func:`pysipnet.io.param_io.write_param_file` across the
     :data:`~pysipnet.io.param_io.PYTHON_TO_SIPNET` mapping.  Names not in the
@@ -22,14 +22,14 @@ def params_from_sipnet_file(path: Path):
     library API once it lands.
     """
     from pysipnet.io.param_io import PYTHON_TO_SIPNET, read_param_file
-    from pysipnet.parameters.v1 import (
+    from pysipnet.parameters.model import (
         AllocationParams,
         InitialConditions,
         LeafPhysiologyParams,
         PhenologyParams,
         PhotosynthesisParams,
         RespirationParams,
-        SIPNETParametersV1,
+        SIPNETParameters,
         WaterParams,
     )
 
@@ -50,4 +50,4 @@ def params_from_sipnet_file(path: Path):
             group, field = python_path.split(".", 1)
             groups[group][field] = flat[sipnet_name]
     kwargs = {group: cls(**groups[group]) for group, cls in group_classes.items()}
-    return SIPNETParametersV1(**kwargs)
+    return SIPNETParameters(**kwargs)

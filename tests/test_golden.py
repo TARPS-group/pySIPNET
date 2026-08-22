@@ -29,7 +29,8 @@ import pytest
 
 from pysipnet.climate import ClimateDrivers
 from pysipnet.io.clim_io import read_clim_file
-from pysipnet.runner import ModelPreset, SIPNETRunner
+from pysipnet.runner import SIPNETRunner
+from pysipnet.parameters.model import ModelFlags
 from tests.helpers import params_from_sipnet_file
 
 REFERENCE_DIR = Path(__file__).parent / "fixtures" / "niwot_reference"
@@ -39,7 +40,7 @@ GOLDEN = Path(__file__).parent / "fixtures" / "golden" / "niwot_standard.out.csv
 
 _N_TIMESTEPS = 60  # ~3–4 weeks at Niwot's sub-daily cadence; keeps the golden compact
 
-_STANDARD_BINARY = SIPNETRunner(preset=ModelPreset.STANDARD).binary_path
+_STANDARD_BINARY = SIPNETRunner(flags=ModelFlags.standard()).binary_path
 
 pytestmark = [
     pytest.mark.integration,
@@ -61,7 +62,7 @@ def _run_baseline() -> pd.DataFrame:
         full = read_clim_file(REFERENCE_CLIM, version="v1")
     climate = ClimateDrivers.from_dataframe(full.data.head(_N_TIMESTEPS).copy(), version="v1")
     params = params_from_sipnet_file(REFERENCE_PARAM)
-    result = SIPNETRunner(preset=ModelPreset.STANDARD).run(params, climate, run_id="golden")
+    result = SIPNETRunner(flags=ModelFlags.standard()).run(params, climate, run_id="golden")
     assert result.provenance.success, result.provenance.stderr
     return result.outputs.data
 

@@ -57,10 +57,10 @@ Every Pydantic model that uses :func:`param_field` stores a
 :func:`get_parameter_specs` to retrieve a flat ``{dotted.path: ParameterSpec}``
 dict from a model class, suitable for building bijector maps::
 
-    from pysipnet.parameters.v1 import SIPNETParametersV1
+    from pysipnet.parameters.model import SIPNETParameters
     from pysipnet.parameters.base import get_parameter_specs, ParameterDomain
 
-    specs = get_parameter_specs(SIPNETParametersV1)
+    specs = get_parameter_specs(SIPNETParameters)
     positive_params = {k for k, s in specs.items() if s.domain == ParameterDomain.POSITIVE}
 """
 
@@ -214,7 +214,7 @@ def get_parameter_specs(model_cls: type[BaseModel], prefix: str = "") -> dict[st
 
     Example::
 
-        specs = get_parameter_specs(SIPNETParametersV1)
+        specs = get_parameter_specs(SIPNETParameters)
         # {"photosynthesis.a_max": ParameterSpec(...), ...}
     """
     result: dict[str, ParameterSpec] = {}

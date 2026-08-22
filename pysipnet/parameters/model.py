@@ -7,9 +7,9 @@ handles translation to SIPNET's camelCase names.
 
 Model structure
 ---------------
-``SIPNETParametersV1`` is a flat composition of domain-grouped sub-models::
+``SIPNETParameters`` is a flat composition of domain-grouped sub-models::
 
-    params = SIPNETParametersV1(
+    params = SIPNETParameters(
         initial_conditions=InitialConditions(plant_wood=30000, ...),
         photosynthesis=PhotosynthesisParams(a_max=112.0, ...),
         ...
@@ -19,7 +19,7 @@ Use :func:`pysipnet.parameters.base.get_parameter_specs` to retrieve the full
 ``{path: ParameterSpec}`` dict for calibration tooling::
 
     from pysipnet.parameters.base import get_parameter_specs
-    specs = get_parameter_specs(SIPNETParametersV1)
+    specs = get_parameter_specs(SIPNETParameters)
 
 Per-year rate parameters
 ------------------------
@@ -51,25 +51,25 @@ Flag-dependent parameters
 -------------------------
 Some parameters are only meaningful when the corresponding compile-time flag is
 active.  These fields are ``Optional[float]`` with a default of ``None``.
-:class:`SIPNETParametersV1` validates that required-by-flag parameters are
-provided given the active :class:`ModelFlagsV1`.
+:class:`SIPNETParameters` validates that required-by-flag parameters are
+provided given the active :class:`ModelFlags`.
 
 +---------------------------+----------------------------------+
 | Parameter                 | Required when flag is active     |
 +===========================+==================================+
-| ``phenology.gdd_leaf_on`` | ``ModelFlagsV1.gdd = True``      |
+| ``phenology.gdd_leaf_on`` | ``ModelFlags.gdd = True``      |
 +---------------------------+----------------------------------+
-| ``phenology.soil_temp_leaf_on`` | ``ModelFlagsV1.soil_phenol`` |
+| ``phenology.soil_temp_leaf_on`` | ``ModelFlags.soil_phenol`` |
 +---------------------------+----------------------------------+
-| ``initial_conditions.snow`` (optional, default 0) | ``ModelFlagsV1.snow`` |
+| ``initial_conditions.snow`` (optional, default 0) | ``ModelFlags.snow`` |
 +---------------------------+----------------------------------+
-| ``water.snow_melt``       | ``ModelFlagsV1.snow = True``     |
+| ``water.snow_melt``       | ``ModelFlags.snow = True``     |
 +---------------------------+----------------------------------+
-| ``water.leaf_pool_depth`` | ``ModelFlagsV1.leaf_water``      |
+| ``water.leaf_pool_depth`` | ``ModelFlags.leaf_water``      |
 +---------------------------+----------------------------------+
-| ``respiration.litter_breakdown_rate`` | ``ModelFlagsV1.litter_pool`` |
+| ``respiration.litter_breakdown_rate`` | ``ModelFlags.litter_pool`` |
 +---------------------------+----------------------------------+
-| ``respiration.frac_litter_respired``  | ``ModelFlagsV1.litter_pool`` |
+| ``respiration.frac_litter_respired``  | ``ModelFlags.litter_pool`` |
 +---------------------------+----------------------------------+
 """
 
@@ -85,60 +85,184 @@ from pysipnet.parameters.base import (
 _D = ParameterDomain  # local alias for brevity
 
 
-# ── Compile-time flag model ────────────────────────────────────────────────────
+# ── Model feature flags ───────────────────────────────────────────────────────
 
 
-class ModelFlagsV1(BaseModel):
-    """Compile-time feature flags for the SIPNET v1 binary.
+class ModelFlags(BaseModel):
+    """Which optional SIPNET processes are switched on for a run.
 
-    Each flag controls a ``#define`` in the SIPNET source.  The combination of
-    flags determines which binary preset to use (see :class:`pysipnet.runner.ModelPreset`)
-    and which parameters are required.
+    SIPNET calls these its "model feature flags". They turn whole processes on
+    or off — snow, a separate litter pool, the nitrogen cycle — and they do two
+    things in pySIPNET:
 
-    ``gdd`` and ``soil_phenol`` are mutually exclusive.
+    1. They are written into the ``sipnet.in`` config file, which is how SIPNET
+       learns about them. See :meth:`to_config_keys`.
+    2. They decide which parameters SIPNET will insist on finding in the
+       ``.param`` file. See :meth:`SIPNETParameters.validate_for_flags`.
 
-    Presets
-    -------
-    ``ModelFlagsV1.standard()``  — SNOW=1 GDD=1 WATER_HRESP=1 (all others off)
-    ``ModelFlagsV1.forest()``    — standard + LITTER_POOL=1
+    Because of (2), changing a flag can change which parameters you must
+    supply, so the flags belong in the saved record of a run rather than being
+    passed in ad hoc.
+
+    Named starting points
+    ---------------------
+    :meth:`standard` and :meth:`forest` return the two configurations pySIPNET
+    has always shipped. Any other combination is equally valid — build one
+    directly with keyword arguments.
+
+    Restrictions
+    ------------
+    SIPNET refuses to start on three flag combinations, and this model rejects
+    them first so the problem is reported in Python rather than as an exit
+    code from the binary:
+
+    - ``gdd`` and ``soil_phenol`` cannot both be on. They are two different
+      ways of deciding when leaves appear, so exactly one must be chosen.
+    - ``anaerobic`` requires ``water_hresp``.
+    - ``nitrogen_cycle`` requires both ``litter_pool`` and ``anaerobic``.
     """
 
+    # ── Processes on by default ──
     snow: bool = True
-    """Track snowpack rather than treating all precipitation as liquid."""
+    """Track a snowpack instead of treating all precipitation as liquid."""
 
     gdd: bool = True
-    """Use growing degree-days (accumulated from Jan 1) for leaf-out phenology."""
+    """Decide when leaves appear from accumulated growing degree-days.
+
+    Degree-days accumulate from January 1 and are compared against the
+    ``phenology.gdd_leaf_on`` parameter. Mutually exclusive with
+    ``soil_phenol``.
+    """
 
     water_hresp: bool = True
-    """Allow soil moisture to affect heterotrophic respiration."""
+    """Let soil moisture affect how fast soil carbon decomposes."""
 
+    # ── Processes off by default ──
     growth_resp: bool = False
-    """Model growth respiration explicitly, separate from maintenance respiration."""
+    """Track growth respiration separately from maintenance respiration."""
 
     leaf_water: bool = False
-    """Calculate a leaf water pool for sub-daily evaporation realism."""
+    """Give leaves their own water pool and evaporate from it.
+
+    Mainly matters for timesteps shorter than a day, where treating canopy
+    interception as instantaneous is too coarse.
+    """
 
     litter_pool: bool = False
-    """Enable a separate litter carbon pool in addition to the soil C pool."""
+    """Add a litter carbon pool that feeds the soil carbon pool.
+
+    Without this, plant litter goes straight into soil carbon.
+    """
 
     soil_phenol: bool = False
-    """Use soil temperature threshold for leaf-out (mutually exclusive with ``gdd``)."""
+    """Decide when leaves appear from a soil temperature threshold.
+
+    An alternative to ``gdd``; the two cannot both be on.
+    """
+
+    nitrogen_cycle: bool = False
+    """Track nitrogen pools and fluxes alongside carbon.
+
+    Requires ``litter_pool`` and ``anaerobic``.
+    """
+
+    anaerobic: bool = False
+    """Model methane production and waterlogged-soil effects on decomposition.
+
+    Requires ``water_hresp``.
+    """
+
+    flooding: bool = False
+    """Allow soil moisture to rise above the soil's water holding capacity."""
+
+    # ── Provenance ──
+    name: str | None = None
+    """Optional label for this configuration, for run records and plots.
+
+    Purely descriptive: it is never written to ``sipnet.in`` and never affects
+    the model. :meth:`standard` and :meth:`forest` set it for you.
+
+    Note that it does take part in equality, so a labelled configuration is
+    not equal to an identical unlabelled one. Compare
+    :meth:`to_config_keys` output when you want to compare only the flags.
+    """
 
     @model_validator(mode="after")
-    def _check_phenology_exclusivity(self) -> ModelFlagsV1:
+    def _check_flag_restrictions(self) -> ModelFlags:
+        """Reject the flag combinations SIPNET itself refuses to run.
+
+        Mirrors ``validateContext()`` in SIPNET's ``src/common/context.c``.
+        All problems are collected so a caller fixing several at once sees
+        them together.
+        """
+        problems: list[str] = []
+
         if self.gdd and self.soil_phenol:
-            raise ValueError("gdd and soil_phenol are mutually exclusive: set exactly one to True.")
+            problems.append(
+                "gdd and soil_phenol are two different ways of triggering leaf-out "
+                "and cannot both be on; set exactly one to True"
+            )
+        if self.anaerobic and not self.water_hresp:
+            problems.append("anaerobic requires water_hresp to be True")
+        if self.nitrogen_cycle and not (self.litter_pool and self.anaerobic):
+            problems.append(
+                "nitrogen_cycle requires both litter_pool and anaerobic to be True"
+            )
+
+        if problems:
+            raise ValueError(
+                "Invalid combination of model flags:\n"
+                + "\n".join(f"  - {p}" for p in problems)
+            )
         return self
 
-    @classmethod
-    def standard(cls) -> ModelFlagsV1:
-        """Default v1 configuration: SNOW, GDD, WATER_HRESP on; everything else off."""
-        return cls()
+    def to_config_keys(self) -> dict[str, int]:
+        """Return these flags as the ``sipnet.in`` keys SIPNET expects.
+
+        Keys are SIPNET's own uppercase names and values are 1 or 0. Every
+        flag is written, including the ones left at their default, so the
+        config file is a complete and unambiguous record of the run rather
+        than something whose meaning depends on the binary's built-in
+        defaults.
+
+        The ``name`` label is descriptive only and is not included.
+
+        Example::
+
+            >>> ModelFlags.forest().to_config_keys()["LITTER_POOL"]
+            1
+        """
+        return {
+            "SNOW": int(self.snow),
+            "GDD": int(self.gdd),
+            "WATER_HRESP": int(self.water_hresp),
+            "GROWTH_RESP": int(self.growth_resp),
+            "LEAF_WATER": int(self.leaf_water),
+            "LITTER_POOL": int(self.litter_pool),
+            "SOIL_PHENOL": int(self.soil_phenol),
+            "NITROGEN_CYCLE": int(self.nitrogen_cycle),
+            "ANAEROBIC": int(self.anaerobic),
+            "FLOODING": int(self.flooding),
+        }
 
     @classmethod
-    def forest(cls) -> ModelFlagsV1:
-        """Standard configuration with an additional explicit litter C pool."""
-        return cls(litter_pool=True)
+    def standard(cls) -> ModelFlags:
+        """Snow, degree-day leaf-out, and moisture-sensitive soil respiration.
+
+        The sensible default for most sites, and what you get from
+        ``ModelFlags()``.
+        """
+        return cls(name="standard")
+
+    @classmethod
+    def forest(cls) -> ModelFlags:
+        """:meth:`standard` plus a separate litter carbon pool.
+
+        Suited to sites where litter accumulates and decomposes on a
+        noticeably different timescale from soil carbon, such as boreal or
+        deciduous forest.
+        """
+        return cls(litter_pool=True, name="forest")
 
 
 # ── Sub-models ─────────────────────────────────────────────────────────────────
@@ -170,7 +294,7 @@ class InitialConditions(BaseModel):
         domain=_D.NON_NEGATIVE,
         default=0.0,
         description="Initial litter C pool (SIPNET param: litterInit). "
-        "Only affects dynamics when ModelFlagsV1.litter_pool is True.",
+        "Only affects dynamics when ModelFlags.litter_pool is True.",
     )
     soil: float = param_field(
         unit="g / m**2",
@@ -198,7 +322,7 @@ class InitialConditions(BaseModel):
         domain=_D.NON_NEGATIVE,
         default=0.0,
         description="Initial snowpack in cm water equivalent (SIPNET param: snowInit). "
-        "Only used when ModelFlagsV1.snow is True.",
+        "Only used when ModelFlags.snow is True.",
     )
     fine_root_frac: float = param_field(
         unit="1",
@@ -295,7 +419,7 @@ class PhenologyParams(BaseModel):
         unit="day",
         domain=_D.POSITIVE,
         description="Day of year on which leaves appear (SIPNET param: leafOnDay). "
-        "Active when both ModelFlagsV1.gdd and ModelFlagsV1.soil_phenol are False.",
+        "Active when both ModelFlags.gdd and ModelFlags.soil_phenol are False.",
         default=None,
     )
     leaf_off_day: float = param_field(
@@ -309,14 +433,14 @@ class PhenologyParams(BaseModel):
         description="Growing degree-day (GDD) threshold for leaf appearance "
         "(SIPNET param: gddLeafOn). Unit is K·day = °C·day (temperature differences; "
         "Kelvin used instead of degC to avoid Pint offset-unit ambiguity). "
-        "Active when ModelFlagsV1.gdd is True.",
+        "Active when ModelFlags.gdd is True.",
         default=None,
     )
     soil_temp_leaf_on: float | None = param_field(
         unit="degC",
         domain=_D.REAL,
         description="Soil temperature threshold for leaf appearance "
-        "(SIPNET param: soilTempLeafOn). Active when ModelFlagsV1.soil_phenol is True.",
+        "(SIPNET param: soilTempLeafOn). Active when ModelFlags.soil_phenol is True.",
         default=None,
     )
     leaf_growth: float = param_field(
@@ -361,8 +485,8 @@ class RespirationParams(BaseModel):
     Litter parameters
     ~~~~~~~~~~~~~~~~~
     ``litter_breakdown_rate`` and ``frac_litter_respired`` are only meaningful
-    when ``ModelFlagsV1.litter_pool`` is ``True``.  They may be ``None``
-    otherwise; the validator on :class:`SIPNETParametersV1` enforces this.
+    when ``ModelFlags.litter_pool`` is ``True``.  They may be ``None``
+    otherwise; the validator on :class:`SIPNETParameters` enforces this.
     """
 
     base_veg_resp: float = param_field(
@@ -384,7 +508,7 @@ class RespirationParams(BaseModel):
         domain=_D.UNIT_INTERVAL,
         description="Growth respiration as a fraction of running-mean NPP "
         "(SIPNET param: growthRespFrac). "
-        "Only used when ModelFlagsV1.growth_resp is True.",
+        "Only used when ModelFlags.growth_resp is True.",
         default=0.0,
     )
     frozen_soil_fol_r_eff: float = param_field(
@@ -444,7 +568,7 @@ class RespirationParams(BaseModel):
         domain=_D.NON_NEGATIVE,
         description="Exponent controlling the effect of soil moisture on heterotrophic "
         "respiration (SIPNET param: soilRespMoistEffect). "
-        "Only used when ModelFlagsV1.water_hresp is True.",
+        "Only used when ModelFlags.water_hresp is True.",
     )
     litter_breakdown_rate: float | None = param_field(
         unit="1 / year",
@@ -453,7 +577,7 @@ class RespirationParams(BaseModel):
         per_year=True,
         description="Litter-to-soil carbon transfer rate at 0 °C "
         "(SIPNET param: litterBreakdownRate). "
-        "Required when ModelFlagsV1.litter_pool is True.",
+        "Required when ModelFlags.litter_pool is True.",
         default=None,
     )
     frac_litter_respired: float | None = param_field(
@@ -461,7 +585,7 @@ class RespirationParams(BaseModel):
         domain=_D.UNIT_INTERVAL,
         description="Fraction of broken-down litter that is respired rather than "
         "transferred to the soil C pool (SIPNET param: fracLitterRespired). "
-        "Required when ModelFlagsV1.litter_pool is True.",
+        "Required when ModelFlags.litter_pool is True.",
         default=None,
     )
 
@@ -528,7 +652,7 @@ class AllocationParams(BaseModel):
     @model_validator(mode="after")
     def _check_allocation_sum(self) -> AllocationParams:
         # leaf_allocation lives in PhenologyParams; the cross-model constraint
-        # (leaf + fine_root + wood < 1) is checked on SIPNETParametersV1.
+        # (leaf + fine_root + wood < 1) is checked on SIPNETParameters.
         total = self.fine_root_allocation + self.wood_allocation
         if total >= 1.0:
             raise ValueError(
@@ -543,9 +667,9 @@ class WaterParams(BaseModel):
 
     Flag-dependent fields
     ~~~~~~~~~~~~~~~~~~~~~
-    ``snow_melt`` is only used when ``ModelFlagsV1.snow`` is ``True``.
-    ``leaf_pool_depth`` is only used when ``ModelFlagsV1.leaf_water`` is ``True``.
-    Both are ``Optional[float]`` and validated by :class:`SIPNETParametersV1`.
+    ``snow_melt`` is only used when ``ModelFlags.snow`` is ``True``.
+    ``leaf_pool_depth`` is only used when ``ModelFlags.leaf_water`` is ``True``.
+    Both are ``Optional[float]`` and validated by :class:`SIPNETParameters`.
     """
 
     water_remove_frac: float = param_field(
@@ -589,7 +713,7 @@ class WaterParams(BaseModel):
         description="Snowmelt rate per Kelvin above freezing per day "
         "(SIPNET param: snowMelt). Unit is cm K⁻¹ day⁻¹ = cm °C⁻¹ day⁻¹ "
         "(Kelvin used instead of degC to avoid Pint offset-unit ambiguity). "
-        "Required when ModelFlagsV1.snow is True.",
+        "Required when ModelFlags.snow is True.",
         default=None,
     )
     rd_const: float = param_field(
@@ -620,7 +744,7 @@ class WaterParams(BaseModel):
         domain=_D.NON_NEGATIVE,
         description="Leaf water pool capacity (cm per unit LAI per day cap on "
         "interception evaporation) (SIPNET param: leafPoolDepth). "
-        "Required when ModelFlagsV1.leaf_water is True.",
+        "Required when ModelFlags.leaf_water is True.",
         default=None,
     )
 
@@ -647,23 +771,23 @@ class LeafPhysiologyParams(BaseModel):
 # ── Top-level model ────────────────────────────────────────────────────────────
 
 
-class SIPNETParametersV1(BaseModel):
+class SIPNETParameters(BaseModel):
     """Complete parameter set for a SIPNET v1 run.
 
     Composed of domain-grouped sub-models.  All fields are required unless
-    otherwise noted.  The companion :class:`ModelFlagsV1` controls which
+    otherwise noted.  The companion :class:`ModelFlags` controls which
     compile-time features are active and therefore which parameters are
     actually used by SIPNET.
 
     Serialisation / deserialisation::
 
         params_dict = params.model_dump()
-        params      = SIPNETParametersV1.model_validate(params_dict)
+        params      = SIPNETParameters.model_validate(params_dict)
 
     Calibration tooling::
 
         from pysipnet.parameters.base import get_parameter_specs
-        specs = get_parameter_specs(SIPNETParametersV1)
+        specs = get_parameter_specs(SIPNETParameters)
         domains = {k: v.domain for k, v in specs.items()}
     """
 
@@ -676,7 +800,7 @@ class SIPNETParametersV1(BaseModel):
     leaf: LeafPhysiologyParams
 
     @model_validator(mode="after")
-    def _check_allocation_triangle(self) -> SIPNETParametersV1:
+    def _check_allocation_triangle(self) -> SIPNETParameters:
         total = (
             self.phenology.leaf_allocation
             + self.allocation.fine_root_allocation
@@ -689,7 +813,7 @@ class SIPNETParametersV1(BaseModel):
             )
         return self
 
-    def validate_for_flags(self, flags: ModelFlagsV1) -> None:
+    def validate_for_flags(self, flags: ModelFlags) -> None:
         """Raise :class:`ValueError` if any flag-required parameter is ``None``.
 
         Call this before writing the param file to surface configuration
@@ -697,23 +821,23 @@ class SIPNETParametersV1(BaseModel):
         """
         errors: list[str] = []
         if flags.snow and self.water.snow_melt is None:
-            errors.append("water.snow_melt is required when ModelFlagsV1.snow is True")
+            errors.append("water.snow_melt is required when ModelFlags.snow is True")
         if flags.leaf_water and self.water.leaf_pool_depth is None:
-            errors.append("water.leaf_pool_depth is required when ModelFlagsV1.leaf_water is True")
+            errors.append("water.leaf_pool_depth is required when ModelFlags.leaf_water is True")
         if flags.litter_pool and self.respiration.litter_breakdown_rate is None:
             errors.append(
                 "respiration.litter_breakdown_rate is required"
-                " when ModelFlagsV1.litter_pool is True"
+                " when ModelFlags.litter_pool is True"
             )
         if flags.litter_pool and self.respiration.frac_litter_respired is None:
             errors.append(
-                "respiration.frac_litter_respired is required when ModelFlagsV1.litter_pool is True"
+                "respiration.frac_litter_respired is required when ModelFlags.litter_pool is True"
             )
         if flags.gdd and self.phenology.gdd_leaf_on is None:
-            errors.append("phenology.gdd_leaf_on is required when ModelFlagsV1.gdd is True")
+            errors.append("phenology.gdd_leaf_on is required when ModelFlags.gdd is True")
         if flags.soil_phenol and self.phenology.soil_temp_leaf_on is None:
             errors.append(
-                "phenology.soil_temp_leaf_on is required when ModelFlagsV1.soil_phenol is True"
+                "phenology.soil_temp_leaf_on is required when ModelFlags.soil_phenol is True"
             )
         if not flags.gdd and not flags.soil_phenol and self.phenology.leaf_on_day is None:
             errors.append(
@@ -730,11 +854,11 @@ def _build_param_groups() -> dict[str, list[str]]:
     """Return a mapping from group name to the list of parameter field names.
 
     Asserts that all parameter names are unique across groups — a structural
-    invariant of :class:`SIPNETParametersV1`.
+    invariant of :class:`SIPNETParameters`.
     """
     groups: dict[str, list[str]] = {}
     seen: dict[str, str] = {}
-    for group_name, field_info in SIPNETParametersV1.model_fields.items():
+    for group_name, field_info in SIPNETParameters.model_fields.items():
         annotation = field_info.annotation
         if (
             annotation is None
@@ -756,7 +880,7 @@ def _build_param_groups() -> dict[str, list[str]]:
 SIPNET_PARAMS_BY_GROUP: dict[str, list[str]] = _build_param_groups()
 """Mapping from parameter group name to the list of field names in that group.
 
-Built once at module import time by inspecting :class:`SIPNETParametersV1`.
+Built once at module import time by inspecting :class:`SIPNETParameters`.
 All parameter names are guaranteed unique across groups.
 
 Groups and their parameters:

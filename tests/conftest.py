@@ -9,6 +9,15 @@ SAMPLE_CLIM_V1 = DATA_DIR / "era5_site1.clim"
 
 
 @pytest.fixture
+def reference_fixture_dir() -> Path:
+    """Directory holding a known-good sipnet.param and sipnet.clim pair.
+
+    Used by tests that need to run the real binary on realistic inputs.
+    """
+    return Path(__file__).parent / "fixtures" / "niwot_reference"
+
+
+@pytest.fixture
 def sample_clim_path() -> Path:
     """Path to the sample v1 climate file."""
     return SAMPLE_CLIM_V1
@@ -16,7 +25,7 @@ def sample_clim_path() -> Path:
 
 @pytest.fixture
 def minimal_params():
-    """A minimal but valid SIPNETParametersV1 for testing."""
+    """A minimal but valid SIPNETParameters for testing."""
     from pysipnet.parameters import (
         AllocationParams,
         InitialConditions,
@@ -24,11 +33,11 @@ def minimal_params():
         PhenologyParams,
         PhotosynthesisParams,
         RespirationParams,
-        SIPNETParametersV1,
+        SIPNETParameters,
         WaterParams,
     )
 
-    return SIPNETParametersV1(
+    return SIPNETParameters(
         initial_conditions=InitialConditions(
             plant_wood=30000.0,
             lai=0.0,

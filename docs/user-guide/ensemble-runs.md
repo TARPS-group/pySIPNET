@@ -52,9 +52,9 @@ construct one.  You give it a runner and a *baseline* parameter set; each
 call applies a dict of overrides on top of that baseline:
 
 ```python
-from pysipnet import SIPNETRunner, ModelPreset, SIPNETModel
+from pysipnet import SIPNETRunner, ModelFlags, SIPNETModel
 
-runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+runner = SIPNETRunner(flags=ModelFlags.standard())
 model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 ```
 

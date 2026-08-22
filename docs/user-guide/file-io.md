@@ -42,10 +42,10 @@ random UUID hex string.
 You can control both:
 
 ```python
-from pysipnet import SIPNETRunner, ModelPreset
+from pysipnet import SIPNETRunner, ModelFlags
 
 runner = SIPNETRunner(
-    preset=ModelPreset.STANDARD,
+    flags=ModelFlags.standard(),
     workdir_base="/scratch/my_runs",
 )
 
@@ -107,10 +107,10 @@ When staging a file-backed climate instance, the runner can either **copy**
 the file or create a **symlink**:
 
 ```python
-from pysipnet import SIPNETRunner, ModelPreset, ClimateStaging
+from pysipnet import SIPNETRunner, ModelFlags, ClimateStaging
 
 runner = SIPNETRunner(
-    preset=ModelPreset.STANDARD,
+    flags=ModelFlags.standard(),
     climate_staging=ClimateStaging.SYMLINK,   # zero I/O for large files
 )
 ```
@@ -147,7 +147,7 @@ The working directory is then deleted.  If you also want the raw file retained
 on disk, set `keep_workdir=True` (see [Keeping the working directory](#keeping-the-working-directory)).
 
 ```python
-runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+runner = SIPNETRunner(flags=ModelFlags.standard())
 result = runner.run(params, climate)
 
 # Data is already in memory:
@@ -162,7 +162,7 @@ directory is deleted, `sipnet.out` is copied to
 
 ```python
 runner = SIPNETRunner(
-    preset=ModelPreset.STANDARD,
+    flags=ModelFlags.standard(),
     output_dir=Path("run_outputs"),
 )
 result = runner.run(params, climate, run_id="baseline")
@@ -182,7 +182,7 @@ overridden per call:
 
 ```python
 runner = SIPNETRunner(
-    preset=ModelPreset.STANDARD,
+    flags=ModelFlags.standard(),
     output_dir=Path("default_outputs"),   # runner-level default
 )
 
@@ -231,7 +231,7 @@ cleanup entirely:
 
 ```python
 runner = SIPNETRunner(
-    preset=ModelPreset.STANDARD,
+    flags=ModelFlags.standard(),
     keep_workdir=True,
 )
 

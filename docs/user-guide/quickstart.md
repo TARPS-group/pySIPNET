@@ -26,13 +26,13 @@ every value at construction time — invalid values raise `ValidationError`
 immediately.
 
 ```python
-from pysipnet import SIPNETParametersV1
+from pysipnet import SIPNETParameters
 from pysipnet.parameters import (
     InitialConditions, PhotosynthesisParams, PhenologyParams,
     RespirationParams, AllocationParams, WaterParams, LeafPhysiologyParams,
 )
 
-params = SIPNETParametersV1(
+params = SIPNETParameters(
     initial_conditions=InitialConditions(
         plant_wood=30000.0, lai=0.0, soil=10000.0,
         soil_water_frac=0.5, fine_root_frac=0.05, coarse_root_frac=0.15,
@@ -73,9 +73,9 @@ params = SIPNETParametersV1(
 ## 3. Run SIPNET
 
 ```python
-from pysipnet import SIPNETRunner, ModelPreset
+from pysipnet import SIPNETRunner, ModelFlags
 
-runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+runner = SIPNETRunner(flags=ModelFlags.standard())
 result = runner.run(params, climate)
 
 print(result.provenance.success)   # True

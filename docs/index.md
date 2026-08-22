@@ -25,15 +25,15 @@ pySIPNET does not include an ensemble runner.  The single-run interface is desig
 ## Quick example
 
 ```python
-from pysipnet import SIPNETRunner, ModelPreset
-from pysipnet.parameters.v1 import SIPNETParametersV1, ModelFlagsV1
+from pysipnet import SIPNETRunner, ModelFlags
+from pysipnet.parameters.model import SIPNETParameters, ModelFlags
 from pysipnet.parameters import (
     InitialConditions, PhotosynthesisParams, PhenologyParams,
     RespirationParams, AllocationParams, WaterParams, LeafPhysiologyParams,
 )
 from pysipnet.climate import ClimateDrivers
 
-params = SIPNETParametersV1(
+params = SIPNETParameters(
     initial_conditions=InitialConditions(
         plant_wood=30000, lai=0.0, soil=10000,
         soil_water_frac=0.5, fine_root_frac=0.05, coarse_root_frac=0.15,
@@ -48,7 +48,7 @@ params = SIPNETParametersV1(
 )
 
 climate = ClimateDrivers.from_file("data/era5_site1.clim", version="v1")
-runner  = SIPNETRunner(preset=ModelPreset.STANDARD)
+runner  = SIPNETRunner(flags=ModelFlags.standard())
 result  = runner.run(params, climate)
 
 print(result.nee().describe())

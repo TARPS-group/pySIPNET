@@ -14,9 +14,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pysipnet.runner import ModelPreset, SIPNETRunner
+from pysipnet.runner import SIPNETRunner
+from pysipnet.parameters.model import ModelFlags
 
-_STANDARD_BINARY = SIPNETRunner(preset=ModelPreset.STANDARD).binary_path
+_STANDARD_BINARY = SIPNETRunner(flags=ModelFlags.standard()).binary_path
 
 pytestmark = pytest.mark.skipif(
     not _STANDARD_BINARY.exists(),
@@ -62,7 +63,7 @@ def _make_climate(n_days: int = 30, year: int = 2010, start_doy: int = 150):
 
 class TestEndToEnd:
     def test_run_completes(self, minimal_params):
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD, keep_workdir=False)
+        runner = SIPNETRunner(flags=ModelFlags.standard(), keep_workdir=False)
         climate = _make_climate()
         result = runner.run(minimal_params, climate)
 
@@ -72,7 +73,7 @@ class TestEndToEnd:
         )
 
     def test_output_shape(self, minimal_params):
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        runner = SIPNETRunner(flags=ModelFlags.standard())
         climate = _make_climate(n_days=30)
         result = runner.run(minimal_params, climate)
 
@@ -81,7 +82,7 @@ class TestEndToEnd:
         assert result.outputs.data.shape[1] > 10
 
     def test_key_columns_present(self, minimal_params):
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        runner = SIPNETRunner(flags=ModelFlags.standard())
         climate = _make_climate()
         result = runner.run(minimal_params, climate)
 
@@ -90,7 +91,7 @@ class TestEndToEnd:
             assert col in result.outputs.data.columns, f"Missing column: {col}"
 
     def test_no_nans_in_output(self, minimal_params):
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        runner = SIPNETRunner(flags=ModelFlags.standard())
         climate = _make_climate()
         result = runner.run(minimal_params, climate)
 
@@ -98,7 +99,7 @@ class TestEndToEnd:
         assert not result.outputs.data.isnull().any().any(), "NaN values found in output"
 
     def test_convenience_accessors(self, minimal_params):
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        runner = SIPNETRunner(flags=ModelFlags.standard())
         climate = _make_climate()
         result = runner.run(minimal_params, climate)
 
@@ -108,7 +109,7 @@ class TestEndToEnd:
         assert len(result.et()) == 30
 
     def test_gpp_non_negative(self, minimal_params):
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        runner = SIPNETRunner(flags=ModelFlags.standard())
         climate = _make_climate()
         result = runner.run(minimal_params, climate)
 
@@ -121,7 +122,7 @@ class TestEndToEnd:
         SIPNET writes output with limited decimal precision (~2 dp), so we
         allow an absolute tolerance of 0.01 g C m⁻² rather than a relative one.
         """
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        runner = SIPNETRunner(flags=ModelFlags.standard())
         climate = _make_climate()
         result = runner.run(minimal_params, climate)
 
@@ -162,7 +163,7 @@ class TestOutputIO:
         """Default run (no output_dir) returns a memory-backed SIPNETOutput."""
         from pysipnet.output import SIPNETOutput
 
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        runner = SIPNETRunner(flags=ModelFlags.standard())
         result = runner.run(minimal_params, _make_climate())
 
         assert isinstance(result.outputs, SIPNETOutput)
@@ -173,7 +174,7 @@ class TestOutputIO:
         """Runner-level output_dir copies sipnet.out before workdir cleanup."""
         output_dir = tmp_path / "outputs"
         runner = SIPNETRunner(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             output_dir=output_dir,
         )
         result = runner.run(minimal_params, _make_climate(), run_id="test_run")
@@ -185,7 +186,7 @@ class TestOutputIO:
     def test_lazy_output_not_loaded_until_accessed(self, minimal_params, tmp_path):
         """File-backed SIPNETOutput holds no DataFrame until .data is accessed."""
         runner = SIPNETRunner(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             output_dir=tmp_path / "outputs",
         )
         result = runner.run(minimal_params, _make_climate())
@@ -200,7 +201,7 @@ class TestOutputIO:
         runner_dir = tmp_path / "runner_default"
         call_dir = tmp_path / "call_override"
 
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD, output_dir=runner_dir)
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=runner_dir)
         runner.run(minimal_params, _make_climate(), run_id="override_run", output_dir=call_dir)
 
         assert (call_dir / "sipnet_override_run.out").exists()
@@ -209,7 +210,7 @@ class TestOutputIO:
     def test_per_call_none_suppresses_runner_output_dir(self, minimal_params, tmp_path):
         """Passing output_dir=None at call time suppresses the runner-level default."""
         runner_dir = tmp_path / "runner_default"
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD, output_dir=runner_dir)
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=runner_dir)
         result = runner.run(minimal_params, _make_climate(), output_dir=None)
 
         assert result.outputs.source_path is None, "Should be in-memory when output_dir=None"
@@ -219,7 +220,7 @@ class TestOutputIO:
         """output_dir inside the workdir raises ValueError before the binary runs."""
         workdir_base = tmp_path / "workdirs"
         runner = SIPNETRunner(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             workdir_base=workdir_base,
         )
         # The workdir will be workdir_base/sipnet_myrun — so a subdir of that is invalid.
@@ -231,7 +232,7 @@ class TestOutputIO:
     def test_column_selection_returns_subset(self, minimal_params, tmp_path):
         """load(columns=...) returns only the requested columns plus time coords."""
         runner = SIPNETRunner(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             output_dir=tmp_path / "outputs",
         )
         result = runner.run(minimal_params, _make_climate())
@@ -242,7 +243,7 @@ class TestOutputIO:
 
     def test_column_selection_memory_backed(self, minimal_params):
         """load(columns=...) works on memory-backed instances too."""
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        runner = SIPNETRunner(flags=ModelFlags.standard())
         result = runner.run(minimal_params, _make_climate())
 
         subset = result.outputs.load(columns=["nee"])
@@ -252,8 +253,8 @@ class TestOutputIO:
 
     def test_n_timesteps(self, minimal_params, tmp_path):
         """n_timesteps is correct for both memory-backed and file-backed outputs."""
-        runner_mem = SIPNETRunner(preset=ModelPreset.STANDARD)
-        runner_file = SIPNETRunner(preset=ModelPreset.STANDARD, output_dir=tmp_path / "outputs")
+        runner_mem = SIPNETRunner(flags=ModelFlags.standard())
+        runner_file = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
         result_mem = runner_mem.run(minimal_params, _make_climate(n_days=20))
         result_file = runner_file.run(minimal_params, _make_climate(n_days=20))
 

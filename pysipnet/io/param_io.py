@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pysipnet.parameters.v1 import ModelFlagsV1, SIPNETParametersV1
+from pysipnet.parameters.model import ModelFlags, SIPNETParameters
 
 # Maps dot-separated Python path → SIPNET param file name.
 PYTHON_TO_SIPNET: dict[str, str] = {
@@ -123,7 +123,7 @@ _OBSOLETE_DEFAULTS: dict[str, float] = {
 }
 
 
-def _flatten(params: SIPNETParametersV1) -> dict[str, float]:
+def _flatten(params: SIPNETParameters) -> dict[str, float]:
     """Return a flat ``{sipnet_name: value}`` dict, omitting ``None`` values."""
     result: dict[str, float] = {}
     dump = params.model_dump()
@@ -136,8 +136,8 @@ def _flatten(params: SIPNETParametersV1) -> dict[str, float]:
 
 
 def write_param_file(
-    parameters: SIPNETParametersV1,
-    flags: ModelFlagsV1,
+    parameters: SIPNETParameters,
+    flags: ModelFlags,
     path: Path,
 ) -> None:
     """Write a SIPNET v1 ``.param`` file.

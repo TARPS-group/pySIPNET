@@ -12,8 +12,7 @@ if TYPE_CHECKING:
     from pysipnet.climate import ClimateDrivers
     from pysipnet.events import EventSequence
     from pysipnet.output import SIPNETOutput
-    from pysipnet.parameters.v1 import ModelFlagsV1, SIPNETParametersV1
-    from pysipnet.runner import ModelPreset
+    from pysipnet.parameters.model import ModelFlags, SIPNETParameters
 
 
 @dataclass
@@ -22,8 +21,8 @@ class RunProvenance:
 
     Attributes
     ----------
-    preset:
-        The :class:`~pysipnet.runner.ModelPreset` used for this run.
+    flags:
+        The :class:`~pysipnet.parameters.model.ModelFlags` this run used.
     binary_path:
         Absolute path to the SIPNET binary that was executed.
     run_id:
@@ -41,7 +40,7 @@ class RunProvenance:
         Captured standard error from the SIPNET process.
     """
 
-    preset: ModelPreset
+    flags: ModelFlags
     binary_path: Path
     run_id: str
     workdir: Path
@@ -63,12 +62,12 @@ class SIPNETResult:
         ``result.outputs.load(columns=[...])`` to read only a subset of
         columns from a file-backed instance.
     parameters:
-        The :class:`~pysipnet.parameters.v1.SIPNETParametersV1` used for
+        The :class:`~pysipnet.parameters.model.SIPNETParameters` used for
         this run.
     climate:
         The :class:`~pysipnet.climate.ClimateDrivers` used for this run.
     flags:
-        The :class:`~pysipnet.parameters.v1.ModelFlagsV1` compiled into the
+        The :class:`~pysipnet.parameters.model.ModelFlags` compiled into the
         binary used for this run.
     provenance:
         Execution metadata: binary, run ID, working directory, return code,
@@ -79,9 +78,9 @@ class SIPNETResult:
     """
 
     outputs: SIPNETOutput
-    parameters: SIPNETParametersV1
+    parameters: SIPNETParameters
     climate: ClimateDrivers
-    flags: ModelFlagsV1
+    flags: ModelFlags
     provenance: RunProvenance
     events: EventSequence | None = field(default=None)
 

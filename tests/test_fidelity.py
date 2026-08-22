@@ -44,14 +44,15 @@ import pytest
 
 from pysipnet.io.clim_io import read_clim_file
 from pysipnet.io.output_reader import read_output_file
-from pysipnet.runner import ModelPreset, SIPNETRunner
+from pysipnet.runner import SIPNETRunner
+from pysipnet.parameters.model import ModelFlags
 from tests.helpers import params_from_sipnet_file
 
 REFERENCE_DIR = Path(__file__).parent / "fixtures" / "niwot_reference"
 REFERENCE_PARAM = REFERENCE_DIR / "sipnet.param"
 REFERENCE_CLIM = REFERENCE_DIR / "sipnet.clim"
 
-_STANDARD_BINARY = SIPNETRunner(preset=ModelPreset.STANDARD).binary_path
+_STANDARD_BINARY = SIPNETRunner(flags=ModelFlags.standard()).binary_path
 
 pytestmark = [
     pytest.mark.integration,
@@ -120,7 +121,7 @@ class TestWrapperFidelity:
         params = params_from_sipnet_file(REFERENCE_PARAM)
         climate = _load_reference_climate()
 
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD, keep_workdir=True)
+        runner = SIPNETRunner(flags=ModelFlags.standard(), keep_workdir=True)
         result = runner.run(params, climate, run_id="fidelity_transparent")
         assert result.provenance.success, result.provenance.stderr
         workdir = result.provenance.workdir
@@ -157,7 +158,7 @@ class TestWrapperFidelity:
 
         params = params_from_sipnet_file(REFERENCE_PARAM)
         climate = _load_reference_climate()
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        runner = SIPNETRunner(flags=ModelFlags.standard())
         result = runner.run(params, climate, run_id="fidelity_reference")
         assert result.provenance.success, result.provenance.stderr
         wrapper = result.outputs.data

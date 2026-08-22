@@ -22,7 +22,7 @@ a function — optionally supplying parameter or climate overrides for each run
 — which makes it the preferred entry point for most workflows:
 
 ```python
-runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+runner = SIPNETRunner(flags=ModelFlags.standard())
 model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
 result        = model()                # baseline run
@@ -59,12 +59,12 @@ lightweight file reference without loading the data — see [File I/O](file-io.m
 ### Parameters
 
 Parameters are grouped into seven domain-specific sub-models that compose
-into a single `SIPNETParametersV1`.  Pydantic validates every field at
+into a single `SIPNETParameters`.  Pydantic validates every field at
 construction time — out-of-range values and missing required fields raise
 `ValidationError` immediately.
 
 ```python
-from pysipnet import SIPNETParametersV1
+from pysipnet import SIPNETParameters
 from pysipnet.parameters import (
     InitialConditions,
     PhotosynthesisParams,
@@ -75,7 +75,7 @@ from pysipnet.parameters import (
     LeafPhysiologyParams,
 )
 
-params = SIPNETParametersV1(
+params = SIPNETParameters(
     initial_conditions=InitialConditions(
         plant_wood=30000.0,    # g C m⁻² — initial aboveground + root C
         lai=0.0,               # m² m⁻² — leaf area index at t=0
@@ -97,7 +97,7 @@ params = SIPNETParametersV1(
     ),
     phenology=PhenologyParams(
         leaf_off_day=270.0,
-        gdd_leaf_on=100.0,     # °C·day — required for GDD=1 preset
+        gdd_leaf_on=100.0,     # °C·day — required when the gdd flag is on
         leaf_growth=50.0,      # g C m⁻²
         frac_leaf_fall=0.95,
         leaf_allocation=0.25,
@@ -132,7 +132,7 @@ params = SIPNETParametersV1(
         litter_whc=5.0,    # cm — litter water holding capacity
         immed_evap_frac=0.1,
         fast_flow_frac=0.1,
-        snow_melt=0.15,    # cm °C⁻¹ day⁻¹ — required for SNOW=1 preset
+        snow_melt=0.15,    # cm °C⁻¹ day⁻¹ — required when the snow flag is on
         rd_const=100.0,
         r_soil_const1=3.0,
         r_soil_const2=2.0,
@@ -146,14 +146,14 @@ params = SIPNETParametersV1(
 
 #### Flag-dependent parameters
 
-The `STANDARD` preset enables `SNOW=1`, `GDD=1`, and `WATER_HRESP=1`.  This
+`ModelFlags.standard()` turns on snow, degree-day leaf-out, and moisture-sensitive soil respiration.  This
 means `water.snow_melt` and `phenology.gdd_leaf_on` are required.  Call
 `validate_for_flags` to catch mismatches before running:
 
 ```python
-from pysipnet import ModelPreset
+from pysipnet import ModelFlags
 
-params.validate_for_flags(ModelPreset.STANDARD.flags)
+params.validate_for_flags(ModelFlags.standard())
 # raises ValueError listing any missing flag-required parameters
 ```
 
@@ -165,9 +165,9 @@ params.validate_for_flags(ModelPreset.STANDARD.flags)
 reuse it across any number of runs — the runner holds no per-run state.
 
 ```python
-from pysipnet import SIPNETRunner, ModelPreset
+from pysipnet import SIPNETRunner, ModelFlags
 
-runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+runner = SIPNETRunner(flags=ModelFlags.standard())
 result = runner.run(params, climate)
 
 print(result.provenance.success)   # True if returncode == 0
@@ -178,7 +178,7 @@ print(result.provenance.stderr)    # SIPNET's stderr output, if any
 
 | Parameter | Default | Purpose |
 |:----------|:--------|:--------|
-| `preset` | required | Binary preset (`STANDARD` or `FOREST`) |
+| `flags` | optional | Model options; defaults to `ModelFlags.standard()` |
 | `timeout` | 300 s | Maximum wall-clock time per run |
 | `run_id` | UUID hex | Identifier used in the working directory name |
 | `output_dir` | `None` | Copy `sipnet.out` here before workdir cleanup (lazy loading) |
@@ -186,7 +186,7 @@ print(result.provenance.stderr)    # SIPNET's stderr output, if any
 
 ```python
 runner = SIPNETRunner(
-    preset=ModelPreset.STANDARD,
+    flags=ModelFlags.standard(),
     timeout=600.0,
 )
 
@@ -199,12 +199,12 @@ print(result.provenance.run_id)     # "my_baseline"
 For I/O options — keeping files on disk, lazy output loading, climate staging
 — see [File I/O](file-io.md) and [Common Workflows](workflows.md).
 
-### Binary presets
+### Named flag sets
 
 | Preset | Active flags |
 |:-------|:-------------|
-| `ModelPreset.STANDARD` | SNOW=1, GDD=1, WATER_HRESP=1 |
-| `ModelPreset.FOREST` | STANDARD + LITTER_POOL=1 |
+| `ModelFlags.standard()` | snow, degree-day leaf-out, moisture-sensitive soil respiration |
+| `ModelFlags.forest()` | as above, plus a separate litter carbon pool |
 
 Use `FOREST` for sites with a distinct litter carbon layer.  It additionally
 requires `respiration.litter_breakdown_rate` and `respiration.frac_litter_respired`.
@@ -218,9 +218,9 @@ applies overrides on top of the baseline and delegates the actual execution to
 the runner.
 
 ```python
-from pysipnet import SIPNETRunner, ModelPreset, SIPNETModel
+from pysipnet import SIPNETRunner, ModelFlags, SIPNETModel
 
-runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+runner = SIPNETRunner(flags=ModelFlags.standard())
 model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 ```
 
@@ -373,7 +373,7 @@ whether the value is a per-year rate:
 ```python
 from pysipnet.parameters.base import get_parameter_specs, ParameterDomain
 
-specs = get_parameter_specs(SIPNETParametersV1)
+specs = get_parameter_specs(SIPNETParameters)
 # {"photosynthesis.a_max": ParameterSpec(unit="nmol / (g * s)", domain=POSITIVE, ...), ...}
 
 # Parameters requiring a log bijector for unconstrained optimisation

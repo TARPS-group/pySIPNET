@@ -3,14 +3,14 @@
 Quickstart::
 
     from pysipnet import (
-        SIPNETRunner, ModelPreset, SIPNETModel,
-        SIPNETParametersV1, ModelFlagsV1,
+        SIPNETRunner, SIPNETModel,
+        SIPNETParameters, ModelFlags,
         ClimateDrivers,
     )
 
-    params  = SIPNETParametersV1(...)
+    params  = SIPNETParameters(...)
     climate = ClimateDrivers.from_file("site.clim", version="v1")
-    runner  = SIPNETRunner(preset=ModelPreset.STANDARD)
+    runner  = SIPNETRunner(flags=ModelFlags.standard())
     model   = SIPNETModel(runner, base_params=params, base_climate=climate)
 
     result = model()                    # baseline run
@@ -55,9 +55,9 @@ from pysipnet.model import SIPNETModel
 from pysipnet.output import SIPNETOutput
 
 # Parameters (top-level groups available via pysipnet.parameters)
-from pysipnet.parameters.v1 import SIPNET_PARAMS_BY_GROUP, ModelFlagsV1, SIPNETParametersV1
+from pysipnet.parameters.model import SIPNET_PARAMS_BY_GROUP, ModelFlags, SIPNETParameters
 from pysipnet.result import RunProvenance, SIPNETResult
-from pysipnet.runner import ClimateStaging, ModelPreset, SIPNETRunner
+from pysipnet.runner import ClimateStaging, SIPNETRunner
 
 # Version
 from pysipnet.version import PYSIPNET_VERSION, SIPNET_PINNED_COMMIT, SIPNET_TARGET_VERSION
@@ -69,7 +69,6 @@ __all__ = [
     "SIPNETModel",
     # Runner
     "SIPNETRunner",
-    "ModelPreset",
     "ClimateStaging",
     # Config (reproducible workflows)
     "RunConfig",
@@ -78,8 +77,8 @@ __all__ = [
     "SIPNETOutput",
     "RunProvenance",
     # Parameters
-    "SIPNETParametersV1",
-    "ModelFlagsV1",
+    "SIPNETParameters",
+    "ModelFlags",
     "SIPNET_PARAMS_BY_GROUP",
     # Climate
     "ClimateDrivers",
