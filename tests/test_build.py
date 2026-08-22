@@ -1,142 +1,203 @@
-"""Tests for pysipnet.build — binary cache management and build helpers."""
+"""Tests for :mod:`pysipnet.build` — compiling and locating the SIPNET binary.
+
+Two groups of tests here do different jobs.
+
+The unit tests use a temporary directory in place of the real binary cache, so
+they run anywhere and never invoke the compiler.
+
+The tests marked ``requires_binary`` check the actual compiled binary, and are
+skipped when it has not been built. Among them are two checks that the binary
+and the pin agree with each other: a mismatch there means pySIPNET would be
+driving a different model than the one this release claims to support, which
+would not otherwise announce itself.
+"""
 
 from __future__ import annotations
+
+import subprocess
 
 import pytest
 
 from pysipnet.build import (
     _CACHE_DIR,
-    _PATCH_SCRIPT,
     _REPO_ROOT,
     _SIPNET_DIR,
+    BINARY_NAME,
+    binary_path,
     binary_sha256,
-    build_preset,
+    build_sipnet,
     ensure_binary,
     init_submodule,
+    sipnet_version,
 )
-from pysipnet.runner import ModelPreset
+from pysipnet.version import SIPNET_PINNED_COMMIT, SIPNET_TARGET_VERSION
 
-_STANDARD_BINARY = _CACHE_DIR / ModelPreset.STANDARD.binary_name
+# Skip marker for tests that need a compiled binary present.
+requires_binary = pytest.mark.skipif(
+    not binary_path().exists(),
+    reason="SIPNET binary not built; run 'make sipnet'",
+)
 
 
-# ---------------------------------------------------------------------------
-# Module-level constants
-# ---------------------------------------------------------------------------
+class TestPaths:
+    """The module-level paths should point at real things in this repository."""
 
-
-class TestConstants:
     def test_repo_root_has_makefile(self):
         assert (_REPO_ROOT / "Makefile").exists()
 
-    def test_sipnet_dir_exists(self):
-        assert _SIPNET_DIR.exists()
+    def test_sipnet_submodule_is_populated(self):
+        assert (_SIPNET_DIR / "Makefile").exists(), (
+            "sipnet/ submodule looks empty; run 'git submodule update --init sipnet'"
+        )
 
-    def test_patch_script_exists(self):
-        assert _PATCH_SCRIPT.exists()
+    def test_binary_path_is_inside_cache_dir(self):
+        assert binary_path() == _CACHE_DIR / BINARY_NAME
 
-
-# ---------------------------------------------------------------------------
-# ensure_binary
-# ---------------------------------------------------------------------------
+    def test_binary_path_does_not_touch_the_filesystem(self, tmp_path, monkeypatch):
+        """binary_path only computes a path, so it works before anything is built."""
+        monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+        assert binary_path() == tmp_path / BINARY_NAME
 
 
 class TestEnsureBinary:
-    def test_raises_if_binary_missing(self, tmp_path, monkeypatch):
+    def test_raises_when_binary_is_missing(self, tmp_path, monkeypatch):
         monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
-        with pytest.raises(FileNotFoundError, match="sipnet_standard"):
-            ensure_binary(ModelPreset.STANDARD)
+        with pytest.raises(FileNotFoundError):
+            ensure_binary()
 
-    def test_error_message_includes_make_command(self, tmp_path, monkeypatch):
+    def test_error_message_says_how_to_fix_it(self, tmp_path, monkeypatch):
+        """A missing binary is a setup problem, so the message must be actionable."""
         monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
-        with pytest.raises(FileNotFoundError, match="make sipnet-standard"):
-            ensure_binary(ModelPreset.STANDARD)
+        with pytest.raises(FileNotFoundError, match="make sipnet"):
+            ensure_binary()
 
-    @pytest.mark.skipif(
-        not _STANDARD_BINARY.exists(),
-        reason="Binary not built; run 'make sipnet-standard'",
-    )
-    def test_returns_path_when_binary_exists(self):
-        path = ensure_binary(ModelPreset.STANDARD)
-        assert path.exists()
-        assert path.name == "sipnet_standard"
+    def test_never_compiles_anything(self, tmp_path, monkeypatch):
+        """ensure_binary is a check, not a build step."""
+        monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+        monkeypatch.setattr(
+            "pysipnet.build.subprocess.run",
+            lambda *a, **kw: pytest.fail("ensure_binary must not run subprocesses"),
+        )
+        with pytest.raises(FileNotFoundError):
+            ensure_binary()
 
+    @requires_binary
+    def test_returns_the_binary_path(self):
+        assert ensure_binary() == binary_path()
 
-# ---------------------------------------------------------------------------
-# binary_sha256
-# ---------------------------------------------------------------------------
+    @requires_binary
+    def test_returned_path_is_executable(self):
+        import os
+
+        assert os.access(ensure_binary(), os.X_OK)
 
 
 class TestBinarySha256:
-    @pytest.mark.skipif(
-        not _STANDARD_BINARY.exists(),
-        reason="Binary not built; run 'make sipnet-standard'",
-    )
-    def test_returns_64_char_hex(self):
-        digest = binary_sha256(ModelPreset.STANDARD)
+    @requires_binary
+    def test_is_64_hex_characters(self):
+        digest = binary_sha256()
         assert len(digest) == 64
         assert all(c in "0123456789abcdef" for c in digest)
 
-    @pytest.mark.skipif(
-        not _STANDARD_BINARY.exists(),
-        reason="Binary not built; run 'make sipnet-standard'",
-    )
-    def test_deterministic(self):
-        assert binary_sha256(ModelPreset.STANDARD) == binary_sha256(ModelPreset.STANDARD)
+    @requires_binary
+    def test_is_stable_across_calls(self):
+        assert binary_sha256() == binary_sha256()
 
-    def test_raises_if_binary_missing(self, tmp_path, monkeypatch):
+    def test_changes_when_the_binary_changes(self, tmp_path, monkeypatch):
+        """The digest identifies a specific build, so different bytes must differ."""
+        monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+        target = tmp_path / BINARY_NAME
+
+        target.write_bytes(b"one build")
+        first = binary_sha256()
+
+        target.write_bytes(b"a different build")
+        assert binary_sha256() != first
+
+    def test_raises_when_binary_is_missing(self, tmp_path, monkeypatch):
         monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
         with pytest.raises(FileNotFoundError):
-            binary_sha256(ModelPreset.STANDARD)
+            binary_sha256()
 
-    def test_content_sensitive(self, tmp_path, monkeypatch):
+
+class TestBuild:
+    def test_skips_compiling_when_a_binary_is_already_present(self, tmp_path, monkeypatch):
         monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
-        binary_a = tmp_path / "sipnet_standard"
-        binary_b = tmp_path / "sipnet_forest"
-        binary_a.write_bytes(b"content_a")
-        binary_b.write_bytes(b"content_b")
-        assert binary_sha256(ModelPreset.STANDARD) != binary_sha256(ModelPreset.FOREST)
+        (tmp_path / BINARY_NAME).write_bytes(b"pretend binary")
+        monkeypatch.setattr(
+            "pysipnet.build.subprocess.run",
+            lambda *a, **kw: pytest.fail("build_sipnet() should not have compiled"),
+        )
+        assert build_sipnet() == tmp_path / BINARY_NAME
 
+    def test_force_compiles_even_when_a_binary_is_present(self, tmp_path, monkeypatch):
+        """force=True is the escape hatch after changing the pinned SIPNET version."""
+        monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+        (tmp_path / BINARY_NAME).write_bytes(b"stale binary")
 
-# ---------------------------------------------------------------------------
-# build_preset (no-op path only — avoids running make in unit tests)
-# ---------------------------------------------------------------------------
+        commands = []
+        monkeypatch.setattr("pysipnet.build.subprocess.run", lambda args, **kw: commands.append(args))
 
+        build_sipnet(force=True)
+        assert ["make", "sipnet"] in commands
 
-class TestBuildPreset:
-    @pytest.mark.skipif(
-        not _STANDARD_BINARY.exists(),
-        reason="Binary not built; run 'make sipnet-standard'",
-    )
-    def test_noop_if_binary_exists(self, monkeypatch):
-        """build_preset(force=False) returns the existing path without calling make."""
-        called = []
+    def test_compiles_when_no_binary_exists(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+        commands = []
+        monkeypatch.setattr("pysipnet.build.subprocess.run", lambda args, **kw: commands.append(args))
 
-        def fake_run(args, **kwargs):
-            called.append(args)
-
-        monkeypatch.setattr("pysipnet.build.subprocess.run", fake_run)
-        path = build_preset(ModelPreset.STANDARD, force=False)
-        assert path.exists()
-        assert called == [], "subprocess.run should not have been called"
-
-    @pytest.mark.skipif(
-        not _STANDARD_BINARY.exists(),
-        reason="Binary not built; run 'make sipnet-standard'",
-    )
-    def test_returns_correct_path(self):
-        path = build_preset(ModelPreset.STANDARD, force=False)
-        assert path == _CACHE_DIR / "sipnet_standard"
-
-
-# ---------------------------------------------------------------------------
-# init_submodule
-# ---------------------------------------------------------------------------
+        build_sipnet()
+        assert ["make", "sipnet"] in commands
 
 
 class TestInitSubmodule:
-    def test_noop_if_makefile_exists(self, monkeypatch):
-        """init_submodule does nothing if sipnet/Makefile is present."""
-        called = []
-        monkeypatch.setattr("pysipnet.build.subprocess.run", lambda *a, **kw: called.append(a))
+    def test_does_nothing_when_the_submodule_is_populated(self, monkeypatch):
+        monkeypatch.setattr(
+            "pysipnet.build.subprocess.run",
+            lambda *a, **kw: pytest.fail("submodule is already present"),
+        )
         init_submodule()
-        assert called == [], "subprocess.run should not be called when submodule is present"
+
+    def test_fetches_when_the_submodule_is_empty(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("pysipnet.build._SIPNET_DIR", tmp_path / "empty")
+        commands = []
+        monkeypatch.setattr("pysipnet.build.subprocess.run", lambda args, **kw: commands.append(args))
+
+        init_submodule()
+        assert commands == [["git", "submodule", "update", "--init", "sipnet"]]
+
+
+class TestBinaryMatchesThePin:
+    """The compiled binary and the recorded pin must describe the same SIPNET.
+
+    These are the tests that catch a stale binary or a half-finished version
+    bump. Without them, pySIPNET would happily drive a binary built from
+    different source than the version constants advertise, and the only symptom
+    would be quietly wrong model output.
+    """
+
+    def test_submodule_is_checked_out_at_the_pinned_commit(self):
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=_SIPNET_DIR,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert result.stdout.strip() == SIPNET_PINNED_COMMIT, (
+            "sipnet/ is not at the commit recorded in pysipnet.version. "
+            "Run 'git submodule update --init sipnet'."
+        )
+
+    @requires_binary
+    def test_binary_reports_the_targeted_version(self):
+        """A binary left over from a previous pin would fail here."""
+        expected = SIPNET_TARGET_VERSION.lstrip("v")
+        assert sipnet_version().startswith(expected), (
+            f"binary reports {sipnet_version()!r} but this release targets "
+            f"{SIPNET_TARGET_VERSION!r}. Rebuild with 'make sipnet'."
+        )
+
+    @requires_binary
+    def test_version_string_is_not_empty(self):
+        assert sipnet_version().strip()

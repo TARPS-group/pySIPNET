@@ -29,7 +29,7 @@ With agronomic events::
 
 # Runner
 # Build utilities
-from pysipnet.build import build_preset, ensure_binary
+from pysipnet.build import build_sipnet, ensure_binary, sipnet_version
 
 # Climate
 from pysipnet.climate import ClimateDrivers
@@ -92,8 +92,9 @@ __all__ = [
     "PlantingEvent",
     "TillageEvent",
     # Build
-    "build_preset",
+    "build_sipnet",
     "ensure_binary",
+    "sipnet_version",
     # Version
     "PYSIPNET_VERSION",
     "SIPNET_PINNED_COMMIT",

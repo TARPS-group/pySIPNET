@@ -25,16 +25,16 @@ Dask, Parsl, Ray, etc.)::
     with ProcessPoolExecutor() as pool:
         results = list(pool.map(run_one, ensemble_configs))
 
-Presets and binaries
---------------------
-A :class:`ModelPreset` selects a pre-compiled SIPNET binary.  Binaries are
-stored in ``.sipnet_cache/`` at the repo root and are built with::
+The SIPNET binary
+-----------------
+There is a single SIPNET binary, stored in ``.sipnet_cache/`` at the repo root
+and built with::
 
-    make sipnet   # builds all presets
-    make sipnet-standard
-    make sipnet-forest
+    make sipnet
 
-The cache directory can be overridden via ``SIPNETRunner(cache_dir=...)``.
+Every model option is chosen at run time and written into ``sipnet.in``, so one
+binary serves every configuration. The cache directory can be overridden via
+``SIPNETRunner(cache_dir=...)``.
 
 Output persistence
 ------------------
@@ -61,6 +61,8 @@ import uuid
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from pysipnet.build import BINARY_NAME
 
 if TYPE_CHECKING:
     from pysipnet.climate import ClimateDrivers
@@ -101,12 +103,11 @@ class ClimateStaging(StrEnum):
 
 
 class ModelPreset(StrEnum):
-    """Named SIPNET v1 binary presets.
+    """Named sets of SIPNET model options.
 
-    Each preset corresponds to a fixed set of compile-time flags (see
-    ``Makefile`` for the exact ``-D`` values).  The preset selects the
-    binary from ``.sipnet_cache/`` and determines which
-    :class:`~pysipnet.parameters.v1.ModelFlagsV1` fields are active.
+    Each preset names a set of model options, which the runner writes into
+    the ``sipnet.in`` config file. Presets no longer select a binary: there is
+    only one, and it supports every combination of options.
 
     +----------+--------------------------------------------+
     | Preset   | Active flags                               |
@@ -118,7 +119,7 @@ class ModelPreset(StrEnum):
     """
 
     STANDARD = "standard"
-    """Default v1 configuration: snow, GDD phenology, moisture-sensitive Rh."""
+    """Snow, growing-degree-day phenology, moisture-sensitive soil respiration."""
 
     FOREST = "forest"
     """Standard + explicit litter C pool (required for sites with distinct
@@ -134,11 +135,6 @@ class ModelPreset(StrEnum):
         if self == ModelPreset.FOREST:
             return ModelFlagsV1.forest()
         raise NotImplementedError(f"Flags not defined for preset {self!r}")
-
-    @property
-    def binary_name(self) -> str:
-        """Filename of the compiled binary in the cache directory."""
-        return f"sipnet_{self.value}"
 
 
 class SIPNETRunner:
@@ -195,8 +191,8 @@ class SIPNETRunner:
 
     @property
     def binary_path(self) -> Path:
-        """Absolute path to the SIPNET binary for the selected preset."""
-        return self.cache_dir / self.preset.binary_name
+        """Absolute path to the SIPNET binary this runner will execute."""
+        return self.cache_dir / BINARY_NAME
 
     def _check_binary(self) -> None:
         if not self.binary_path.exists():

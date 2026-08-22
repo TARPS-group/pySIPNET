@@ -1,38 +1,31 @@
-SIPNET_DIR     := sipnet
-PATCH_SCRIPT   := patches/apply_flags_patch.py
-CACHE_DIR      := .sipnet_cache
+# Build the SIPNET binary that pySIPNET drives.
+#
+# SIPNET lives in the sipnet/ git submodule, pinned to a specific release tag.
+# From SIPNET v2.0.0 onward every model option (snow, litter pool, nitrogen
+# cycle, and so on) is chosen at run time in the sipnet.in config file, so
+# there is exactly one binary to build and no compiler flags to pass. Earlier
+# SIPNET versions chose those options at compile time, which is why older
+# versions of this Makefile built one binary per option combination.
 
-# Flags always set: HEADER=1 forces a column-header row in output,
-# making output parsing unambiguous regardless of parameter changes.
-BASE_FLAGS := -DHEADER=1
+SIPNET_DIR := sipnet
+CACHE_DIR  := .sipnet_cache
+BINARY     := $(CACHE_DIR)/sipnet
 
-# Named presets — these map to ModelPreset enum values in pysipnet/runner.py.
-# To add a new preset, extend both this Makefile and pysipnet/build.py.
-STANDARD_FLAGS := $(BASE_FLAGS) -DSNOW=1 -DGDD=1 -DWATER_HRESP=1 -DGROWTH_RESP=0 -DLITTER_POOL=0 -DLEAF_WATER=0
-FOREST_FLAGS   := $(BASE_FLAGS) -DSNOW=1 -DGDD=1 -DWATER_HRESP=1 -DGROWTH_RESP=0 -DLITTER_POOL=1 -DLEAF_WATER=0
+.PHONY: sipnet submodule clean-sipnet
 
-.PHONY: sipnet sipnet-standard sipnet-forest patch-sipnet clean-sipnet
-
-sipnet: sipnet-standard sipnet-forest
-	@echo "SIPNET binaries built in $(CACHE_DIR)/"
-
-# Apply the #ifndef patch to SIPNET source (idempotent).
-patch-sipnet:
-	python3 $(PATCH_SCRIPT) $(SIPNET_DIR)
-
-sipnet-standard: patch-sipnet
+# Default target: build SIPNET and copy the binary into the cache directory
+# where pysipnet.runner looks for it.
+sipnet: submodule
 	$(MAKE) -C $(SIPNET_DIR) clean
-	$(MAKE) -C $(SIPNET_DIR) CFLAGS="-Wall -g -Isrc -Wno-c2x-extensions $(STANDARD_FLAGS)"
+	$(MAKE) -C $(SIPNET_DIR)
 	mkdir -p $(CACHE_DIR)
-	cp $(SIPNET_DIR)/sipnet $(CACHE_DIR)/sipnet_standard
-	@echo "Built: $(CACHE_DIR)/sipnet_standard"
+	cp $(SIPNET_DIR)/sipnet $(BINARY)
+	@echo "Built: $(BINARY)"
+	@$(BINARY) --version
 
-sipnet-forest: patch-sipnet
-	$(MAKE) -C $(SIPNET_DIR) clean
-	$(MAKE) -C $(SIPNET_DIR) CFLAGS="-Wall -g -Isrc -Wno-c2x-extensions $(FOREST_FLAGS)"
-	mkdir -p $(CACHE_DIR)
-	cp $(SIPNET_DIR)/sipnet $(CACHE_DIR)/sipnet_forest
-	@echo "Built: $(CACHE_DIR)/sipnet_forest"
+# Fetch the submodule contents if this is a fresh clone.
+submodule:
+	@test -f $(SIPNET_DIR)/Makefile || git submodule update --init $(SIPNET_DIR)
 
 clean-sipnet:
 	$(MAKE) -C $(SIPNET_DIR) clean
