@@ -49,18 +49,18 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-groups
 
-      # Cache the compiled binaries keyed on the submodule commit so the
+      # Cache the compiled binary keyed on the submodule commit so the
       # expensive compile step is skipped on reruns with no SIPNET changes.
-      - name: Cache SIPNET binaries
+      - name: Cache SIPNET binary
         id: cache-sipnet
         uses: actions/cache@v4
         with:
           path: .sipnet_cache/
-          key: sipnet-${{ runner.os }}-${{ hashFiles('.git/modules/sipnet/HEAD', 'sipnet/src/**/*.c', 'sipnet/src/**/*.h', 'patches/apply_flags_patch.py', 'Makefile') }}
+          key: sipnet-${{ runner.os }}-${{ hashFiles('.git/modules/sipnet/HEAD', 'sipnet/src/**/*.c', 'sipnet/src/**/*.h', 'Makefile') }}
 
-      - name: Build SIPNET binaries
+      - name: Build SIPNET binary
         if: steps.cache-sipnet.outputs.cache-hit != 'true'
-        run: make sipnet-standard
+        run: make sipnet
 
       - name: Run tests
         run: uv run pytest tests/ --tb=short -q

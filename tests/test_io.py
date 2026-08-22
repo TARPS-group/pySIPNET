@@ -353,7 +353,5 @@ class TestOutputHeaderDetection:
         """year/day/time identify each row, so they survive any selection."""
         from pysipnet.io.output_reader import read_output_file
 
-        df = read_output_file(
-            self._write(tmp_path, self.HEADER, self.ROW_1), columns=["nee"]
-        )
+        df = read_output_file(self._write(tmp_path, self.HEADER, self.ROW_1), columns=["nee"])
         assert set(df.columns) == {"year", "day", "time", "nee"}

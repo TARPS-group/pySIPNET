@@ -13,9 +13,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pysipnet.climate import ClimateDrivers
     from pysipnet.events import EventSequence
-    from pysipnet.parameters.model import SIPNETParameters
+    from pysipnet.parameters.model import ModelFlags, SIPNETParameters
     from pysipnet.result import SIPNETResult
-    from pysipnet.parameters.model import ModelFlags
 
 _MODE_COPY = "copy"
 _MODE_REFERENCE = "reference"
@@ -191,8 +190,7 @@ class RunConfig:
         """
         from pysipnet.climate import ClimateDrivers
         from pysipnet.events import EventSequence
-        from pysipnet.parameters.model import SIPNETParameters
-        from pysipnet.parameters.model import ModelFlags
+        from pysipnet.parameters.model import ModelFlags, SIPNETParameters
 
         path = Path(path)
         config_path = path / "config.json"

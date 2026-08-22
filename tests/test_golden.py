@@ -29,8 +29,8 @@ import pytest
 
 from pysipnet.climate import ClimateDrivers
 from pysipnet.io.clim_io import read_clim_file
-from pysipnet.runner import SIPNETRunner
 from pysipnet.parameters.model import ModelFlags
+from pysipnet.runner import SIPNETRunner
 from tests.helpers import params_from_sipnet_file
 
 REFERENCE_DIR = Path(__file__).parent / "fixtures" / "niwot_reference"

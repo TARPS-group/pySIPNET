@@ -136,7 +136,9 @@ class TestBuild:
         (tmp_path / BINARY_NAME).write_bytes(b"stale binary")
 
         commands = []
-        monkeypatch.setattr("pysipnet.build.subprocess.run", lambda args, **kw: commands.append(args))
+        monkeypatch.setattr(
+            "pysipnet.build.subprocess.run", lambda args, **kw: commands.append(args)
+        )
 
         build_sipnet(force=True)
         assert ["make", "sipnet"] in commands
@@ -144,7 +146,9 @@ class TestBuild:
     def test_compiles_when_no_binary_exists(self, tmp_path, monkeypatch):
         monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
         commands = []
-        monkeypatch.setattr("pysipnet.build.subprocess.run", lambda args, **kw: commands.append(args))
+        monkeypatch.setattr(
+            "pysipnet.build.subprocess.run", lambda args, **kw: commands.append(args)
+        )
 
         build_sipnet()
         assert ["make", "sipnet"] in commands
@@ -161,7 +165,9 @@ class TestInitSubmodule:
     def test_fetches_when_the_submodule_is_empty(self, tmp_path, monkeypatch):
         monkeypatch.setattr("pysipnet.build._SIPNET_DIR", tmp_path / "empty")
         commands = []
-        monkeypatch.setattr("pysipnet.build.subprocess.run", lambda args, **kw: commands.append(args))
+        monkeypatch.setattr(
+            "pysipnet.build.subprocess.run", lambda args, **kw: commands.append(args)
+        )
 
         init_submodule()
         assert commands == [["git", "submodule", "update", "--init", "sipnet"]]

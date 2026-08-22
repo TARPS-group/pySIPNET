@@ -205,14 +205,11 @@ class ModelFlags(BaseModel):
         if self.anaerobic and not self.water_hresp:
             problems.append("anaerobic requires water_hresp to be True")
         if self.nitrogen_cycle and not (self.litter_pool and self.anaerobic):
-            problems.append(
-                "nitrogen_cycle requires both litter_pool and anaerobic to be True"
-            )
+            problems.append("nitrogen_cycle requires both litter_pool and anaerobic to be True")
 
         if problems:
             raise ValueError(
-                "Invalid combination of model flags:\n"
-                + "\n".join(f"  - {p}" for p in problems)
+                "Invalid combination of model flags:\n" + "\n".join(f"  - {p}" for p in problems)
             )
         return self
 
@@ -798,8 +795,7 @@ class SIPNETParameters(BaseModel):
             errors.append("water.leaf_pool_depth is required when ModelFlags.leaf_water is True")
         if flags.litter_pool and self.respiration.litter_breakdown_rate is None:
             errors.append(
-                "respiration.litter_breakdown_rate is required"
-                " when ModelFlags.litter_pool is True"
+                "respiration.litter_breakdown_rate is required when ModelFlags.litter_pool is True"
             )
         if flags.litter_pool and self.respiration.frac_litter_respired is None:
             errors.append(

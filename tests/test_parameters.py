@@ -142,9 +142,7 @@ class TestModelFlagsConfigKeys:
     def test_every_flag_is_written(self):
         """Writing all keys, not just the non-default ones, keeps runs reproducible."""
         keys = ModelFlags().to_config_keys()
-        flag_fields = {
-            name for name in ModelFlags.model_fields if name != "name"
-        }
+        flag_fields = {name for name in ModelFlags.model_fields if name != "name"}
         assert len(keys) == len(flag_fields)
 
     def test_keys_are_sipnet_uppercase_names(self):

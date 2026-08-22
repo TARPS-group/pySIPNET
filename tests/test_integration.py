@@ -14,8 +14,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pysipnet.runner import SIPNETRunner
 from pysipnet.parameters.model import ModelFlags
+from pysipnet.runner import SIPNETRunner
 
 _SIPNET_BINARY = SIPNETRunner(flags=ModelFlags.standard()).binary_path
 

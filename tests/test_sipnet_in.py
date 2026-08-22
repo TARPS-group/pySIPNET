@@ -114,7 +114,9 @@ class TestSipnetAcceptsOurConfig:
     def test_no_key_is_ignored(self, tmp_path, reference_fixture_dir):
         proc = self._run(tmp_path, ModelFlags.standard(), reference_fixture_dir)
         combined = proc.stdout + proc.stderr
-        ignored = [line for line in combined.splitlines() if "ignoring input file parameter" in line]
+        ignored = [
+            line for line in combined.splitlines() if "ignoring input file parameter" in line
+        ]
         assert not ignored, "SIPNET did not recognise these keys:\n" + "\n".join(ignored)
 
     def test_run_succeeds(self, tmp_path, reference_fixture_dir):
@@ -141,7 +143,9 @@ class TestSipnetAcceptsOurConfig:
             shutil.copy(reference_fixture_dir / name, tmp_path / name)
         flags = ModelFlags.forest()
         text = _render_sipnet_in(flags, events_enabled=False)
-        (tmp_path / "sipnet.in").write_text(text.replace("PRINT_HEADER = 1", "PRINT_HEADER = 1\nDUMP_CONFIG = 1"))
+        # Ask SIPNET to write out the configuration it actually resolved.
+        with_dump = text.replace("PRINT_HEADER = 1", "PRINT_HEADER = 1\nDUMP_CONFIG = 1")
+        (tmp_path / "sipnet.in").write_text(with_dump)
 
         proc = subprocess.run(
             [str(binary_path()), "-i", "sipnet.in"],

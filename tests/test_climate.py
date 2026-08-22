@@ -8,8 +8,8 @@ import pandas as pd
 import pytest
 
 from pysipnet.climate import CLIM_COLUMNS, ClimateDrivers
-from pysipnet.runner import ClimateStaging, SIPNETRunner
 from pysipnet.parameters.model import ModelFlags
+from pysipnet.runner import ClimateStaging, SIPNETRunner
 
 
 def _make_df(

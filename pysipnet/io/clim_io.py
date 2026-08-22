@@ -162,9 +162,9 @@ def peek_clim_file(
         year_col, day_col = _YEAR_COL_IN_12, _DAY_COL_IN_12
     else:
         raise ValueError(
-        f"Unsupported climate file layout: {n_columns} columns. "
-        "SIPNET reads 12- or 14-column files."
-    )
+            f"Unsupported climate file layout: {n_columns} columns. "
+            "SIPNET reads 12- or 14-column files."
+        )
 
     start = (int(first.iloc[0, year_col]), int(first.iloc[0, day_col]))
     end = (int(last.iloc[0, year_col]), int(last.iloc[0, day_col]))
