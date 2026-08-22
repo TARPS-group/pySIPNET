@@ -251,7 +251,7 @@ reproduce the run manually:
 
 ```bash
 cd /tmp/sipnet_debug_run
-./path/to/sipnet_standard
+./path/to/sipnet
 ```
 
 `output_dir` and `keep_workdir=True` serve different purposes and can be used

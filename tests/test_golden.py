@@ -16,7 +16,7 @@ first :data:`_N_TIMESTEPS` rows of its climate.  Regenerate the golden after an
 
 and review the resulting diff before committing it.
 
-Requires the compiled STANDARD binary; skipped when absent.
+Requires the compiled SIPNET binary; skipped when absent.
 """
 
 from __future__ import annotations
@@ -40,13 +40,13 @@ GOLDEN = Path(__file__).parent / "fixtures" / "golden" / "niwot_standard.out.csv
 
 _N_TIMESTEPS = 60  # ~3–4 weeks at Niwot's sub-daily cadence; keeps the golden compact
 
-_STANDARD_BINARY = SIPNETRunner(flags=ModelFlags.standard()).binary_path
+_SIPNET_BINARY = SIPNETRunner(flags=ModelFlags.standard()).binary_path
 
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(
-        not _STANDARD_BINARY.exists(),
-        reason=f"SIPNET binary not found at {_STANDARD_BINARY}; run 'make sipnet-standard'",
+        not _SIPNET_BINARY.exists(),
+        reason=f"SIPNET binary not found at {_SIPNET_BINARY}; run 'make sipnet'",
     ),
     pytest.mark.skipif(
         not REFERENCE_PARAM.exists() or not REFERENCE_CLIM.exists(),

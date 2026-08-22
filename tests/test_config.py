@@ -334,7 +334,7 @@ class TestFromResult:
 
         provenance = RunProvenance(
             flags=ModelFlags.standard(),
-            binary_path=Path("/fake/sipnet_standard"),
+            binary_path=Path("/fake/sipnet"),
             run_id="test-abc",
             workdir=Path("/fake/workdir"),
             returncode=0,
@@ -365,7 +365,7 @@ class TestFromResult:
         )
         provenance = RunProvenance(
             flags=ModelFlags.forest(),
-            binary_path=Path("/fake/sipnet_forest"),
+            binary_path=Path("/fake/sipnet"),
             run_id="test-xyz",
             workdir=Path("/fake/workdir"),
             returncode=0,

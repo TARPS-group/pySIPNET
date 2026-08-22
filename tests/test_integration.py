@@ -5,7 +5,7 @@ when the binary is absent (e.g., in CI without a build step).
 
 Build the binary with::
 
-    make sipnet-standard
+    make sipnet
 """
 
 from __future__ import annotations
@@ -17,11 +17,11 @@ import pytest
 from pysipnet.runner import SIPNETRunner
 from pysipnet.parameters.model import ModelFlags
 
-_STANDARD_BINARY = SIPNETRunner(flags=ModelFlags.standard()).binary_path
+_SIPNET_BINARY = SIPNETRunner(flags=ModelFlags.standard()).binary_path
 
 pytestmark = pytest.mark.skipif(
-    not _STANDARD_BINARY.exists(),
-    reason=f"SIPNET binary not found at {_STANDARD_BINARY}; run 'make sipnet-standard'",
+    not _SIPNET_BINARY.exists(),
+    reason=f"SIPNET binary not found at {_SIPNET_BINARY}; run 'make sipnet'",
 )
 
 
@@ -260,3 +260,92 @@ class TestOutputIO:
 
         assert result_mem.outputs.n_timesteps == 20
         assert result_file.outputs.n_timesteps == 20
+
+
+# ---------------------------------------------------------------------------
+# Litter pool
+# ---------------------------------------------------------------------------
+
+
+class TestLitterPool:
+    """The litter pool must actually work when switched on.
+
+    This configuration was unusable before the SIPNET v2.1.0 pin. The old
+    pinned source did not compile with the litter pool enabled, and the commit
+    that made it compile still left soil respiration unassigned on that code
+    path, so ``rSoil`` stayed at zero: soil carbon accumulated without ever
+    respiring, and both heterotrophic respiration and NEE were wrong.
+
+    Nothing about that failure was loud. The run succeeded and the output
+    looked plausible, which is exactly why it is worth asserting on directly.
+    """
+
+    @pytest.fixture
+    def litter_params(self, minimal_params):
+        """Parameters with the two values the litter pool requires."""
+        data = minimal_params.model_dump()
+        data["respiration"]["litter_breakdown_rate"] = 0.5
+        data["respiration"]["frac_litter_respired"] = 0.5
+        return type(minimal_params).model_validate(data)
+
+    def test_run_succeeds(self, litter_params):
+        result = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, _make_climate())
+        assert result.provenance.success, result.provenance.stderr
+
+    def test_soil_respiration_is_not_zero(self, litter_params):
+        """The specific regression: rSoil must be computed, not left at zero."""
+        result = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, _make_climate())
+        r_soil = result.outputs.data["r_soil"]
+        assert (r_soil > 0).any(), (
+            "soil respiration is zero for every timestep with the litter pool on, "
+            "which is the pre-v2.1.0 defect this test exists to catch"
+        )
+
+    def test_litter_pool_holds_carbon(self, litter_params):
+        """With the pool on, litter carbon should be tracked rather than left at zero."""
+        result = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, _make_climate())
+        assert (result.outputs.data["litter_c"] > 0).any()
+
+    def test_litter_pool_stays_empty_when_switched_off(self, minimal_params):
+        """The complement: SIPNET writes the column but leaves it at zero."""
+        result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())
+        assert (result.outputs.data["litter_c"] == 0).all()
+
+    def test_enabling_the_litter_pool_changes_the_answer(self, litter_params):
+        """A flag that reaches SIPNET must visibly affect the model.
+
+        If the flag were silently dropped from sipnet.in, the two runs would
+        agree and every other test here would still pass.
+        """
+        climate = _make_climate()
+        with_pool = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, climate)
+        without = SIPNETRunner(flags=ModelFlags.standard()).run(litter_params, climate)
+        assert not np.allclose(
+            with_pool.outputs.data["nee"].to_numpy(),
+            without.outputs.data["nee"].to_numpy(),
+        ), "turning the litter pool on made no difference to NEE"
+
+
+# ---------------------------------------------------------------------------
+# Mass balance
+# ---------------------------------------------------------------------------
+
+
+class TestMassBalance:
+    """SIPNET reports its own carbon and nitrogen closure errors; check them.
+
+    These columns are the model's internal audit of whether the pools it
+    updated match the fluxes it computed. They should sit at or very near zero.
+    A drift away from zero points at a problem inside the model run rather than
+    in our wrapping, so it is worth surfacing rather than ignoring.
+    """
+
+    def test_carbon_balance_closes(self, minimal_params):
+        result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())
+        delta = result.outputs.data["balance_delta_c"].abs().max()
+        assert delta < 1e-3, f"largest carbon closure error was {delta}"
+
+    def test_nitrogen_balance_closes_when_the_cycle_is_off(self, minimal_params):
+        """With the nitrogen cycle off there are no nitrogen fluxes to reconcile."""
+        result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())
+        assert result.outputs.data["balance_delta_n"].abs().max() < 1e-3
