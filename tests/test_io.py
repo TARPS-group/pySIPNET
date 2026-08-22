@@ -10,7 +10,6 @@ from __future__ import annotations
 import pytest
 
 from pysipnet.io.param_io import (
-    _OBSOLETE_DEFAULTS,
     PYTHON_TO_SIPNET,
     SIPNET_TO_PYTHON,
     _flatten,
@@ -48,12 +47,6 @@ class TestNameMappings:
     def test_all_paths_have_exactly_one_dot(self):
         for path in PYTHON_TO_SIPNET:
             assert path.count(".") == 1, f"Expected single dot in {path!r}"
-
-    def test_obsolete_defaults_names_not_in_main_mapping(self):
-        """Obsolete params must not accidentally shadow a real param."""
-        main_names = set(PYTHON_TO_SIPNET.values())
-        for name in _OBSOLETE_DEFAULTS:
-            assert name not in main_names, f"{name!r} appears in both mappings"
 
 
 # ---------------------------------------------------------------------------
@@ -104,20 +97,6 @@ class TestWriteParamFile:
         path = tmp_path / "sipnet.param"
         write_param_file(minimal_params, flags, path)
         assert any(line.startswith("!") for line in path.read_text().splitlines())
-
-    def test_all_obsolete_defaults_written(self, tmp_path, minimal_params, flags):
-        path = tmp_path / "sipnet.param"
-        write_param_file(minimal_params, flags, path)
-        written = read_param_file(path)
-        for name in _OBSOLETE_DEFAULTS:
-            assert name in written, f"Obsolete param {name!r} missing from file"
-
-    def test_obsolete_values_match_defaults(self, tmp_path, minimal_params, flags):
-        path = tmp_path / "sipnet.param"
-        write_param_file(minimal_params, flags, path)
-        written = read_param_file(path)
-        for name, expected in _OBSOLETE_DEFAULTS.items():
-            assert written[name] == pytest.approx(expected)
 
     def test_none_fields_not_written(self, tmp_path, minimal_params, flags):
         """Fields with None values must not appear in the file at all."""
@@ -200,7 +179,6 @@ class TestWriteParamFile:
                 frozen_soil_eff=0.1,
                 wue_const=10.0,
                 soil_whc=12.0,
-                litter_whc=5.0,
                 immed_evap_frac=0.1,
                 fast_flow_frac=0.1,
                 rd_const=100.0,

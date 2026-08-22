@@ -92,7 +92,6 @@ def minimal_params():
             frozen_soil_eff=0.1,
             wue_const=10.0,
             soil_whc=12.0,
-            litter_whc=5.0,
             immed_evap_frac=0.1,
             fast_flow_frac=0.1,
             snow_melt=0.15,

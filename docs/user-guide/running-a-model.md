@@ -129,7 +129,6 @@ params = SIPNETParameters(
         frozen_soil_eff=0.1,
         wue_const=10.0,
         soil_whc=12.0,     # cm — soil water holding capacity
-        litter_whc=5.0,    # cm — litter water holding capacity
         immed_evap_frac=0.1,
         fast_flow_frac=0.1,
         snow_melt=0.15,    # cm °C⁻¹ day⁻¹ — required when the snow flag is on

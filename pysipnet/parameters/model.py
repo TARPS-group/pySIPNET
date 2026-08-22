@@ -308,14 +308,6 @@ class InitialConditions(BaseModel):
         description="Initial soil water as a fraction of water holding capacity "
         "(SIPNET param: soilWFracInit). May exceed 1 in flooding scenarios.",
     )
-    litter_water_frac: float = param_field(
-        unit="1",
-        domain=_D.NON_NEGATIVE,
-        default=0.0,
-        description="Initial litter water as a fraction of litter water holding capacity "
-        "(SIPNET param: litterWFracInit). Used to initialise litterWater = "
-        "litterWFracInit × litterWHC.",
-    )
     snow: float = param_field(
         unit="cm",
         constituent="water equiv.",
@@ -608,20 +600,6 @@ class AllocationParams(BaseModel):
         domain=_D.OPEN_UNIT_INTERVAL,
         description="Fraction of NPP allocated to fine roots (SIPNET param: fineRootAllocation).",
     )
-    fine_root_exudation: float = param_field(
-        unit="1",
-        domain=_D.UNIT_INTERVAL,
-        default=0.0,
-        description="Fraction of GPP exuded from fine roots to soil "
-        "(SIPNET param: fineRootExudation).",
-    )
-    coarse_root_exudation: float = param_field(
-        unit="1",
-        domain=_D.UNIT_INTERVAL,
-        default=0.0,
-        description="Fraction of NPP exuded from coarse roots to soil "
-        "(SIPNET param: coarseRootExudation).",
-    )
     wood_allocation: float = param_field(
         unit="1",
         domain=_D.OPEN_UNIT_INTERVAL,
@@ -732,12 +710,6 @@ class WaterParams(BaseModel):
         domain=_D.POSITIVE,
         description="Soil resistance constant 2 (SIPNET param: rSoilConst2). "
         "Larger values produce stronger soil resistance at low soil moisture.",
-    )
-    litter_whc: float = param_field(
-        unit="cm",
-        domain=_D.POSITIVE,
-        description="Litter layer water holding capacity (SIPNET param: litterWHC). "
-        "Used together with litter_water_frac to initialise litterWater.",
     )
     leaf_pool_depth: float | None = param_field(
         unit="cm",
@@ -886,7 +858,7 @@ All parameter names are guaranteed unique across groups.
 Groups and their parameters:
 
 - ``initial_conditions`` — ``plant_wood``, ``lai``, ``litter``, ``soil``,
-  ``soil_water_frac``, ``litter_water_frac``, ``snow``, ``fine_root_frac``,
+  ``soil_water_frac``, ``snow``, ``fine_root_frac``,
   ``coarse_root_frac``
 - ``photosynthesis`` — ``a_max``, ``a_max_frac``, ``base_fol_resp_frac``,
   ``psn_t_min``, ``psn_t_opt``, ``d_vpd_slope``, ``d_vpd_exp``,
@@ -900,13 +872,12 @@ Groups and their parameters:
   ``base_coarse_root_resp``, ``fine_root_q10``, ``coarse_root_q10``,
   ``base_soil_resp``, ``soil_resp_q10``, ``soil_resp_moist_effect``,
   ``litter_breakdown_rate``, ``frac_litter_respired``
-- ``allocation`` — ``fine_root_allocation``, ``fine_root_exudation``,
-  ``coarse_root_exudation``, ``wood_allocation``,
+- ``allocation`` — ``fine_root_allocation``, ``wood_allocation``,
   ``fine_root_turnover_rate``, ``coarse_root_turnover_rate``,
   ``wood_turnover_rate``
 - ``water`` — ``water_remove_frac``, ``frozen_soil_eff``, ``wue_const``,
   ``soil_whc``, ``immed_evap_frac``, ``fast_flow_frac``, ``snow_melt``,
-  ``rd_const``, ``r_soil_const1``, ``r_soil_const2``, ``litter_whc``,
+  ``rd_const``, ``r_soil_const1``, ``r_soil_const2``,
   ``leaf_pool_depth``
 - ``leaf`` — ``leaf_c_sp_wt``, ``c_frac_leaf``
 
