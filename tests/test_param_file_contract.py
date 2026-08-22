@@ -87,37 +87,37 @@ def params_for(minimal_params):
 @requires_binary
 class TestSipnetRecognisesEveryParameter:
     @pytest.mark.parametrize("flags", FLAG_CASES)
-    def test_no_unknown_parameters(self, tmp_path, params_for, sample_clim_path, flags):
+    def test_no_unknown_parameters(self, tmp_path, params_for, reference_clim_path, flags):
         """Every name we write must be one SIPNET knows.
 
         An unknown name is only a log line in SIPNET, so without this test a
         renamed or misspelled parameter would silently stop having any effect.
         """
-        proc = _run_sipnet(tmp_path, params_for(flags), flags, sample_clim_path)
+        proc = _run_sipnet(tmp_path, params_for(flags), flags, reference_clim_path)
         combined = proc.stdout + proc.stderr
         unknown = [ln for ln in combined.splitlines() if "Unknown param" in ln]
         assert not unknown, "SIPNET did not recognise some parameters:\n" + "\n".join(unknown)
 
     @pytest.mark.parametrize("flags", FLAG_CASES)
-    def test_no_required_parameter_is_missing(self, tmp_path, params_for, sample_clim_path, flags):
+    def test_no_required_parameter_is_missing(self, tmp_path, params_for, reference_clim_path, flags):
         """SIPNET must not report a required parameter as absent.
 
         Complements ``validate_for_flags``: that checks our own idea of what is
         required, this checks SIPNET's.
         """
-        proc = _run_sipnet(tmp_path, params_for(flags), flags, sample_clim_path)
+        proc = _run_sipnet(tmp_path, params_for(flags), flags, reference_clim_path)
         combined = proc.stdout + proc.stderr
         missing = [ln for ln in combined.splitlines() if "required parameter" in ln]
         assert not missing, "SIPNET reported missing parameters:\n" + "\n".join(missing)
 
     @pytest.mark.parametrize("flags", FLAG_CASES)
-    def test_run_succeeds(self, tmp_path, params_for, sample_clim_path, flags):
-        proc = _run_sipnet(tmp_path, params_for(flags), flags, sample_clim_path)
+    def test_run_succeeds(self, tmp_path, params_for, reference_clim_path, flags):
+        proc = _run_sipnet(tmp_path, params_for(flags), flags, reference_clim_path)
         assert proc.returncode == 0, proc.stdout + proc.stderr
 
     @pytest.mark.parametrize("flags", FLAG_CASES)
-    def test_output_file_is_produced(self, tmp_path, params_for, sample_clim_path, flags):
-        _run_sipnet(tmp_path, params_for(flags), flags, sample_clim_path)
+    def test_output_file_is_produced(self, tmp_path, params_for, reference_clim_path, flags):
+        _run_sipnet(tmp_path, params_for(flags), flags, reference_clim_path)
         out = tmp_path / "sipnet.out"
         assert out.exists()
         # Header row plus at least one timestep.
@@ -154,8 +154,8 @@ class TestObsoleteParametersAreGone:
             assert name not in written, f"retired placeholder {name!r} is still being written"
 
     def test_sipnet_logs_no_unknown_parameters_at_all(
-        self, tmp_path, minimal_params, sample_clim_path
+        self, tmp_path, minimal_params, reference_clim_path
     ):
         """The clean-run baseline: zero unknown-parameter lines, not merely few."""
-        proc = _run_sipnet(tmp_path, minimal_params, ModelFlags.standard(), sample_clim_path)
+        proc = _run_sipnet(tmp_path, minimal_params, ModelFlags.standard(), reference_clim_path)
         assert "Unknown param" not in proc.stdout + proc.stderr
