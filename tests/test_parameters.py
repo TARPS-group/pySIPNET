@@ -405,3 +405,63 @@ class TestSIPNETParameters:
 
     def test_validate_for_flags_standard_ok(self, minimal_params):
         minimal_params.validate_for_flags(ModelFlags.standard())
+
+
+class TestValidateForFlags:
+    """Every flag-conditional parameter must be checked before SIPNET runs.
+
+    This is design principle 2 in practice: a parameter SIPNET will demand
+    should be reported as missing here, naming the field, rather than as an
+    exit code from a subprocess. Each branch is exercised because an unchecked
+    one produces exactly the deep failure the method exists to avoid.
+    """
+
+    def _without(self, params, group, field):
+        """Return a copy of *params* with one field cleared."""
+        data = params.model_dump()
+        data[group][field] = None
+        return type(params).model_validate(data)
+
+    @pytest.mark.parametrize(
+        ("flags", "group", "field"),
+        [
+            (ModelFlags(snow=True), "water", "snow_melt"),
+            (ModelFlags(leaf_water=True), "water", "leaf_pool_depth"),
+            (ModelFlags(litter_pool=True), "respiration", "litter_breakdown_rate"),
+            (ModelFlags(litter_pool=True), "respiration", "frac_litter_respired"),
+            (ModelFlags(gdd=True), "phenology", "gdd_leaf_on"),
+            (ModelFlags(gdd=False, soil_phenol=True), "phenology", "soil_temp_leaf_on"),
+        ],
+        ids=lambda v: v if isinstance(v, str) else "",
+    )
+    def test_missing_required_parameter_is_reported(self, minimal_params, flags, group, field):
+        stripped = self._without(minimal_params, group, field)
+        with pytest.raises(ValueError, match=field):
+            stripped.validate_for_flags(flags)
+
+    def test_leaf_on_day_is_required_when_neither_trigger_is_on(self, minimal_params):
+        """With gdd and soil_phenol both off, leaf-out falls back to a fixed day."""
+        flags = ModelFlags(gdd=False, soil_phenol=False)
+        stripped = self._without(minimal_params, "phenology", "leaf_on_day")
+        with pytest.raises(ValueError, match="leaf_on_day"):
+            stripped.validate_for_flags(flags)
+
+    def test_a_parameter_is_not_demanded_when_its_flag_is_off(self, minimal_params):
+        """The complement: an off flag must not make its parameter required."""
+        stripped = self._without(minimal_params, "water", "leaf_pool_depth")
+        stripped.validate_for_flags(ModelFlags(leaf_water=False))
+
+    def test_all_missing_parameters_are_reported_together(self, minimal_params):
+        """One round trip should surface every problem, not the first."""
+        data = minimal_params.model_dump()
+        data["respiration"]["litter_breakdown_rate"] = None
+        data["respiration"]["frac_litter_respired"] = None
+        stripped = type(minimal_params).model_validate(data)
+        with pytest.raises(ValueError) as exc:
+            stripped.validate_for_flags(ModelFlags(litter_pool=True))
+        message = str(exc.value)
+        assert "litter_breakdown_rate" in message
+        assert "frac_litter_respired" in message
+
+    def test_a_complete_parameter_set_passes(self, minimal_params):
+        minimal_params.validate_for_flags(ModelFlags.standard())
