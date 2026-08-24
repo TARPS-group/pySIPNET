@@ -253,10 +253,19 @@ Format: `year day <type> <type-specific params...>`, one event per line, and rec
 | `harv` | fractionRemovedAbove, fractionRemovedBelow, fractionTransferredAbove, fractionTransferredBelow |
 | `irrig` | amountAdded, method (0 = canopy, 1 = soil, 2 = flood — declared but **not supported**) |
 | `plant` | leafC, woodC, fineRootC, coarseRootC |
-| `till` | fractionLitterTransferred, somDecompModifier, litterDecompModifier |
+| `till` | tillageEffect |
 
-An unknown event keyword or a wrong param count is a hard error. Events produce an
-`events.out` file alongside the main output.
+An unknown event keyword is a hard error. A wrong param **count** is not, in
+one direction: `sscanf` stops once it has filled its arguments, so a line with
+*too many* values is accepted and the surplus discarded without a word. That is
+how a tillage bug survived — pySIPNET wrote the three parameters older SIPNET
+took, v2.1.0 reads one, and the litter fraction was silently applied as the
+decomposition boost. `pysipnet/events.py` now checks the count exactly on read,
+and `tests/test_events_contract.py` asserts every arity against
+`NUM_*_PARAMS` in `sipnet/src/sipnet/events.h` so it cannot drift again.
+
+Events produce an `events.out` file alongside the main output, recording what
+SIPNET actually applied — which is what makes this contract testable.
 
 ### SIPNET Output
 
