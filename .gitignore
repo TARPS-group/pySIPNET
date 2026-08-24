@@ -1,5 +1,7 @@
 # Project-specific files and directories
-data/
+# Anchored to the repo root so it ignores the local sample-data dir only, not
+# committed example data such as docs/examples/data/.
+/data/
 
 # macOS metadata
 .DS_Store

@@ -38,6 +38,15 @@ plugins:
             show_root_heading: true
             show_submodules: false
             members_order: source
+  - mkdocs-jupyter:
+      execute: false
+      include_source: true
+
+# Rendered example notebooks ship with their outputs (execute: false above), so
+# the docs build needs no SIPNET binary. Supporting data files under examples/
+# are not standalone pages.
+not_in_nav: |
+  /examples/data/README.md
 
 nav:
   - Home: index.md
@@ -51,6 +60,8 @@ nav:
       - Reproducible Workflows: user-guide/reproducible-runs.md
       - File I/O: user-guide/file-io.md
       - Common Workflows: user-guide/workflows.md
+  - Examples:
+      - MCMC Calibration: examples/mcmc_calibration.ipynb
   - API Reference:
       - Overview: api/index.md
 
