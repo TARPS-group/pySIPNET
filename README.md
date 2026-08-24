@@ -42,7 +42,7 @@ result = model()                    # baseline run
 result = model(a_max=140.0)         # override a single parameter
 result = model(climate=other_site)  # swap climate drivers
 
-print(result.outputs[["nee", "gpp"]].sum())
+print(result.outputs.data[["nee", "gpp"]].sum())
 ```
 
 ## Documentation

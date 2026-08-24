@@ -1,6 +1,6 @@
-"""SIPNET v1 parameter models.
+"""SIPNET parameter models.
 
-All inputs to a SIPNET v1 run are captured here as Pydantic models.  The
+All inputs to a SIPNET run are captured here as Pydantic models.  The
 models mirror the structure of SIPNET's ``.param`` file but use snake_case
 field names and explicit units.  The IO layer (:mod:`pysipnet.io.param_io`)
 handles translation to SIPNET's camelCase names.
@@ -49,8 +49,8 @@ explicit fractions sum to strictly less than 1.
 
 Flag-dependent parameters
 -------------------------
-Some parameters are only meaningful when the corresponding compile-time flag is
-active.  These fields are ``Optional[float]`` with a default of ``None``.
+Some parameters are only meaningful when the corresponding model flag is on.
+These fields are ``Optional[float]`` with a default of ``None``.
 :class:`SIPNETParameters` validates that required-by-flag parameters are
 provided given the active :class:`ModelFlags`.
 
@@ -511,9 +511,8 @@ class PhenologyParams(BaseModel):
     """Parameters controlling leaf phenology (growing season timing and leaf dynamics).
 
     Exactly one of ``leaf_on_day``, ``gdd_leaf_on``, or ``soil_temp_leaf_on``
-    will be active depending on the compile-time flags (``GDD`` or
-    ``SOIL_PHENOL``).  The inactive alternatives are still stored here but are
-    ignored by SIPNET.
+    is used, depending on the ``gdd`` and ``soil_phenol`` model flags.  The
+    other two may still be set here; SIPNET ignores them.
     """
 
     leaf_on_day: float | None = param_field(
@@ -853,12 +852,11 @@ class LeafPhysiologyParams(BaseModel):
 
 
 class SIPNETParameters(BaseModel):
-    """Complete parameter set for a SIPNET v1 run.
+    """Complete parameter set for a SIPNET run.
 
     Composed of domain-grouped sub-models.  All fields are required unless
-    otherwise noted.  The companion :class:`ModelFlags` controls which
-    compile-time features are active and therefore which parameters are
-    actually used by SIPNET.
+    otherwise noted.  The companion :class:`ModelFlags` decides which optional
+    processes are on, and therefore which parameters SIPNET requires.
 
     Serialisation / deserialisation::
 

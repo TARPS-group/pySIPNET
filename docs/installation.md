@@ -13,7 +13,7 @@ pySIPNET uses a git **submodule** to track the pinned SIPNET source.  You must
 clone with `--recurse-submodules` to get it:
 
 ```bash
-git clone --recurse-submodules https://github.com/andrewroberts/pySIPNET.git
+git clone --recurse-submodules https://github.com/TARPS-group/pySIPNET.git
 cd pySIPNET
 ```
 
@@ -117,7 +117,7 @@ closed list — any valid combination of flags works without rebuilding.
 
 ```bash
 uv run python -c "import pysipnet; print(pysipnet.__version__)"
-uv run pytest tests/ -m "not integration"   # fast tests (no binary required)
+uv run pytest tests/ -m "not integration and not network"   # fast tests (no binary required)
 uv run pytest tests/ -m integration         # full tests (requires compiled binary)
 ```
 
@@ -131,7 +131,7 @@ To update the pin:
 3. Return to the repo root and stage the change: `cd .. && git add sipnet/`
 4. Commit the update: `git commit -m "chore: update SIPNET pin to <short-hash>"`
 5. Update `pysipnet/version.py` (`SIPNET_PINNED_COMMIT`) and this page.
-6. Rebuild all binaries: `make clean-sipnet sipnet`
+6. Rebuild the binary: `make clean-sipnet sipnet`
 7. Run the full test suite: `uv run pytest`
 
 !!! warning "Regenerate documentation after any version change"

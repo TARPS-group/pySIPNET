@@ -15,8 +15,9 @@ Two column-count variants are accepted on read:
 * **13 columns**: the same layout without the leading ``loc`` column.
 
 The writer always produces 14 columns.  The ``loc`` column (col 1) and the
-``soil_wetness`` column (col 14) are required by the file format but are never
-read by SIPNET; see :data:`_SOIL_WETNESS_FILL` for details.
+``soil_wetness`` column (col 14) carry no information SIPNET uses. Note SIPNET does
+read ``loc``: it errors if the value changes between rows, so the writer emits
+a constant. See :data:`_SOIL_WETNESS_FILL` for the soil-wetness filler.
 
 Column 8 (``par``) units
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -78,7 +79,7 @@ _DATA_END_IN_14 = 13
 
 # ── Padding values ─────────────────────────────────────────────────────────────
 
-# The soilWetness column (col 14 in v1) is required by the v1 file format but
+# The soilWetness column (col 14 of the 14-column layout) is required by that layout but
 # is never used by SIPNET.  Any float is valid; 0.6 is written as an innocuous
 # placeholder so files look plausible on manual inspection.
 _SOIL_WETNESS_FILL = 0.6

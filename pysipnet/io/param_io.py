@@ -1,6 +1,6 @@
 """Read and write SIPNET ``.param`` files.
 
-SIPNET parameter file format (v1)
+SIPNET parameter file format
 ----------------------------------
 Space/tab-delimited, two used columns::
 

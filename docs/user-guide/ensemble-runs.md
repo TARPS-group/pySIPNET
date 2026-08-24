@@ -1,7 +1,7 @@
 # Ensemble Runs
 
 This guide explains how to run SIPNET over many parameter and climate
-configurations using [PyEns](https://github.com/andrewroberts/pyens).  It
+configurations using [PyEns](https://github.com/arob5/PyEns).  It
 assumes you are comfortable with the single-run interface covered in
 [Running a Model](running-a-model.md).
 
@@ -65,7 +65,7 @@ result = model(a_max=112.0, base_veg_resp=0.02)
 print(result.outputs.data[["nee", "gpp"]].sum())
 ```
 
-Any SIPNET v1 parameter name can be passed as a keyword argument.  The
+Any SIPNET parameter name can be passed as a keyword argument.  The
 reserved names `climate` and `events` pass a `ClimateDrivers` or
 `EventSequence` directly through to the runner.
 

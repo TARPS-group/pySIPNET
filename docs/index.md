@@ -31,7 +31,6 @@ from pysipnet.parameters import (
     InitialConditions, PhotosynthesisParams, PhenologyParams,
     RespirationParams, AllocationParams, WaterParams, LeafPhysiologyParams,
 )
-from pysipnet.climate import ClimateDrivers
 
 params = SIPNETParameters(
     initial_conditions=InitialConditions(

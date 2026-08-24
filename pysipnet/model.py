@@ -12,7 +12,7 @@ and exposes a single ``__call__`` interface::
     result_site_b    = model(climate=other_climate)     # different drivers
     result_both      = model(a_max=120.0, climate=other_climate)
 
-Any SIPNET v1 parameter name (see
+Any SIPNET parameter name (see
 :data:`~pysipnet.parameters.SIPNET_PARAMS_BY_GROUP`) can be passed as a keyword
 argument to override the baseline value for that run.  The reserved names
 ``climate`` and ``events`` pass a
@@ -112,7 +112,7 @@ class SIPNETModel:
         result_site_b = model(climate=other_climate)    # swap climate drivers
         result_both   = model(a_max=140.0, climate=other_climate)
 
-    Any SIPNET v1 parameter name is accepted as a keyword argument.
+    Any SIPNET parameter name is accepted as a keyword argument.
     Unrecognised names raise :class:`ValueError` immediately.  Invalid
     parameter values (e.g., a negative ``a_max``) raise
     :class:`pydantic.ValidationError` before the binary is invoked.
@@ -189,7 +189,7 @@ class SIPNETModel:
             Optional management event sequence.
         **param_overrides:
             Parameter values to override for this run.  Each key must be a
-            valid SIPNET v1 parameter name (see
+            valid SIPNET parameter name (see
             :data:`~pysipnet.parameters.SIPNET_PARAMS_BY_GROUP`).
             Unrecognised keys raise :class:`ValueError` immediately.
 

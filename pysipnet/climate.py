@@ -1,15 +1,15 @@
 """Climate driver data structure and I/O.
 
 The :class:`ClimateDrivers` class holds the meteorological forcing time series
-required by SIPNET.  It is layout-aware: the column layout differs between
-SIPNET v1 (14 columns) and v2 (12 columns).
+required by SIPNET.  It is layout-aware: the number of columns differs between
+the 14-column and 12-column layouts, both of which the pinned SIPNET reads.
 
 Column conventions
 ------------------
 Python-side column names use ``snake_case`` and match the table below.  The
 I/O layer maps these to the positional format SIPNET expects.
 
-SIPNET v1 climate file (14 columns, space-delimited, no header):
+14-column climate file (the layout the writer emits, space-delimited, no header):
 
 +-----+----------------+---------+-------------------------------------------+
 | Col | Name           | Unit    | Notes                                     |

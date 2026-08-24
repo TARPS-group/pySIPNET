@@ -1,15 +1,20 @@
-"""Compile the SIPNET binary and check that it is present.
+"""Get a SIPNET binary, and check that the one you have is the right one.
 
 The ``Makefile`` at the repository root is the main way to build SIPNET. This
 module wraps it so that scripts and tests can build and locate the binary
 without shelling out to ``make`` themselves.
 
-Typical usage::
+Two ways to get one::
 
-    from pysipnet.build import build_sipnet, ensure_binary
+    from pysipnet.build import build_sipnet, download_sipnet, ensure_binary
 
-    build_sipnet()     # compile, or do nothing if the binary already exists
-    ensure_binary()    # return the path, or raise if it has not been built
+    build_sipnet()     # compile from the submodule source; works anywhere
+    download_sipnet()  # fetch a prebuilt binary; no C toolchain needed
+    ensure_binary()    # return the path, or raise if there is no binary yet
+
+Compiling is the default. Downloading is available for the platforms upstream
+publishes binaries for, verifies a pinned checksum before unpacking anything,
+and never happens unless asked.
 
 There is a single binary. Every model option that pySIPNET can set — snow,
 litter pool, nitrogen cycle, and the rest — is chosen at run time through the
@@ -115,8 +120,9 @@ def ensure_binary() -> Path:
     if not target.exists():
         raise FileNotFoundError(
             f"SIPNET binary not found at {target}. "
-            "Build it by running 'make sipnet' from the repository root, "
-            "or by calling pysipnet.build.build_sipnet()."
+            "Build it by running 'make sipnet' from the repository root, or "
+            "fetch a prebuilt one with 'make sipnet-download'. The equivalent "
+            "Python calls are build_sipnet() and download_sipnet()."
         )
     return target
 

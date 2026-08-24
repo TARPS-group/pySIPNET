@@ -149,7 +149,7 @@ saved run does not change meaning if a future default changes.
 | `EVENTS` | 1 | we always set it explicitly |
 | `PRINT_HEADER` | 1 | we always set 1; the output reader matches columns by name |
 | `DO_MAIN_OUTPUT` | 1 | |
-| `DO_SINGLE_OUTPUT` | 0 | |
+| `DO_SINGLE_OUTPUTS` | 0 | **plural** — see below |
 | `DUMP_CONFIG` | 0 | writes SIPNET's resolved config; used by our tests |
 | `QUIET` | 0 | |
 | `INPUT_FILE` | `sipnet.in` | |
@@ -164,6 +164,14 @@ Model flags: `GDD` (1), `SNOW` (1), `WATER_HRESP` (1), `GROWTH_RESP` (0),
 `validateContext()` rejects three combinations, mirrored in `ModelFlags`:
 `GDD` with `SOIL_PHENOL`; `ANAEROBIC` without `WATER_HRESP`; `NITROGEN_CYCLE`
 without both `LITTER_POOL` and `ANAEROBIC`.
+
+**`DO_SINGLE_OUTPUTS` must be plural.** SIPNET derives each config key from
+the C *field* name via `nameToKey`, not from the label it prints for the
+setting. `CREATE_INT_CONTEXT(doSingleOutputs, "DO_SINGLE_OUTPUT", ...)` gives
+the field `doSingleOutputs` → key `dosingleoutputs`, while the printed label
+and SIPNET's own docs say `DO_SINGLE_OUTPUT` → `dosingleoutput`. The singular
+form is silently ignored. `tests/test_sipnet_in.py` caught this the moment the
+key was added; it is the reason that test reads SIPNET's log back.
 
 Precedence is `DEFAULT < INPUT_FILE < COMMAND_LINE < CALCULATED`.
 `PARAM_FILE` / `CLIM_FILE` / `OUT_FILE` exist as keys but are overwritten from
@@ -239,7 +247,9 @@ real work.
 
 ### `events.in` (optional)
 
-Fixed filename, read from the working directory only when `EVENTS` is on. A **missing file
+Read from the working directory only when `EVENTS` is on. The name comes
+from `EVENTS_PREFIX` (default `events`, giving `events.in` and `events.out`);
+pySIPNET leaves that at the default. A **missing file
 is harmless** — `readEventData` guards with `access(..., F_OK)` and logs
 `"No event file found, assuming no events"`.
 
@@ -342,8 +352,10 @@ Python model** because the flags default off:
 - `NITROGEN_CYCLE`: `mineralNInit`, `soilOrgNInit`, `litterOrgNInit`,
   `nVolatilizationFrac`, `nLeachingFrac`, `leafCN`, `woodCN`, `fineRootCN`,
   `kCN`, `nFixationFracMax`, `halfNFixationMax`
-- `ANAEROBIC`: `fAnoxia`, `anaerobicDecompRate`, `anaerobicTransExp`,
-  `soilMethaneRate`, `litterMethaneRate`
+- `ANAEROBIC`: `anaerobicDecompRate`, `anaerobicTransExp`, `soilMethaneRate`,
+  `litterMethaneRate`
+- `ANAEROBIC` **or** `NITROGEN_CYCLE`: `fAnoxia` — registered
+  `ctx.anaerobic || ctx.nitrogenCycle`, so either flag alone demands it
 - `FLOODING`: `waterDrainFrac`
 
 **These three flags are refused by `ModelFlags`,** because accepting them
@@ -381,7 +393,9 @@ different parameters depending on `sipnet.in`. `ModelFlags` mirrors this in
 
 - **48 parameters are unconditionally required.**
 - Default flags (`gdd`, `snow`, `water_hresp`) add `gddLeafOn`, `snowMelt` and
-  `soilRespMoistEffect` → **51 required**, and 51 lines is the whole file.
+  `soilRespMoistEffect` → **51 required**. The writer emits every parameter
+  that is not `None`, so the actual line count is 51 plus whichever optional
+  ones you set.
 - `litter_pool` adds `litterBreakdownRate` and `fracLitterRespired` → **53**.
 - No obsolete placeholders. The previous pin needed 64 lines for the equivalent
   configuration.
@@ -418,15 +432,15 @@ different parameters depending on `sipnet.in`. `ModelFlags` mirrors this in
 ```
 pySIPNET/
 ├── sipnet/                       # git submodule — SIPNET source, pinned to v2.1.0
-├── Makefile                      # one target: `make sipnet`
+├── Makefile                      # `make sipnet`, `make sipnet-download`
 ├── pysipnet/
 │   ├── version.py                # pinned commit, target version, clim column counts
-│   ├── build.py                  # compile, locate and fingerprint the binary
+│   ├── build.py                  # compile or download, locate, verify the binary
 │   ├── parameters/
 │   │   ├── base.py               # ParameterSpec, param_field, domains (version-agnostic)
 │   │   └── model.py              # ModelFlags and SIPNETParameters
 │   ├── climate.py                # ClimateDrivers + validation
-│   ├── events.py                 # management events
+│   ├── events.py                 # management events (arity checked against SIPNET)
 │   ├── io/
 │   │   ├── param_io.py           # read/write .param
 │   │   ├── clim_io.py            # read/write .clim (12- and 14-column layouts)
@@ -441,6 +455,8 @@ pySIPNET/
 ├── tests/
 │   ├── test_sipnet_in.py         # the sipnet.in contract, incl. SIPNET's config dump
 │   ├── test_param_file_contract.py  # the .param contract across flag combinations
+│   ├── test_events_contract.py   # the events.in contract, incl. arities
+│   ├── test_download.py          # prebuilt-binary download and its verification
 │   ├── test_fidelity.py          # wrapper output == bare binary output
 │   ├── test_golden.py            # frozen numeric baseline
 │   ├── test_build.py             # binary/pin agreement

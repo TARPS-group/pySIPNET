@@ -42,7 +42,7 @@ A SIPNET run requires two inputs: climate drivers and a parameter set.
 ### Climate data
 
 Climate forcing is stored in a SIPNET `.clim` file — one row per timestep,
-14 columns of meteorological variables.
+12 meteorological values per row.
 
 ```python
 from pysipnet import ClimateDrivers
@@ -205,7 +205,7 @@ For I/O options — keeping files on disk, lazy output loading, climate staging
 | `ModelFlags.standard()` | snow, degree-day leaf-out, moisture-sensitive soil respiration |
 | `ModelFlags.forest()` | as above, plus a separate litter carbon pool |
 
-Use `FOREST` for sites with a distinct litter carbon layer.  It additionally
+Use `ModelFlags.forest()` for sites with a distinct litter carbon layer.  It additionally
 requires `respiration.litter_breakdown_rate` and `respiration.frac_litter_respired`.
 
 ---
@@ -234,7 +234,7 @@ print(result.outputs.data[["nee", "gpp"]].sum())
 
 ### Parameter overrides
 
-Pass any SIPNET v1 parameter name as a keyword argument to override its value
+Pass any SIPNET parameter name as a keyword argument to override its value
 for that run.  All other parameters stay at their baseline values.  The
 override is applied, Pydantic-validated, and discarded — `model.base_params`
 is never mutated.
@@ -287,14 +287,24 @@ Both `SIPNETModel` and `SIPNETRunner.run()` return a `SIPNETResult`.
 
 ```python
 print(result.outputs.data.columns.tolist())
-# ['year', 'day', 'time',
-#  'plant_wood_c', 'plant_leaf_c', 'wood_creation',
+# 36 columns:
+#  'year', 'day', 'time',
+#  'plant_wood_c', 'plant_leaf_c', 'wood_creation', 'npp_storage',
 #  'soil_c', 'coarse_root_c', 'fine_root_c', 'litter_c',
 #  'soil_water', 'soil_wetness_frac', 'snow',
 #  'npp', 'nee', 'cum_nee', 'gpp',
 #  'r_aboveground', 'r_soil', 'r_root', 'ra', 'rh', 'rtot',
-#  'evapotranspiration', 'transpiration', 'f_par']
+#  'evapotranspiration', 'transpiration',
+#  'mineral_n', 'soil_organic_n', 'litter_n', 'n2o',
+#  'n_leaching', 'n_fixation', 'n_uptake', 'ch4',
+#  'balance_delta_c', 'balance_delta_n'
 ```
+
+Every column is always present. A process that is switched off writes zeros
+rather than omitting its column, so the nitrogen and methane columns are there
+but empty unless those processes are on. `balance_delta_c` and
+`balance_delta_n` are SIPNET's own mass-balance checks and should stay near
+zero.
 
 Key variables:
 
@@ -360,7 +370,7 @@ list(SIPNET_PARAMS_BY_GROUP.keys())
 #  'allocation', 'water', 'leaf']
 
 # Total parameter count
-sum(len(ps) for ps in SIPNET_PARAMS_BY_GROUP.values())  # 61
+sum(len(ps) for ps in SIPNET_PARAMS_BY_GROUP.values())  # 57
 ```
 
 ### get_parameter_specs

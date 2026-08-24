@@ -2,7 +2,7 @@
 
 This module provides :func:`sipnet_site_fields` and
 :func:`sipnet_member_fields`, which build PyEns
-:class:`~pyens.FieldSpec` objects pre-validated against the SIPNET v1
+:class:`~pyens.FieldSpec` objects pre-validated against the SIPNET
 parameter schema.
 
 The primary model interface — :class:`~pysipnet.model.SIPNETModel` — lives
@@ -65,7 +65,7 @@ def sipnet_site_fields(
         Climate drivers for each site, one per site in axis order.
     **site_params:
         Parameter values for each site, one per site in axis order.  Each
-        keyword argument key must be a valid SIPNET v1 parameter name.
+        keyword argument key must be a valid SIPNET parameter name.
 
     Returns
     -------
@@ -114,7 +114,7 @@ def sipnet_member_fields(
         The :class:`~pyens.Axis` defining the set of ensemble members.
     **param_samples:
         Parameter values for each member, one per member in axis order.  Each
-        keyword argument key must be a valid SIPNET v1 parameter name.
+        keyword argument key must be a valid SIPNET parameter name.
 
     Returns
     -------

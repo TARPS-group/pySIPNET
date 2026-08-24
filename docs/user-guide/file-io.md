@@ -17,7 +17,7 @@ follows the same file lifecycle:
    (default: the system temp directory).
 2. **Stage inputs** — write `sipnet.param`, `sipnet.clim`, and (optionally)
    `events.in` into the working directory.
-3. **Write `sipnet.in`** — the two-line config file that tells SIPNET where to
+3. **Write `sipnet.in`** — the run configuration file that tells SIPNET where to
    find its inputs.
 4. **Execute the binary** — SIPNET reads the staged files and writes
    `sipnet.out` in the same directory.

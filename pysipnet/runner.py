@@ -106,10 +106,13 @@ class ClimateStaging(StrEnum):
 def _render_sipnet_in(flags: ModelFlags, *, events_enabled: bool) -> str:
     """Build the contents of the ``sipnet.in`` config file for one run.
 
-    SIPNET reads its run configuration from this file. Every setting is written
-    explicitly, including ones that match SIPNET's own defaults, so the file is
-    a complete record of how the model was configured. That keeps a saved run
-    reproducible even if a future SIPNET version changes a default.
+    SIPNET reads its run configuration from this file. Everything pySIPNET
+    depends on is written explicitly, including settings that match SIPNET's
+    own defaults, so a saved run keeps its meaning even if a future SIPNET
+    changes one of those defaults.
+
+    Settings pySIPNET does not rely on — ``QUIET``, ``EVENTS_PREFIX``,
+    ``DUMP_CONFIG``, ``INPUT_FILE`` — are left out and take SIPNET's defaults.
 
     Parameters
     ----------
@@ -132,6 +135,18 @@ def _render_sipnet_in(flags: ModelFlags, *, events_enabled: bool) -> str:
         # columns by name, so results stay parseable even when a flag change
         # alters which columns SIPNET writes.
         "PRINT_HEADER": 1,
+        # Written rather than assumed: if a future SIPNET defaulted this off,
+        # there would be no output file to read and the failure would look
+        # like a missing file rather than a configuration change.
+        "DO_MAIN_OUTPUT": 1,
+        # We parse the combined output, so the per-variable files are just
+        # extra work and extra files in the working directory.
+        #
+        # Note the plural. SIPNET builds its config keys from the C *field*
+        # name (doSingleOutputs), not from the label it prints for the setting
+        # (DO_SINGLE_OUTPUT), and the two disagree here. The singular form —
+        # the one SIPNET's own docs give — is silently ignored.
+        "DO_SINGLE_OUTPUTS": 0,
         "EVENTS": int(events_enabled),
     }
     settings.update(flags.to_config_keys())
