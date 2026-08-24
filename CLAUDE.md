@@ -377,8 +377,10 @@ asserts every name in that table is a parameter the pinned SIPNET actually
 registers **and** is still absent from our model, so the table cannot go stale
 in either direction.
 
-Adding these is the natural next feature; do it as its own opt-in group so the
-default parameter set stays as small as it is now. Note `fAnoxia` **does** exist
+Adding these is tracked in issue #26. Do it as its own opt-in group so the
+default parameter set stays as small as it is now, and start with `flooding` —
+one parameter, no flag dependencies, so it exercises the whole path with the
+least in the way. Note `fAnoxia` **does** exist
 at this pin, contradicting the earlier note that it was v2-only.
 
 The `MICROBES` and `SOIL_QUALITY` processes were removed upstream, so their

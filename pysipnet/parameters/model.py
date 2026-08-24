@@ -94,6 +94,7 @@ _D = ParameterDomain  # local alias for brevity
 #
 # To add support for one: model its parameters, mark them required under the
 # flag in SIPNETParameters.validate_for_flags, then delete its entry here.
+# Tracked in issue #26.
 UNSUPPORTED_FLAGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "nitrogen_cycle": (
         "nitrogen pools and fluxes",
@@ -294,8 +295,7 @@ class ModelFlags(BaseModel):
             "Leave these flags off. Turning one on would produce a run that fails "
             "inside SIPNET rather than here.",
             "To add support, model the listed parameters and remove the flag from "
-            "UNSUPPORTED_FLAGS in this module. See the 'Optional nitrogen, methane "
-            "and flooding parameters' section of CLAUDE.md.",
+            "UNSUPPORTED_FLAGS in this module. Tracked in issue #26.",
         ]
         raise ValueError("\n".join(lines))
 
