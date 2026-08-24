@@ -314,10 +314,10 @@ is on — off in `ModelFlags.standard()`, on in `ModelFlags.forest()`.
 `fineRootAllocation`, `woodAllocation`, `fineRootTurnoverRate` (year⁻¹), `coarseRootTurnoverRate` (year⁻¹), `woodTurnoverRate` (year⁻¹)
 
 ### Water
-`waterRemoveFrac` (day⁻¹), `frozenSoilEff`, `wueConst`, `soilWHC` (cm), `immedEvapFrac`, `fastFlowFrac`, `snowMelt` (cm °C⁻¹ day⁻¹), `rdConst`, `rSoilConst1`, `rSoilConst2`, `leafPoolDepth`, `waterDrainFrac`
+`waterRemoveFrac` (day⁻¹), `frozenSoilEff`, `wueConst`, `soilWHC` (cm), `immedEvapFrac`, `fastFlowFrac`, `snowMelt` (cm °C⁻¹ day⁻¹), `rdConst`, `rSoilConst1`, `rSoilConst2`, `leafPoolDepth`
 
 `snowMelt` is required when `snow` is on (the default). `leafPoolDepth` is required
-when `leaf_water` is on (off by default). `waterDrainFrac` is required when `flooding` is on (off by default).
+when `leaf_water` is on (off by default).
 
 ### Optional nitrogen, methane and flooding parameters
 
@@ -330,6 +330,15 @@ Python model** because the flags default off:
 - `ANAEROBIC`: `fAnoxia`, `anaerobicDecompRate`, `anaerobicTransExp`,
   `soilMethaneRate`, `litterMethaneRate`
 - `FLOODING`: `waterDrainFrac`
+
+**Known gap:** `ModelFlags` accepts `nitrogen_cycle`, `anaerobic` and
+`flooding`, and `validate_for_flags` passes, but the parameters those flags
+require are not in the model — so the run reaches SIPNET and dies there with
+"Did not find required parameter". That contradicts design principle 2, which
+says required fields are enforced by the data model rather than discovered when
+SIPNET crashes. Either add the parameters, or have `ModelFlags` reject the three
+flags with a clear "not supported yet" message until they exist. The second is
+a few lines and closes the gap immediately.
 
 Adding these is the natural next feature; do it as its own opt-in group so the
 default parameter set stays as small as it is now. Note `fAnoxia` **does** exist
