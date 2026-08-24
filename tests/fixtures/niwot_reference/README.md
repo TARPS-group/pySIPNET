@@ -1,6 +1,6 @@
 # Niwot Ridge fidelity reference fixture
 
-These files are an **independently-authored** SIPNET v1 input set, used by
+These files are an **independently-authored** SIPNET input set, used by
 `tests/test_fidelity.py` to verify that the pySIPNET wrapper reproduces the
 output of the SIPNET binary run by hand on the same inputs.
 
@@ -17,7 +17,17 @@ Copied verbatim from the SIPNET submodule's own smoke-test suite:
 
 Pinned SIPNET submodule commit at time of copy:
 
-    e4abf14f2445133c785b756025a2e39e60c7760f  (v1.3.0-82-ge4abf14)
+    1bd16b782c9941c98abcb9615e8626f1fd78c309  (v2.1.0)
+
+`sipnet.param` is byte-identical to the upstream file at that commit, and
+`sipnet.clim` matches its first 800 rows exactly. Keep it that way: the whole
+value of this fixture is that pySIPNET did not write it, so any drift weakens
+what the fidelity test proves.
+
+Note that the upstream file still lists parameters SIPNET removed at v2.0.0,
+so a run against it logs unknown-parameter warnings. Those come from upstream's
+own fixture, not from pySIPNET's writer; `tests/test_param_file_contract.py`
+checks our writer separately and requires it to produce none.
 
 The point of using an upstream, wrapper-independent file is that a bug in the
 pySIPNET `.param` writer (a wrong name, unit, or dropped field) would make the

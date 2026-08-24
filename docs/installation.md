@@ -105,7 +105,7 @@ uv run pytest tests/ -m integration         # full tests (requires compiled bina
 
 ## Upgrading SIPNET
 
-The SIPNET source is pinned to commit `e4abf14f` (the last pre-v2 commit).
+The SIPNET source is pinned to the v2.1.0 release (commit `1bd16b78`).
 To update the pin:
 
 1. Navigate to the submodule: `cd sipnet/`
