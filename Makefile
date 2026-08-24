@@ -11,7 +11,7 @@ SIPNET_DIR := sipnet
 CACHE_DIR  := .sipnet_cache
 BINARY     := $(CACHE_DIR)/sipnet
 
-.PHONY: sipnet submodule clean-sipnet
+.PHONY: sipnet sipnet-download submodule clean-sipnet
 
 # Default target: build SIPNET and copy the binary into the cache directory
 # where pysipnet.runner looks for it.
@@ -21,6 +21,14 @@ sipnet: submodule
 	mkdir -p $(CACHE_DIR)
 	cp $(SIPNET_DIR)/sipnet $(BINARY)
 	@echo "Built: $(BINARY)"
+	@$(BINARY) --version
+
+# Fetch a prebuilt binary instead of compiling. Useful on a machine without a
+# C toolchain. The archive's SHA-256 is pinned in pysipnet/version.py and
+# checked before anything is unpacked; compiling from source (above) works on
+# any platform and is the default.
+sipnet-download:
+	uv run python -c "from pysipnet.build import download_sipnet; print(download_sipnet(force=True))"
 	@$(BINARY) --version
 
 # Fetch the submodule contents if this is a fresh clone.

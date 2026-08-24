@@ -74,6 +74,24 @@ source.  Binaries are placed in `.sipnet_cache/`.
 make sipnet           # builds the one SIPNET binary
 ```
 
+### Without a C compiler
+
+If compiling is inconvenient, fetch the binary the SIPNET project publishes
+with each release:
+
+```bash
+make sipnet-download
+```
+
+Available for `macos-arm64` and `linux-x86_64` only; anywhere else has to
+compile, which always works. The archive's SHA-256 is pinned in
+`pysipnet/version.py` and verified before anything is unpacked, and the
+installed binary is then asked for its version to confirm it is the release
+pySIPNET targets. Any mismatch aborts and leaves nothing installed.
+
+Compiling from source stays the default. Downloading never happens on its own —
+you have to ask for it.
+
 !!! note "One binary, no compiler flags"
     The build passes no configuration to the compiler. Every model option is
     chosen when a run starts, not when SIPNET is compiled, so a single binary

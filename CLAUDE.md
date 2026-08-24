@@ -48,8 +48,14 @@ the same model source, and a version change is an explicit, reviewable edit.
   by 1.8%. Upstream says as much: the change "will likely require
   recalibration of SIPNET params."
 - **Upstream ships binaries** for `linux-x86_64` and `macos-arm64` from v2.0.0
-  on, so local compilation is optional on those platforms. Verify checksums
-  before trusting a downloaded binary.
+  on, so local compilation is optional on those platforms.
+  `pysipnet.build.download_sipnet()` (or `make sipnet-download`) fetches one.
+  The archive SHA-256 is pinned in `SIPNET_RELEASE_ASSETS` and checked before
+  extraction, archive members are inspected so a hostile path cannot escape the
+  destination, and the installed binary is asked for its version afterwards.
+  A failure at any of those steps leaves nothing installed. Refresh the digests
+  whenever `SIPNET_PINNED_COMMIT` moves; a stale one fails loudly, which is what
+  you want. `pytest -m network` checks them against the published release.
 
 ### Pinning mechanics
 

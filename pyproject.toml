@@ -69,9 +69,12 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short"
 markers = [
     "integration: requires compiled SIPNET binary",
     "slow: takes more than a few seconds",
+    "network: reaches the internet; deselected by default, run with -m network",
 ]
+# Network tests are opt-in: the suite must pass offline and in CI without
+# depending on GitHub being reachable.
+addopts = "-v --tb=short -m 'not network'"
 
