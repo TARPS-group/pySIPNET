@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from pysipnet.parameters.base import ParameterDomain, get_parameter_specs
 from pysipnet.parameters.model import (
+    UNSUPPORTED_FLAGS,
     AllocationParams,
     ModelFlags,
     PhotosynthesisParams,
@@ -108,32 +109,138 @@ class TestModelFlagsRestrictions:
     def test_soil_phenol_alone_is_allowed(self):
         assert ModelFlags(gdd=False, soil_phenol=True).soil_phenol
 
-    def test_anaerobic_requires_water_hresp(self):
-        with pytest.raises(ValidationError, match="anaerobic requires water_hresp"):
-            ModelFlags(anaerobic=True, water_hresp=False)
+    def test_anaerobic_and_nitrogen_rules_are_still_correct(self):
+        """Check the SIPNET-mirroring rules that the unsupported-flag gate hides.
 
-    def test_anaerobic_with_water_hresp_is_allowed(self):
-        assert ModelFlags(anaerobic=True, water_hresp=True).anaerobic
+        ``anaerobic`` and ``nitrogen_cycle`` cannot be switched on through the
+        constructor at present, so these two rules are unreachable that way.
+        They still have to be right for when the flags become usable, so call
+        the validator directly on an instance built without validation.
+        """
+        # anaerobic without water_hresp
+        flags = ModelFlags.model_construct(anaerobic=True, water_hresp=False)
+        with pytest.raises(ValueError, match="anaerobic requires water_hresp"):
+            flags._check_flag_restrictions()
 
-    def test_nitrogen_cycle_requires_litter_pool_and_anaerobic(self):
-        with pytest.raises(ValidationError, match="nitrogen_cycle requires"):
-            ModelFlags(nitrogen_cycle=True)
+        # nitrogen_cycle without either dependency
+        flags = ModelFlags.model_construct(
+            nitrogen_cycle=True, litter_pool=False, anaerobic=False, gdd=True, soil_phenol=False
+        )
+        with pytest.raises(ValueError, match="nitrogen_cycle requires"):
+            flags._check_flag_restrictions()
 
-    def test_nitrogen_cycle_requires_anaerobic_too(self):
-        with pytest.raises(ValidationError, match="nitrogen_cycle requires"):
-            ModelFlags(nitrogen_cycle=True, litter_pool=True)
+        # nitrogen_cycle with only one dependency
+        flags = ModelFlags.model_construct(
+            nitrogen_cycle=True, litter_pool=True, anaerobic=False, gdd=True, soil_phenol=False
+        )
+        with pytest.raises(ValueError, match="nitrogen_cycle requires"):
+            flags._check_flag_restrictions()
 
-    def test_full_nitrogen_configuration_is_allowed(self):
-        flags = ModelFlags(nitrogen_cycle=True, litter_pool=True, anaerobic=True)
-        assert flags.nitrogen_cycle
+        # both dependencies present: the rule is satisfied
+        flags = ModelFlags.model_construct(
+            nitrogen_cycle=True,
+            litter_pool=True,
+            anaerobic=True,
+            water_hresp=True,
+            gdd=True,
+            soil_phenol=False,
+        )
+        assert flags._check_flag_restrictions() is flags
 
     def test_all_problems_are_reported_together(self):
         """A caller fixing several mistakes should see them in one message."""
-        with pytest.raises(ValidationError) as exc:
-            ModelFlags(gdd=True, soil_phenol=True, anaerobic=True, water_hresp=False)
+        flags = ModelFlags.model_construct(
+            gdd=True, soil_phenol=True, anaerobic=True, water_hresp=False
+        )
+        with pytest.raises(ValueError) as exc:
+            flags._check_flag_restrictions()
         message = str(exc.value)
         assert "cannot both be on" in message
         assert "anaerobic requires water_hresp" in message
+
+
+class TestUnsupportedFlags:
+    """Flags SIPNET supports but pySIPNET cannot yet supply parameters for.
+
+    Without this gate the flag reaches SIPNET, which stops with "Did not find
+    required parameter" — a failure far from its cause, and one the parameter
+    model exists to prevent. These tests pin both the refusal and the quality
+    of the message, since the message is the whole point.
+    """
+
+    @pytest.mark.parametrize("flag", sorted(UNSUPPORTED_FLAGS))
+    def test_each_unsupported_flag_is_refused(self, flag):
+        with pytest.raises(ValidationError, match="not supported by pySIPNET yet"):
+            ModelFlags(**{flag: True})
+
+    @pytest.mark.parametrize("flag", sorted(UNSUPPORTED_FLAGS))
+    def test_message_names_the_flag_and_its_parameters(self, flag):
+        """A caller must learn what is missing, not merely that something is."""
+        with pytest.raises(ValidationError) as exc:
+            ModelFlags(**{flag: True})
+        message = str(exc.value)
+        assert flag in message
+        for param in UNSUPPORTED_FLAGS[flag][1]:
+            assert param in message, f"{param} missing from the error message"
+
+    def test_message_says_sipnet_itself_supports_it(self):
+        """The limitation is ours, and saying so saves a hunt through SIPNET."""
+        with pytest.raises(ValidationError, match="even though SIPNET itself supports them"):
+            ModelFlags(flooding=True)
+
+    def test_message_says_how_to_add_support(self):
+        with pytest.raises(ValidationError, match="UNSUPPORTED_FLAGS"):
+            ModelFlags(flooding=True)
+
+    def test_several_unsupported_flags_reported_together(self):
+        with pytest.raises(ValidationError) as exc:
+            ModelFlags(flooding=True, anaerobic=True)
+        message = str(exc.value)
+        assert "flooding" in message
+        assert "anaerobic" in message
+
+    def test_refusal_takes_precedence_over_dependency_advice(self):
+        """nitrogen_cycle alone must not be answered with 'set litter_pool'.
+
+        That advice is a dead end: satisfying it still leaves the flag
+        unsupported. The more fundamental problem has to be reported first.
+        """
+        with pytest.raises(ValidationError) as exc:
+            ModelFlags(nitrogen_cycle=True)
+        message = str(exc.value)
+        assert "not supported by pySIPNET yet" in message
+        assert "nitrogen_cycle requires both litter_pool" not in message
+
+    def test_supported_flags_are_unaffected(self):
+        """The gate must not catch anything it should not."""
+        assert ModelFlags(litter_pool=True, growth_resp=True, leaf_water=True).litter_pool
+
+    def test_flags_default_to_off_so_the_gate_is_invisible(self):
+        for flag in UNSUPPORTED_FLAGS:
+            assert getattr(ModelFlags(), flag) is False
+
+    def test_a_saved_config_with_an_unsupported_flag_is_refused_on_load(self):
+        """Deserialisation must not be a way around the gate."""
+        with pytest.raises(ValidationError, match="not supported"):
+            ModelFlags.model_validate({"flooding": True})
+
+    def test_the_table_matches_what_sipnet_actually_requires(self, sipnet_source_params):
+        """Every parameter named in the message must be real, and still absent.
+
+        Guards two ways of going stale: naming a parameter SIPNET does not
+        have, and keeping a flag listed after its parameters were modelled.
+        """
+        from pysipnet.io.param_io import PYTHON_TO_SIPNET
+
+        modelled = set(PYTHON_TO_SIPNET.values())
+        for flag, (_, params) in UNSUPPORTED_FLAGS.items():
+            for param in params:
+                assert param in sipnet_source_params, (
+                    f"{flag}: {param} is not a parameter SIPNET v2.1.0 registers"
+                )
+                assert param not in modelled, (
+                    f"{flag}: {param} is modelled now — remove {flag} from UNSUPPORTED_FLAGS"
+                )
 
 
 class TestModelFlagsConfigKeys:
@@ -196,7 +303,7 @@ class TestModelFlagsSerialisation:
         assert ModelFlags.model_validate(flags.model_dump()) == flags
 
     def test_roundtrips_through_json(self):
-        flags = ModelFlags(nitrogen_cycle=True, litter_pool=True, anaerobic=True, name="n-cycle")
+        flags = ModelFlags(litter_pool=True, growth_resp=True, name="forest-growth-resp")
         assert ModelFlags.model_validate_json(flags.model_dump_json()) == flags
 
     def test_restrictions_are_enforced_on_load(self):

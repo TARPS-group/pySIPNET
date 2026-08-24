@@ -8,6 +8,34 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 SAMPLE_CLIM_V1 = DATA_DIR / "era5_site1.clim"
 
 
+@pytest.fixture(scope="session")
+def sipnet_source_params() -> set[str]:
+    """Every parameter name the pinned SIPNET source registers.
+
+    Read straight out of the C source rather than hard-coded, so a test that
+    checks our assumptions about SIPNET is checking the SIPNET we actually
+    ship, not a list that can quietly go stale.
+
+    SIPNET registers each parameter with a call of the form::
+
+        initializeOneModelParam(modelParams, "aMax", &(params.aMax), 1);
+    """
+    import re
+
+    source_dir = Path(__file__).parent.parent / "sipnet" / "src"
+    if not source_dir.exists():
+        pytest.skip("SIPNET submodule not populated; run 'git submodule update --init sipnet'")
+
+    pattern = re.compile(r'initializeOneModelParam\(\s*\w+\s*,\s*"([A-Za-z_0-9]+)"')
+    names: set[str] = set()
+    for path in source_dir.rglob("*.c"):
+        names.update(pattern.findall(path.read_text()))
+
+    if not names:
+        pytest.fail(f"No parameter registrations found under {source_dir}; has the C API changed?")
+    return names
+
+
 @pytest.fixture
 def reference_fixture_dir() -> Path:
     """Directory holding a known-good sipnet.param and sipnet.clim pair.

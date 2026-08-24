@@ -331,14 +331,24 @@ Python model** because the flags default off:
   `soilMethaneRate`, `litterMethaneRate`
 - `FLOODING`: `waterDrainFrac`
 
-**Known gap:** `ModelFlags` accepts `nitrogen_cycle`, `anaerobic` and
-`flooding`, and `validate_for_flags` passes, but the parameters those flags
-require are not in the model — so the run reaches SIPNET and dies there with
-"Did not find required parameter". That contradicts design principle 2, which
-says required fields are enforced by the data model rather than discovered when
-SIPNET crashes. Either add the parameters, or have `ModelFlags` reject the three
-flags with a clear "not supported yet" message until they exist. The second is
-a few lines and closes the gap immediately.
+**These three flags are refused by `ModelFlags`,** because accepting them
+would produce a run that fails inside SIPNET with "Did not find required
+parameter" — exactly what design principle 2 says the data model should
+prevent. `UNSUPPORTED_FLAGS` in `pysipnet/parameters/model.py` holds the flag,
+a plain-language description, and the parameters SIPNET would demand; the error
+message reproduces all of it, so a caller learns what is missing rather than
+merely that something is.
+
+The refusal is checked *before* the SIPNET-mirroring restrictions, so
+`nitrogen_cycle=True` reports "not supported yet" rather than sending the
+caller to set `litter_pool` and `anaerobic` — advice that would not have
+helped.
+
+To enable one: model its parameters, mark them required under the flag in
+`validate_for_flags`, and delete its entry from `UNSUPPORTED_FLAGS`. A test
+asserts every name in that table is a parameter the pinned SIPNET actually
+registers **and** is still absent from our model, so the table cannot go stale
+in either direction.
 
 Adding these is the natural next feature; do it as its own opt-in group so the
 default parameter set stays as small as it is now. Note `fAnoxia` **does** exist

@@ -85,6 +85,49 @@ from pysipnet.parameters.base import (
 _D = ParameterDomain  # local alias for brevity
 
 
+# Processes SIPNET supports at the pinned version that pySIPNET cannot yet drive.
+#
+# Each of these flags reaches SIPNET correctly, but the parameters SIPNET then
+# demands are not in SIPNETParameters, so the run would fail inside SIPNET with
+# "Did not find required parameter". Rather than let that happen, ModelFlags
+# refuses the flag up front and says why.
+#
+# To add support for one: model its parameters, mark them required under the
+# flag in SIPNETParameters.validate_for_flags, then delete its entry here.
+UNSUPPORTED_FLAGS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "nitrogen_cycle": (
+        "nitrogen pools and fluxes",
+        (
+            "mineralNInit",
+            "soilOrgNInit",
+            "litterOrgNInit",
+            "nVolatilizationFrac",
+            "nLeachingFrac",
+            "leafCN",
+            "woodCN",
+            "fineRootCN",
+            "kCN",
+            "nFixationFracMax",
+            "halfNFixationMax",
+        ),
+    ),
+    "anaerobic": (
+        "methane production and waterlogged-soil decomposition",
+        (
+            "fAnoxia",
+            "anaerobicDecompRate",
+            "anaerobicTransExp",
+            "soilMethaneRate",
+            "litterMethaneRate",
+        ),
+    ),
+    "flooding": (
+        "soil moisture above water holding capacity",
+        ("waterDrainFrac",),
+    ),
+}
+
+
 # ── Model feature flags ───────────────────────────────────────────────────────
 
 
@@ -109,6 +152,14 @@ class ModelFlags(BaseModel):
     :meth:`standard` and :meth:`forest` return the two configurations pySIPNET
     has always shipped. Any other combination is equally valid — build one
     directly with keyword arguments.
+
+    Not every flag can be used
+    --------------------------
+    ``nitrogen_cycle``, ``anaerobic`` and ``flooding`` are rejected. SIPNET
+    supports all three, but each needs parameters that
+    :class:`SIPNETParameters` does not define yet, so a run would fail inside
+    SIPNET rather than here. :data:`UNSUPPORTED_FLAGS` lists what each one
+    needs.
 
     Restrictions
     ------------
@@ -164,16 +215,27 @@ class ModelFlags(BaseModel):
     """Track nitrogen pools and fluxes alongside carbon.
 
     Requires ``litter_pool`` and ``anaerobic``.
+
+    **Not usable yet**: setting this raises, because the nitrogen parameters
+    SIPNET would require are not modelled. See :data:`UNSUPPORTED_FLAGS`.
     """
 
     anaerobic: bool = False
     """Model methane production and waterlogged-soil effects on decomposition.
 
     Requires ``water_hresp``.
+
+    **Not usable yet**: setting this raises, because the methane and anaerobic
+    parameters SIPNET would require are not modelled. See
+    :data:`UNSUPPORTED_FLAGS`.
     """
 
     flooding: bool = False
-    """Allow soil moisture to rise above the soil's water holding capacity."""
+    """Allow soil moisture to rise above the soil's water holding capacity.
+
+    **Not usable yet**: setting this raises, because ``waterDrainFrac`` is not
+    modelled. See :data:`UNSUPPORTED_FLAGS`.
+    """
 
     # ── Provenance ──
     name: str | None = None
@@ -186,6 +248,49 @@ class ModelFlags(BaseModel):
     not equal to an identical unlabelled one. Compare
     :meth:`to_config_keys` output when you want to compare only the flags.
     """
+
+    @model_validator(mode="after")
+    def _check_flags_are_supported(self) -> ModelFlags:
+        """Reject flags whose parameters pySIPNET does not model yet.
+
+        Runs before :meth:`_check_flag_restrictions` so that turning on an
+        unsupported flag reports that, rather than sending the caller to
+        satisfy a dependency that would still not work.
+
+        Separate from :meth:`_check_flag_restrictions` because the reason is
+        different. That method mirrors combinations SIPNET itself rejects;
+        this one is about a gap on the Python side. SIPNET would happily run
+        these processes if we could supply their parameters.
+
+        Without this check the flag would reach SIPNET, which would then stop
+        with "Did not find required parameter" — a failure a long way from its
+        cause, and one the parameter model is supposed to prevent.
+        """
+        unsupported = [name for name in UNSUPPORTED_FLAGS if getattr(self, name)]
+        if not unsupported:
+            return self
+
+        lines = [
+            "These model flags are not supported by pySIPNET yet, "
+            "even though SIPNET itself supports them:",
+            "",
+        ]
+        for name in unsupported:
+            description, params = UNSUPPORTED_FLAGS[name]
+            lines.append(f"  {name}={getattr(self, name)!r} would enable {description}.")
+            lines.append(
+                f"    SIPNET would then require {len(params)} parameter(s) that "
+                f"SIPNETParameters does not define: {', '.join(params)}."
+            )
+        lines += [
+            "",
+            "Leave these flags off. Turning one on would produce a run that fails "
+            "inside SIPNET rather than here.",
+            "To add support, model the listed parameters and remove the flag from "
+            "UNSUPPORTED_FLAGS in this module. See the 'Optional nitrogen, methane "
+            "and flooding parameters' section of CLAUDE.md.",
+        ]
+        raise ValueError("\n".join(lines))
 
     @model_validator(mode="after")
     def _check_flag_restrictions(self) -> ModelFlags:
