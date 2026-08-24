@@ -7,7 +7,7 @@ pySIPNET is independent of the [PEcAn](https://github.com/pecanproject) ecosyste
 ## Features
 
 - Typed, hierarchical parameter models with units and validation on every field
-- Validated climate driver container (SIPNET v1 format)
+- Validated climate driver container (12- and 14-column SIPNET layouts)
 - Isolated run execution — each run gets its own working directory, enabling trivial parallelism
 - Clean output as labelled DataFrames (optional xarray export)
 - `SIPNETModel` — a single callable compatible with PyEns, Dask, Parsl, Ray, and any framework that treats the model as `(**inputs) → output`
@@ -25,17 +25,17 @@ uv run pytest
 ## Usage
 
 ```python
-from pysipnet import SIPNETRunner, SIPNETModel, ModelPreset, ClimateDrivers, SIPNETParametersV1
+from pysipnet import SIPNETRunner, SIPNETModel, ModelFlags, ClimateDrivers, SIPNETParameters
 from pysipnet.parameters import PhotosynthesisParams, RespirationParams  # and others
 
 climate = ClimateDrivers.from_file("data/era5_site1.clim")
-params  = SIPNETParametersV1(
+params  = SIPNETParameters(
     photosynthesis=PhotosynthesisParams(a_max=112.0, psn_t_opt=24.0, ...),
     respiration=RespirationParams(base_veg_resp=0.02, ...),
     # ... remaining sub-models
 )
 
-runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+runner = SIPNETRunner(flags=ModelFlags.standard())
 model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
 result = model()                    # baseline run
@@ -58,7 +58,9 @@ uv run mkdocs serve
 
 ## SIPNET version
 
-Pinned to SIPNET commit `e4abf14f` — the last pre-v2 state (compile-time flags, 14-column climate file).  See [docs/sipnet-version.md](docs/sipnet-version.md).
+Pinned to the SIPNET **v2.1.0** release (commit `1bd16b78`). Model options are
+chosen at run time, so there is a single binary and no compiler flags. See
+[docs/sipnet-version.md](docs/sipnet-version.md).
 
 ## Requirements
 

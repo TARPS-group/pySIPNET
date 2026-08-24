@@ -9,7 +9,7 @@ Quickstart::
     )
 
     params  = SIPNETParameters(...)
-    climate = ClimateDrivers.from_file("site.clim", version="v1")
+    climate = ClimateDrivers.from_file("site.clim")
     runner  = SIPNETRunner(flags=ModelFlags.standard())
     model   = SIPNETModel(runner, base_params=params, base_climate=climate)
 
