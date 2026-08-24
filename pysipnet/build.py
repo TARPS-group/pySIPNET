@@ -24,7 +24,10 @@ submodule directory is empty; :func:`init_submodule` fills it in, and
 from __future__ import annotations
 
 import hashlib
+import http.client
+import os
 import platform
+import re
 import shutil
 import subprocess
 import tarfile
@@ -163,6 +166,36 @@ class DownloadError(RuntimeError):
     """A prebuilt binary could not be fetched, verified, or unpacked."""
 
 
+# The published archives are around 1 MB. These caps are generous enough never
+# to bite in practice, and they bound the damage if the URL ever serves
+# something else: the checksum cannot help, because it can only be computed
+# after the bytes have already been read.
+MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
+MAX_UNPACKED_BYTES = 256 * 1024 * 1024
+
+# An archive filename becomes a path and part of a URL, so it is restricted to
+# a plain name. Without this, an absolute path in SIPNET_RELEASE_ASSETS would
+# silently escape the temporary directory, because Path("/tmp") / "/etc/x" is
+# "/etc/x" — the left operand is discarded.
+_SAFE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _check_filename(filename: str) -> str:
+    """Return *filename* if it is a plain name, else raise.
+
+    Guards the pinned data in :mod:`pysipnet.version` rather than the network:
+    an edit there looks like a routine pin update, so it should not be able to
+    turn into a write outside the download directory.
+    """
+    if not _SAFE_FILENAME.match(filename) or filename in {".", ".."}:
+        raise DownloadError(
+            f"Refusing to use archive filename {filename!r}. Filenames must be plain "
+            "names without path separators. Check SIPNET_RELEASE_ASSETS in "
+            "pysipnet/version.py."
+        )
+    return filename
+
+
 def platform_key() -> str:
     """Return the key identifying this machine in :data:`SIPNET_RELEASE_ASSETS`.
 
@@ -209,7 +242,35 @@ def release_asset(key: str | None = None) -> tuple[str, str]:
             "Build from source instead with 'make sipnet', which works on any "
             "platform with a C compiler."
         )
-    return SIPNET_RELEASE_ASSETS[key]
+    filename, digest = SIPNET_RELEASE_ASSETS[key]
+    return _check_filename(filename), digest
+
+
+class _HttpsOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Follow redirects only while they stay on HTTPS.
+
+    GitHub release downloads redirect to a storage host, so redirects are on
+    the normal path and cannot simply be disabled. The stdlib handler accepts
+    http and ftp targets as well, which would silently drop the connection to
+    plaintext and expose the fetch to anyone on the network path.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not newurl.lower().startswith("https://"):
+            raise DownloadError(f"Refusing to follow a redirect to a non-HTTPS address: {newurl!r}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _open_url(url: str, timeout: float):
+    """Open *url* over HTTPS, refusing to be redirected off it.
+
+    The one place this module touches the network. Kept separate so tests have
+    a single, stable thing to intercept: patching a stdlib internal instead
+    would quietly stop working the moment the implementation changed, and the
+    tests would start making real requests without failing.
+    """
+    opener = urllib.request.build_opener(_HttpsOnlyRedirectHandler)
+    return opener.open(url, timeout=timeout)  # noqa: S310
 
 
 def release_url(filename: str) -> str:
@@ -230,18 +291,23 @@ def _sha256_of(path: Path) -> str:
 
 
 def _check_archive_members(archive: tarfile.TarFile) -> None:
-    """Reject an archive that would write outside the directory it unpacks into.
+    """Reject an archive that would write outside its directory or blow up on disk.
 
     An archive member may name any path it likes, including an absolute one or
     one climbing out with ``..``, and a symlink member can redirect a later
     write anywhere on disk. Extracting without checking is the "tar slip"
     vulnerability.
 
-    The pinned checksum already makes a hostile archive very unlikely, but this
-    costs nothing and does not depend on the checksum being right.
+    The pinned checksum already makes a hostile archive unlikely. These checks
+    cost nothing and do not depend on the checksum being right, which is the
+    point of having them.
     """
+    seen_lowercase: dict[str, str] = {}
+    total_bytes = 0
+
     for member in archive.getmembers():
         name = Path(member.name)
+
         if name.is_absolute() or ".." in name.parts:
             raise DownloadError(
                 f"Refusing to extract archive: member {member.name!r} points outside "
@@ -257,22 +323,59 @@ def _check_archive_members(archive: tarfile.TarFile) -> None:
                 f"Refusing to extract archive: member {member.name!r} is neither a "
                 "regular file nor a directory."
             )
+        if member.mode is not None and member.mode & (0o4000 | 0o2000 | 0o0002):
+            raise DownloadError(
+                f"Refusing to extract archive: member {member.name!r} requests unsafe "
+                f"permissions ({member.mode:#o}) — setuid, setgid or world-writable."
+            )
+
+        # Two members differing only in case collide into one file on a
+        # case-insensitive filesystem such as macOS's default. An archive
+        # reviewed on Linux, where both survive, would then install something
+        # different here.
+        lowered = member.name.lower()
+        if lowered in seen_lowercase and seen_lowercase[lowered] != member.name:
+            raise DownloadError(
+                f"Refusing to extract archive: members {seen_lowercase[lowered]!r} and "
+                f"{member.name!r} differ only in case and would collide on a "
+                "case-insensitive filesystem."
+            )
+        seen_lowercase[lowered] = member.name
+
+        total_bytes += max(member.size, 0)
+        if member.size > MAX_UNPACKED_BYTES or total_bytes > MAX_UNPACKED_BYTES:
+            raise DownloadError(
+                f"Refusing to extract archive: it expands to at least "
+                f"{total_bytes / 1e6:.0f} MB, over the {MAX_UNPACKED_BYTES / 1e6:.0f} MB "
+                "limit. The real SIPNET archives are a few megabytes."
+            )
 
 
 def _find_binary(root: Path) -> Path:
     """Return the ``sipnet`` executable somewhere beneath *root*.
 
     The archive layout is upstream's to change, so this searches rather than
-    assuming a path. A layout change should not break the download.
+    assuming a path.
+
+    Matching is on the exact name, not a glob, because ``rglob`` is
+    case-insensitive on macOS and would happily return a file called
+    ``SIPNET``. Ties are broken by path so the result does not depend on
+    directory order, which varies by filesystem.
     """
-    candidates = [p for p in root.rglob(BINARY_NAME) if p.is_file()]
+    candidates = sorted(
+        (path for path in root.rglob("*") if path.is_file() and path.name == BINARY_NAME),
+        # Shallowest first, then alphabetical: a stray copy deeper in the tree
+        # cannot displace one at the root, and equal depths resolve the same
+        # way everywhere.
+        key=lambda path: (len(path.relative_to(root).parts), path.parts),
+    )
     if not candidates:
-        contents = ", ".join(sorted(str(p.relative_to(root)) for p in root.rglob("*"))) or "(empty)"
+        contents = ", ".join(sorted(repr(str(q.relative_to(root))) for q in root.rglob("*")))
         raise DownloadError(
-            f"No file named {BINARY_NAME!r} in the downloaded archive. Contents: {contents}"
+            f"No file named {BINARY_NAME!r} in the downloaded archive. "
+            f"Contents: {contents or '(empty)'}"
         )
-    # Prefer the shallowest match, so a stray copy in a subdirectory cannot win.
-    return min(candidates, key=lambda p: len(p.relative_to(root).parts))
+    return candidates[0]
 
 
 def download_sipnet(*, force: bool = False, timeout: float = 120.0) -> Path:
@@ -312,6 +415,11 @@ def download_sipnet(*, force: bool = False, timeout: float = 120.0) -> Path:
         return target
 
     filename, expected_sha256 = release_asset()
+    # Re-check here rather than trusting release_asset alone. The filename
+    # becomes a path below, and Path("/tmp") / "/etc/x" is "/etc/x" — the left
+    # operand is simply discarded — so an unchecked name is an arbitrary write,
+    # and the write happens before the checksum can say anything about it.
+    filename = _check_filename(filename)
     url = release_url(filename)
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -319,9 +427,24 @@ def download_sipnet(*, force: bool = False, timeout: float = 120.0) -> Path:
         archive = tmp_path / filename
 
         try:
-            with urllib.request.urlopen(url, timeout=timeout) as response:  # noqa: S310
-                archive.write_bytes(response.read())
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            with _open_url(url, timeout) as response:
+                # Stream rather than read() in one go: the checksum can only be
+                # computed after the bytes arrive, so an oversized body has to
+                # be stopped while it is still arriving.
+                downloaded = 0
+                with archive.open("wb") as handle:
+                    while chunk := response.read(65536):
+                        downloaded += len(chunk)
+                        if downloaded > MAX_ARCHIVE_BYTES:
+                            raise DownloadError(
+                                f"Refusing to download more than "
+                                f"{MAX_ARCHIVE_BYTES / 1e6:.0f} MB from {url}. The real "
+                                "SIPNET archives are a few megabytes."
+                            )
+                        handle.write(chunk)
+        except DownloadError:
+            raise
+        except (urllib.error.URLError, http.client.HTTPException, TimeoutError, OSError) as exc:
             raise DownloadError(
                 f"Could not download {url}: {exc}. Build from source instead with 'make sipnet'."
             ) from exc
@@ -357,27 +480,48 @@ def download_sipnet(*, force: bool = False, timeout: float = 120.0) -> Path:
 
         source = _find_binary(unpacked)
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
-        target.chmod(0o755)
 
-    # The binary is on disk now, so ask it what it is rather than trusting the
-    # filename. A mismatch means the pinned asset and the pinned version have
-    # drifted apart.
+        # Install in two steps. The new binary is staged beside the target and
+        # checked there, then moved into place with os.replace, which is
+        # atomic. Overwriting the target directly would destroy a working
+        # binary whenever the new one turns out to be unusable, and would let
+        # a concurrent run observe a half-written executable.
+        staged = target.with_name(target.name + ".incoming")
+        try:
+            shutil.copy2(source, staged)
+            staged.chmod(0o755)
+            _check_staged_binary(staged)
+            os.replace(staged, target)
+        finally:
+            staged.unlink(missing_ok=True)
+
+    return target
+
+
+def _check_staged_binary(path: Path) -> None:
+    """Confirm a freshly unpacked binary is the release we expect.
+
+    Asks the binary what it is rather than trusting the filename it arrived
+    under. A mismatch means the pinned asset and ``SIPNET_TARGET_VERSION`` have
+    drifted apart, which is what a half-finished pin bump looks like.
+    """
     try:
-        reported = sipnet_version()
+        result = subprocess.run(
+            [str(path), "--version"], capture_output=True, text=True, check=True
+        )
     except (subprocess.SubprocessError, OSError) as exc:
-        target.unlink(missing_ok=True)
-        raise DownloadError(
-            f"The downloaded binary would not run: {exc}. It has been removed."
-        ) from exc
+        raise DownloadError(f"The downloaded binary would not run: {exc}.") from exc
 
-    if not reported.startswith(SIPNET_TARGET_VERSION.lstrip("v")):
-        target.unlink(missing_ok=True)
+    _, _, reported = result.stdout.strip().partition("version ")
+    reported = reported or result.stdout.strip()
+
+    expected = SIPNET_TARGET_VERSION.removeprefix("v")
+    # Match on the full version token so "2.1.05" and "2.1.0-rc1" do not pass
+    # as "2.1.0".
+    if not re.match(rf"{re.escape(expected)}(?![\w.])", reported):
         raise DownloadError(
             f"The downloaded binary reports version {reported!r}, but this "
-            f"pySIPNET targets {SIPNET_TARGET_VERSION!r}. It has been removed. "
+            f"pySIPNET targets {SIPNET_TARGET_VERSION!r}. It was not installed. "
             "The pinned asset in pysipnet.version is probably out of step with "
             "SIPNET_TARGET_VERSION."
         )
-
-    return target

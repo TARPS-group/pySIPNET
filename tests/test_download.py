@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import io
 import tarfile
+import urllib.error
 
 import pytest
 
@@ -49,9 +50,34 @@ def _tar_bytes(members: dict[str, bytes]) -> bytes:
         for name, data in members.items():
             info = tarfile.TarInfo(name)
             info.size = len(data)
-            info.mode = 0o755
+            # Deliberately not executable: the installer is responsible for that,
+            # so a fixture that pre-sets 0o755 would hide a missing chmod.
+            info.mode = 0o644
             tar.addfile(info, io.BytesIO(data))
     return buffer.getvalue()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_network(monkeypatch, request):
+    """Fail loudly if an offline test reaches the network.
+
+    These tests once patched a stdlib internal. When the implementation moved
+    to a different call, the patch stopped applying and the suite silently
+    began making real requests to GitHub — passing or failing on network
+    conditions rather than on the code. This makes that impossible to repeat.
+    """
+    if "network" in request.keywords:
+        return
+
+    def _blocked(*args, **kwargs):
+        raise AssertionError(
+            "This test reached the real network. Patch pysipnet.build._open_url, "
+            "or mark the test with @pytest.mark.network."
+        )
+
+    monkeypatch.setattr("pysipnet.build.urllib.request.urlopen", _blocked)
+    monkeypatch.setattr("urllib.request.urlopen", _blocked)
+    monkeypatch.setattr("pysipnet.build._open_url", _blocked)
 
 
 @pytest.fixture
@@ -65,8 +91,13 @@ def served(monkeypatch, tmp_path):
 
     def _serve(payload: bytes, *, pinned_sha256: str | None = None):
         class _Response:
-            def read(self):
-                return payload
+            """Enough of an HTTP response for the streaming reader."""
+
+            def __init__(self):
+                self._buffer = io.BytesIO(payload)
+
+            def read(self, size=-1):
+                return self._buffer.read(size)
 
             def __enter__(self):
                 return self
@@ -74,7 +105,7 @@ def served(monkeypatch, tmp_path):
             def __exit__(self, *exc):
                 return False
 
-        monkeypatch.setattr("pysipnet.build.urllib.request.urlopen", lambda *a, **kw: _Response())
+        monkeypatch.setattr("pysipnet.build._open_url", lambda *a, **kw: _Response())
         digest = pinned_sha256 or hashlib.sha256(payload).hexdigest()
         monkeypatch.setattr(
             "pysipnet.build.release_asset", lambda key=None: ("sipnet-test.tar.gz", digest)
@@ -84,8 +115,10 @@ def served(monkeypatch, tmp_path):
 
 
 class TestPlatformKey:
-    def test_returns_system_and_architecture(self):
-        assert "-" in platform_key()
+    def test_returns_system_and_architecture(self, monkeypatch):
+        monkeypatch.setattr("pysipnet.build.platform.system", lambda: "Darwin")
+        monkeypatch.setattr("pysipnet.build.platform.machine", lambda: "arm64")
+        assert platform_key() == "darwin-arm64"
 
     @pytest.mark.parametrize(
         ("machine", "expected"),
@@ -110,6 +143,23 @@ class TestReleaseAsset:
             filename, digest = release_asset(key)
             assert filename
             assert len(digest) == 64
+
+    @pytest.mark.parametrize("key", sorted(SIPNET_RELEASE_ASSETS))
+    def test_defaults_to_this_machine(self, monkeypatch, key):
+        """The no-argument path is what download_sipnet actually uses.
+
+        Parametrised over every platform so the assertion cannot be satisfied
+        by a hard-coded key: whichever one an implementation picked, some case
+        here would disagree with it.
+        """
+        monkeypatch.setattr("pysipnet.build.platform_key", lambda: key)
+        assert release_asset() == SIPNET_RELEASE_ASSETS[key]
+
+    def test_rejects_a_filename_that_is_not_a_plain_name(self, monkeypatch):
+        """Guards the pinned data: an absolute path would escape the temp dir."""
+        monkeypatch.setitem(SIPNET_RELEASE_ASSETS, "linux-x86_64", ("/etc/passwd", "00" * 32))
+        with pytest.raises(DownloadError, match="Refusing to use archive filename"):
+            release_asset("linux-x86_64")
 
     def test_unsupported_platform_raises(self):
         with pytest.raises(DownloadError, match="No prebuilt SIPNET binary is published"):
@@ -145,6 +195,14 @@ class TestReleaseUrl:
         assert SIPNET_RELEASE_REPO in url
         assert f"/{SIPNET_RELEASE_TAG}/" in url
         assert url.startswith("https://")
+
+    def test_includes_the_filename(self):
+        assert release_url("sipnet-test.tar.gz").endswith("/sipnet-test.tar.gz")
+
+    def test_host_is_github(self):
+        from urllib.parse import urlparse
+
+        assert urlparse(release_url("x.tar.gz")).netloc == "github.com"
 
 
 class TestChecksum:
@@ -229,8 +287,9 @@ class TestArchiveSafety:
 
 class TestFindBinary:
     def test_finds_a_binary_at_the_root(self, tmp_path):
-        (tmp_path / BINARY_NAME).write_bytes(b"x")
-        assert _find_binary(tmp_path).name == BINARY_NAME
+        expected = tmp_path / BINARY_NAME
+        expected.write_bytes(b"x")
+        assert _find_binary(tmp_path) == expected
 
     def test_finds_a_binary_in_a_subdirectory(self, tmp_path):
         """The archive layout is upstream's to change; do not assume a path."""
@@ -245,6 +304,21 @@ class TestFindBinary:
         nested.mkdir()
         (nested / BINARY_NAME).write_bytes(b"nested")
         assert _find_binary(tmp_path).read_bytes() == b"top"
+
+    def test_a_directory_named_sipnet_is_not_the_binary(self, tmp_path):
+        """`sipnet/sipnet` is a plausible archive layout."""
+        (tmp_path / BINARY_NAME).mkdir()
+        real = tmp_path / BINARY_NAME / BINARY_NAME
+        real.write_bytes(b"x")
+        assert _find_binary(tmp_path) == real
+
+    def test_equal_depth_ties_are_broken_deterministically(self, tmp_path):
+        """Directory order varies by filesystem; the choice must not."""
+        for name in ("zzz", "aaa"):
+            d = tmp_path / name
+            d.mkdir()
+            (d / BINARY_NAME).write_bytes(name.encode())
+        assert _find_binary(tmp_path).read_bytes() == b"aaa"
 
     def test_raises_when_absent_and_says_what_was_there(self, tmp_path):
         (tmp_path / "README").write_bytes(b"x")
@@ -272,7 +346,7 @@ class TestDownloadSipnet:
     def test_existing_binary_is_kept_without_force(self, served, tmp_path, monkeypatch):
         (tmp_path / BINARY_NAME).write_bytes(b"already here")
         monkeypatch.setattr(
-            "pysipnet.build.urllib.request.urlopen",
+            "pysipnet.build._open_url",
             lambda *a, **kw: pytest.fail("must not download when a binary exists"),
         )
         monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
@@ -315,33 +389,178 @@ class TestDownloadSipnet:
     def test_unsafe_archive_is_refused(self, served, tmp_path):
         payload = _tar_bytes({"../escape": b"x", BINARY_NAME: FAKE_BINARY})
         served(payload)
-        with pytest.raises(DownloadError, match="outside the destination"):
+        # Match our own wording. tarfile's built-in "data" filter rejects this
+        # too, with a message that also contains "outside the destination", so
+        # a looser assertion would pass even with our check deleted.
+        with pytest.raises(DownloadError, match="Refusing to extract archive"):
             download_sipnet()
         assert not (tmp_path / BINARY_NAME).exists()
+
+    def test_symlink_member_is_refused_end_to_end(self, served, tmp_path):
+        """Exercises the guard on a shape the built-in filter would also catch."""
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+            link = tarfile.TarInfo("sneaky")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "/etc/passwd"
+            tar.addfile(link)
+            info = tarfile.TarInfo(BINARY_NAME)
+            info.size = len(FAKE_BINARY)
+            info.mode = 0o644
+            tar.addfile(info, io.BytesIO(FAKE_BINARY))
+        served(buffer.getvalue())
+        with pytest.raises(DownloadError, match="Refusing to extract archive"):
+            download_sipnet()
+        assert not (tmp_path / BINARY_NAME).exists()
+
+    def test_an_absolute_filename_cannot_write_outside_the_temp_dir(
+        self, served, tmp_path, monkeypatch
+    ):
+        """`Path(tmp) / "/etc/x"` is `/etc/x` — the left operand is discarded.
+
+        The download is written before the checksum can say anything about it,
+        so an unchecked filename is an arbitrary write with attacker-chosen
+        contents. Checked at the point of use, not only in release_asset,
+        because that is where the path is actually built.
+        """
+        victim = tmp_path / "victim.txt"
+        victim.write_bytes(b"original")
+        payload = _tar_bytes({BINARY_NAME: FAKE_BINARY})
+        served(payload)
+        monkeypatch.setattr(
+            "pysipnet.build.release_asset",
+            lambda key=None: (str(victim), hashlib.sha256(payload).hexdigest()),
+        )
+        with pytest.raises(DownloadError, match="Refusing to use archive filename"):
+            download_sipnet()
+        assert victim.read_bytes() == b"original", "an absolute filename overwrote a file"
+
+    def test_a_traversing_filename_is_refused(self, served, tmp_path, monkeypatch):
+        payload = _tar_bytes({BINARY_NAME: FAKE_BINARY})
+        served(payload)
+        monkeypatch.setattr(
+            "pysipnet.build.release_asset",
+            lambda key=None: ("../../escape.tar.gz", hashlib.sha256(payload).hexdigest()),
+        )
+        with pytest.raises(DownloadError, match="Refusing to use archive filename"):
+            download_sipnet()
+
+    def test_case_colliding_members_are_refused(self, served, tmp_path):
+        """They merge into one file on macOS, so what installs differs by platform."""
+        payload = _tar_bytes(
+            {BINARY_NAME: FAKE_BINARY, BINARY_NAME.upper(): b"#!/bin/sh\necho other\n"}
+        )
+        served(payload)
+        with pytest.raises(DownloadError, match="differ only in case"):
+            download_sipnet()
+
+    def test_setuid_member_is_refused(self, served, tmp_path):
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+            info = tarfile.TarInfo(BINARY_NAME)
+            info.size = len(FAKE_BINARY)
+            info.mode = 0o4755
+            tar.addfile(info, io.BytesIO(FAKE_BINARY))
+        served(buffer.getvalue())
+        with pytest.raises(DownloadError, match="unsafe permissions"):
+            download_sipnet()
 
     def test_archive_without_a_binary_is_refused(self, served):
         served(_tar_bytes({"README": b"no binary here"}))
         with pytest.raises(DownloadError, match=f"No file named {BINARY_NAME!r}"):
             download_sipnet()
 
-    def test_network_failure_is_reported_clearly(self, monkeypatch, tmp_path):
-        import urllib.error
+    def test_creates_the_cache_directory_if_it_is_missing(self, served, tmp_path, monkeypatch):
+        """The first-run case: .sipnet_cache/ does not exist yet."""
+        fresh = tmp_path / "not-created-yet"
+        monkeypatch.setattr("pysipnet.build._CACHE_DIR", fresh)
+        served(_tar_bytes({BINARY_NAME: FAKE_BINARY}))
+        assert download_sipnet().exists()
+
+    def test_timeout_is_passed_to_the_fetch(self, monkeypatch, tmp_path):
+        """A documented parameter that silently did nothing would be worse than none."""
+        monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+        seen = {}
+
+        def _record(url, timeout):
+            seen["timeout"] = timeout
+            raise urllib.error.URLError("stop here")
+
+        monkeypatch.setattr("pysipnet.build._open_url", _record)
+        with pytest.raises(DownloadError):
+            download_sipnet(timeout=17.5)
+        assert seen["timeout"] == 17.5
+
+    def test_a_working_binary_survives_a_failed_download(self, served, tmp_path):
+        """The install is staged and swapped in, never overwritten in place.
+
+        Overwriting first and validating after would delete a good binary
+        whenever the new one turned out to be unusable — and `make
+        sipnet-download` passes force=True, so this is the normal path.
+        """
+        good = tmp_path / BINARY_NAME
+        good.write_bytes(b"the user's working binary")
+        wrong = b'#!/bin/sh\necho "SIPNET version 9.9.9 (v9.9.9)"\n'
+        served(_tar_bytes({BINARY_NAME: wrong}))
+        with pytest.raises(DownloadError, match="reports version"):
+            download_sipnet(force=True)
+        assert good.read_bytes() == b"the user's working binary", (
+            "a failed download destroyed the binary the user already had"
+        )
+
+    def test_no_staging_file_is_left_behind(self, served, tmp_path):
+        served(_tar_bytes({BINARY_NAME: b"not executable"}))
+        with pytest.raises(DownloadError):
+            download_sipnet()
+        leftovers = [p.name for p in tmp_path.iterdir()]
+        assert leftovers == [], f"download left files behind: {leftovers}"
+
+    def test_oversized_download_is_stopped_while_arriving(self, monkeypatch, tmp_path):
+        """The checksum cannot help here: it runs after the bytes are already in."""
+        from pysipnet.build import MAX_ARCHIVE_BYTES
 
         monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+
+        class _Endless:
+            def read(self, size=-1):
+                return b"\0" * (size if size and size > 0 else 65536)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        monkeypatch.setattr("pysipnet.build._open_url", lambda *a, **kw: _Endless())
+        monkeypatch.setattr(
+            "pysipnet.build.release_asset", lambda key=None: ("sipnet-test.tar.gz", "00" * 32)
+        )
+        with pytest.raises(DownloadError, match="Refusing to download more than"):
+            download_sipnet()
+        assert MAX_ARCHIVE_BYTES > 0
+
+    def test_network_failure_is_reported_clearly(self, monkeypatch, tmp_path):
+        # Pin the asset: without this the test depends on the host platform
+        # having a published binary, and fails on e.g. Intel macOS.
+        monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+        monkeypatch.setattr(
+            "pysipnet.build.release_asset", lambda key=None: ("sipnet-test.tar.gz", "00" * 32)
+        )
 
         def _boom(*a, **kw):
             raise urllib.error.URLError("no route to host")
 
-        monkeypatch.setattr("pysipnet.build.urllib.request.urlopen", _boom)
+        monkeypatch.setattr("pysipnet.build._open_url", _boom)
         with pytest.raises(DownloadError, match="Could not download"):
             download_sipnet()
 
     def test_network_failure_suggests_building_from_source(self, monkeypatch, tmp_path):
-        import urllib.error
-
         monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
         monkeypatch.setattr(
-            "pysipnet.build.urllib.request.urlopen",
+            "pysipnet.build.release_asset", lambda key=None: ("sipnet-test.tar.gz", "00" * 32)
+        )
+        monkeypatch.setattr(
+            "pysipnet.build._open_url",
             lambda *a, **kw: (_ for _ in ()).throw(urllib.error.URLError("offline")),
         )
         with pytest.raises(DownloadError, match="make sipnet"):
@@ -368,16 +587,16 @@ class TestDownloadSipnet:
 
 @pytest.mark.network
 class TestAgainstTheRealRelease:
-    """Actually fetch from GitHub. Deselected unless -m network is passed.
+    """Actually fetch from GitHub. Deselected unless ``-m network`` is passed.
 
     Everything above uses synthetic archives, which proves the logic but not
-    that the pinned filenames and digests match what upstream published. This
-    is the test that proves that, so it is worth running after any pin bump::
+    that the pinned filenames and digests match what upstream actually
+    published. These do, so they are worth running after any pin bump::
 
         uv run pytest -m network
     """
 
-    def test_pinned_digest_matches_the_published_release(self, tmp_path):
+    def test_pinned_digest_matches_the_published_release(self):
         import json
         import urllib.request
 
@@ -390,12 +609,30 @@ class TestAgainstTheRealRelease:
         published = {a["name"]: a.get("digest") for a in release.get("assets", [])}
         for filename, digest in SIPNET_RELEASE_ASSETS.values():
             assert filename in published, f"{filename} is not published on {SIPNET_RELEASE_TAG}"
-            if published[filename]:
-                assert published[filename] == f"sha256:{digest}", (
-                    f"pinned digest for {filename} does not match the published one"
-                )
+            # Fail rather than skip when the digest is absent. Degrading to
+            # "the filename exists" would let this pass while proving nothing
+            # about the bytes, which is the whole purpose of the test.
+            assert published[filename], (
+                f"GitHub reports no digest for {filename}, so the pinned checksum "
+                "cannot be confirmed. Verify it by hand before trusting it."
+            )
+            assert published[filename] == f"sha256:{digest}", (
+                f"pinned digest for {filename} does not match the published one:\n"
+                f"  pinned:    sha256:{digest}\n"
+                f"  published: {published[filename]}"
+            )
 
-    def test_download_installs_a_working_binary(self, tmp_path, monkeypatch):
+    def test_download_installs_a_runnable_binary(self, tmp_path, monkeypatch):
+        """End-to-end against the real release, on platforms that have one."""
+        from pysipnet.build import platform_key, sipnet_version
+        from pysipnet.version import SIPNET_TARGET_VERSION
+
+        if platform_key() not in SIPNET_RELEASE_ASSETS:
+            pytest.skip(f"no prebuilt binary published for {platform_key()}")
+
         monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
         path = download_sipnet(force=True)
-        assert path.exists()
+        # download_sipnet raises on every failure path, so path.exists() alone
+        # would assert nothing. Run the binary instead.
+        assert sipnet_version().startswith(SIPNET_TARGET_VERSION.removeprefix("v"))
+        assert path.stat().st_mode & 0o111

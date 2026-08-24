@@ -224,6 +224,30 @@ class TestUnsupportedFlags:
         with pytest.raises(ValidationError, match="not supported"):
             ModelFlags.model_validate({"flooding": True})
 
+    def test_every_sipnet_parameter_is_either_modelled_or_listed(self, sipnet_source_params):
+        """Nothing SIPNET registers may go unaccounted for.
+
+        If a pin bump adds a parameter, it is either modelled or it belongs to
+        a flag we refuse. Anything else is a silent gap: SIPNET would require
+        it under some configuration and we would have no way to supply it.
+        """
+        from pysipnet.io.param_io import PYTHON_TO_SIPNET
+
+        modelled = set(PYTHON_TO_SIPNET.values())
+        listed = {p for _, params in UNSUPPORTED_FLAGS.values() for p in params}
+        unaccounted = sipnet_source_params - modelled - listed
+        assert not unaccounted, (
+            f"SIPNET registers {sorted(unaccounted)}, which pySIPNET neither models "
+            "nor lists in UNSUPPORTED_FLAGS."
+        )
+
+    def test_we_do_not_write_parameters_sipnet_does_not_have(self, sipnet_source_params):
+        """The other direction: an unknown name is only a warning in SIPNET."""
+        from pysipnet.io.param_io import PYTHON_TO_SIPNET
+
+        unknown = set(PYTHON_TO_SIPNET.values()) - sipnet_source_params
+        assert not unknown, f"pySIPNET writes parameters SIPNET does not know: {sorted(unknown)}"
+
     def test_the_table_matches_what_sipnet_actually_requires(self, sipnet_source_params):
         """Every parameter named in the message must be real, and still absent.
 
@@ -259,10 +283,14 @@ class TestModelFlagsConfigKeys:
         assert "NITROGEN_CYCLE" in keys
 
     def test_values_are_integers_not_booleans(self):
-        """SIPNET parses these with strtol, so they must render as 1/0."""
-        for value in ModelFlags().to_config_keys().values():
+        """SIPNET parses these with strtol, so they must render as 1/0.
+
+        `type(value) is int` rather than isinstance: bool subclasses int, so an
+        isinstance check passes for True/False and tests nothing.
+        """
+        for key, value in ModelFlags().to_config_keys().items():
+            assert type(value) is int, f"{key} is {type(value).__name__}, not int"
             assert value in (0, 1)
-            assert not isinstance(value, bool) or isinstance(value, int)
 
     def test_reflects_the_flag_values(self):
         assert ModelFlags.standard().to_config_keys()["LITTER_POOL"] == 0
@@ -295,6 +323,38 @@ class TestModelFlagsName:
         """Documented consequence of keeping the label on the model itself."""
         assert ModelFlags(name="a") != ModelFlags(name="b")
         assert ModelFlags.standard() != ModelFlags()
+
+
+class TestModelFlagsAreImmutable:
+    """Validation runs at construction, so the model must not be mutable.
+
+    A mutable model lets an unsupported flag be switched on after the checks
+    have run, defeating them entirely and producing the deep SIPNET failure
+    they exist to prevent.
+    """
+
+    def test_assignment_is_refused(self):
+        flags = ModelFlags.standard()
+        with pytest.raises(ValidationError):
+            flags.flooding = True
+
+    def test_a_supported_flag_cannot_be_reassigned_either(self):
+        """Not about which flag; the object is a run specification."""
+        flags = ModelFlags.standard()
+        with pytest.raises(ValidationError):
+            flags.litter_pool = True
+
+    def test_config_keys_cannot_be_changed_after_construction(self):
+        flags = ModelFlags.standard()
+        before = flags.to_config_keys()
+        with pytest.raises(ValidationError):
+            flags.nitrogen_cycle = True
+        assert flags.to_config_keys() == before
+
+    def test_flags_are_hashable(self):
+        """A useful consequence: they can key a cache of ensemble runs."""
+        assert len({ModelFlags.standard(), ModelFlags.standard()}) == 1
+        assert len({ModelFlags.standard(), ModelFlags.forest()}) == 2
 
 
 class TestModelFlagsSerialisation:

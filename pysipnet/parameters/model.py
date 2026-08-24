@@ -75,7 +75,7 @@ provided given the active :class:`ModelFlags`.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from pysipnet.parameters.base import (
     ParameterDomain,
@@ -134,6 +134,11 @@ UNSUPPORTED_FLAGS: dict[str, tuple[str, tuple[str, ...]]] = {
 class ModelFlags(BaseModel):
     """Which optional SIPNET processes are switched on for a run.
 
+    Immutable. The checks below run when an instance is built, so a mutable
+    model would let ``flags.nitrogen_cycle = True`` walk straight past them and
+    reach SIPNET, which is the failure this class exists to prevent. Build a
+    new instance to change a flag.
+
     SIPNET calls these its "model feature flags". They turn whole processes on
     or off — snow, a separate litter pool, the nitrogen cycle — and they do two
     things in pySIPNET:
@@ -172,6 +177,8 @@ class ModelFlags(BaseModel):
     - ``anaerobic`` requires ``water_hresp``.
     - ``nitrogen_cycle`` requires both ``litter_pool`` and ``anaerobic``.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     # ── Processes on by default ──
     snow: bool = True
