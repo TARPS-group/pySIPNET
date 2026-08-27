@@ -94,8 +94,12 @@ class TestArityMatchesSipnet:
                 "A mismatch is silent — sscanf discards the surplus."
             )
 
-    def test_we_cover_every_event_type_sipnet_accepts(self):
-        """A type SIPNET gained upstream should show up as a gap, not silence."""
+    def test_we_only_write_event_types_sipnet_accepts(self):
+        """Writing a keyword SIPNET does not know is a hard error at its end.
+
+        The reverse — SIPNET knowing a type we do not write — is a missing
+        feature rather than a bug, so it is listed rather than asserted away.
+        """
         import re
         from pathlib import Path
 
@@ -103,11 +107,38 @@ class TestArityMatchesSipnet:
         if not events_c.exists():
             pytest.skip("SIPNET submodule not populated")
 
-        keywords = set(re.findall(r'strcmp\(eventTypeStr,\s*"(\w+)"\)', events_c.read_text()))
+        accepted = set(re.findall(r'strcmp\(eventTypeStr,\s*"(\w+)"\)', events_c.read_text()))
         ours = {"harv", "irrig", "fert", "plant", "till"}
-        assert keywords == ours, (
-            f"SIPNET accepts {sorted(keywords)}, pySIPNET writes {sorted(ours)}. "
-            "A type only SIPNET knows is a missing feature; one only we write is a bug."
+
+        unknown = ours - accepted
+        assert not unknown, (
+            f"pySIPNET writes event types SIPNET does not accept: {sorted(unknown)}. "
+            "SIPNET exits with EXIT_CODE_UNKNOWN_EVENT_TYPE_OR_PARAM on these."
+        )
+
+    def test_unmodelled_event_types_are_the_ones_we_expect(self):
+        """Pin the known gaps so a new upstream type shows up as a change.
+
+        ``leafon`` and ``leafoff`` prescribe leaf-out and leaf-fall timing from
+        observed dates instead of a fitted parameter, and ``plantdeath`` is
+        emitted by SIPNET rather than read. Adding the leaf events is tracked
+        in issue #25; this test exists so a *fourth* new type cannot appear
+        unnoticed.
+        """
+        import re
+        from pathlib import Path
+
+        events_c = Path(__file__).parent.parent / "sipnet" / "src" / "sipnet" / "events.c"
+        if not events_c.exists():
+            pytest.skip("SIPNET submodule not populated")
+
+        accepted = set(re.findall(r'strcmp\(eventTypeStr,\s*"(\w+)"\)', events_c.read_text()))
+        ours = {"harv", "irrig", "fert", "plant", "till"}
+
+        assert accepted - ours == {"leafon", "leafoff", "plantdeath"}, (
+            f"the set of event types pySIPNET does not model has changed: "
+            f"{sorted(accepted - ours)}. If a new type appeared upstream, decide "
+            "whether to model it and update this test."
         )
 
 

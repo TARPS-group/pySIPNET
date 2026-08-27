@@ -19,7 +19,14 @@ sipnet: submodule
 	$(MAKE) -C $(SIPNET_DIR) clean
 	$(MAKE) -C $(SIPNET_DIR)
 	mkdir -p $(CACHE_DIR)
-	cp $(SIPNET_DIR)/sipnet $(BINARY)
+	# Install via a temporary name and mv, never by copying over the target.
+	# On Apple Silicon every Mach-O binary carries a code signature, and
+	# overwriting one in place invalidates it — the kernel then SIGKILLs the
+	# binary on exec, with no error message to explain why. mv replaces the
+	# directory entry instead, so the signature stays intact. This also means a
+	# failed build cannot leave a half-written binary behind.
+	cp $(SIPNET_DIR)/sipnet $(BINARY).incoming
+	mv $(BINARY).incoming $(BINARY)
 	@echo "Built: $(BINARY)"
 	@$(BINARY) --version
 

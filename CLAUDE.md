@@ -14,32 +14,54 @@ There is an existing R interface to SIPNET inside [PEcAn](https://github.com/Pec
 
 ## SIPNET Version Target
 
-**pySIPNET pins SIPNET to the `v2.1.0` release tag** (commit
-`1bd16b782c9941c98abcb9615e8626f1fd78c309`, "Nitrogen Cycle, Methane, and
-Restart", released 2026-04-17), recorded in `pysipnet/version.py` and in the
-`sipnet/` submodule.
+**pySIPNET pins SIPNET to the `v2.2.0-alpha.1` pre-release** (commit
+`41fa853e7131f542c52fcc0f4e3ea76892b52eda`), recorded in
+`pysipnet/version.py` and in the `sipnet/` submodule.
+
+The SIPNET developers created this tag so that everyone's analyses pin to the
+same version, which is why it is preferred over a bare commit even though
+newer commits exist.
 
 Pinning by commit rather than branch means anyone who clones the repo compiles
 the same model source, and a version change is an explicit, reviewable edit.
 
-### Why v2.1.0 and not something newer or older
+### Why this tag rather than a newer commit
 
-- **Newer.** `v2.2.0-alpha.1` and later are pre-release. Note the
-  `FILE_NAME` → `FILE_PREFIX` rename there **does** have a config-file alias
-  (`nameToKey` maps `filename` → `fileprefix`), so our generated `sipnet.in`
-  still works — an earlier note in this file claimed otherwise and was wrong.
-  The real migration cost is a new required parameter (`leafOnReallocFrac`),
-  the removal of the `bcdeltaC`/`bcdeltaN` output columns, and three new event
-  types. See the pin-bump analysis in the PR discussion.
-- **Older.** Anything before `v2.0.0` chooses model options at compile time,
-  which forces one binary per combination and a patch to the SIPNET source to
-  make the switches overridable at all. `v2.0.0` also fixes two defects that
-  made the litter pool unusable, and `v2.1.0` fixes wood carbon being counted
-  twice.
-- **Settled.** At the time of pinning, v2.1.0 had been the latest release for
-  four months, with 21 commits behind the tip and only six of those touching
-  the input/output surface. Upstream tempo dropped to 3–4 commits/month
-  through mid-2026, from 10–46/month during 2025.
+Three candidates were on the table: `v2.2.0-alpha.1` (this one), `bc96ae1`, and
+`d2fc7a2`. They form a strict linear chain — the tag is the **oldest** of the
+three, and `d2fc7a2` the newest, which is the opposite of how they were first
+described to us (the `-0400`/`-0700` author timestamps mislead; check ancestry).
+
+The differences do not matter to pySIPNET:
+
+- tag → `bc96ae1` adds `checkMineralNLimitation()` in `limitations.c`, a real
+  model change but inside `if (ctx.nitrogenCycle)`, which `ModelFlags` refuses.
+- `bc96ae1` → `d2fc7a2` touches only `tools/sipnet_view.py`, which we do not use.
+
+So the tag was chosen for the property a bare commit cannot have: it is a name
+everyone can pin to and cite. If the group wants the tip, ask upstream to tag
+it rather than pinning a loose commit.
+
+### The trap: a pre-release tag can move
+
+A tag is not immutable. If upstream re-tags `v2.2.0-alpha.1`,
+`tests/test_build.py` fails, because it asserts the submodule sits at
+`SIPNET_PINNED_COMMIT` — a commit, which cannot move. That is the intended
+behaviour: loud, not silent.
+
+### The trap: the numeric version lags the tag
+
+`version.h` at this tag still declares `NUMERIC_VERSION "2.1.0"`, so:
+
+    $ sipnet --version
+    SIPNET version 2.1.0 (v2.2.0-alpha.1)
+
+The numeric version therefore **cannot identify the pin** — a v2.1.0 binary
+reports the same number. The parenthesised part is `git describe --tags`,
+injected by SIPNET's Makefile as `GIT_HASH`, and that is what
+`sipnet_build_tag()` extracts and `test_build.py` checks. `SIPNET_NUMERIC_VERSION`
+is recorded for reporting only. Do not be tempted to check it instead; a test
+that does would pass against the wrong release.
 
 ### Consequences worth remembering
 
@@ -283,7 +305,7 @@ SIPNET actually applied — which is what makes this contract testable.
 
 ### SIPNET Output
 
-36 columns, header row present (we always set `PRINT_HEADER = 1`). **The
+35 columns, header row present (we always set `PRINT_HEADER = 1`). **The
 `Notes:` preamble line that older SIPNET wrote above the header is gone at this
 pin.** `pysipnet/io/output_reader.py` detects the header by content rather than
 by looking for that line — a first field that does not parse as a number means
@@ -293,11 +315,12 @@ and no header.
 Columns are always all present; a switched-off process writes zeros rather than
 omitting its column. New at this pin: `woodCreation`, `nppStorage`, the
 nitrogen group (`minN`, `soilOrgN`, `litterN`, `n2o`, `nLeaching`, `nFixation`,
-`nUptake`), `ch4`, and SIPNET's own closure errors `bcdeltaC` / `bcdeltaN`.
-Gone: `microbeC`, `litterWater`, `fPAR`, `loc`.
+`nUptake`), `ch4`, and `plantStorageN`. Gone relative to v2.1.0: `bcdeltaC` and `bcdeltaN`.
 
-`bcdeltaC` and `bcdeltaN` are the model auditing itself and should stay near
-zero; `tests/test_integration.py::TestMassBalance` asserts that.
+SIPNET audits its own carbon and nitrogen closure, but reports the result as a
+log warning from `checkBalance()` rather than as output columns — v2.1.0 wrote
+`bcdeltaC`/`bcdeltaN` for this and no longer does.
+`tests/test_integration.py::TestMassBalance` reads the log.
 
 ## SIPNET Parameters — Full Grouped List
 
@@ -397,12 +420,12 @@ Required-ness is expressed at runtime now: `initializeOneModelParam` takes a
 different parameters depending on `sipnet.in`. `ModelFlags` mirrors this in
 `SIPNETParameters.validate_for_flags`.
 
-- **48 parameters are unconditionally required.**
+- **49 parameters are unconditionally required.**
 - Default flags (`gdd`, `snow`, `water_hresp`) add `gddLeafOn`, `snowMelt` and
-  `soilRespMoistEffect` → **51 required**. The writer emits every parameter
+  `soilRespMoistEffect` → **52 required**. The writer emits every parameter
   that is not `None`, so the actual line count is 51 plus whichever optional
   ones you set.
-- `litter_pool` adds `litterBreakdownRate` and `fracLitterRespired` → **53**.
+- `litter_pool` adds `litterBreakdownRate` and `fracLitterRespired` → **54**.
 - No obsolete placeholders. The previous pin needed 64 lines for the equivalent
   configuration.
 
@@ -429,15 +452,17 @@ different parameters depending on `sipnet.in`. `ModelFlags` mirrors this in
 
     Upstream of our pin this changes: see gotcha 9.
 
-9. **Upstream SIPNET accepts prescribed phenology — but not at our pin.** Via `events.in`, not a new file type. PR #326 landed *after* `v2.1.0`, so it is present in `v2.2.0-alpha.1` and `origin/master` and **absent from our pinned version**. It adds `leafon` and `leafoff` event types with **zero** parameters, so a line is just `year day leafon`. They are real input keywords (`eventStringToType` in `events.c`), and they are **mutually exclusive with every calculated mechanism**: `checkForCalculatedLeafEvents()` exits with `EXIT_CODE_BAD_PARAMETER_VALUE` if `ctx.gdd || ctx.soilPhenol || params.leafOnDay > 0 || params.leafOffDay > 0`. The event applies the *same* flux the calculated trigger would (`params.leafGrowth / climLen` for leaf-on, `envi.plantLeafC * params.fracLeafFall` for leaf-off), so events prescribe **timing** while magnitude still comes from parameters. PEcAn already emits them (`write.events.SIPNET.R`) and, when it sees them, zeroes `leafOnDay`/`leafOffDay`/`gddLeafOn` and ignores the `leaf_phenology` CSV. Note the upstream docs (`docs/user-guide/model-inputs.md`) still list event types as only `plant`/`harv`/`till`/`fert`/`irrig` — the code is ahead of the docs.
+9. **Prescribed phenology is available at this pin, and pySIPNET does not use it yet.** Via `events.in`, not a new file type. SIPNET accepts `leafon` and `leafoff` events with **zero** parameters, so a line is just `year day leafon`. They are real input keywords (`eventStringToType` in `events.c`). Two properties matter before wiring them up: they are **mutually exclusive with every calculated mechanism** — `checkForCalculatedLeafEvents()` exits with `EXIT_CODE_BAD_PARAMETER_VALUE` if `ctx.gdd || ctx.soilPhenol || params.leafOnDay > 0 || params.leafOffDay > 0` — and they prescribe **timing only**: the flux is the same `params.leafGrowth / climLen` the calculated trigger would apply, so `leafGrowth` and `fracLeafFall` remain fitted parameters either way. PEcAn already emits them (`write.events.SIPNET.R`) and, when it sees them, zeroes `leafOnDay`/`leafOffDay`/`gddLeafOn` and ignores its `leaf_phenology` CSV. Note upstream's own docs still list event types as only `plant`/`harv`/`till`/`fert`/`irrig` — read `eventStringToType`, not the table. Tracked in issue #25; `tests/test_events_contract.py` pins the set of unmodelled types so a fourth cannot appear unnoticed.
 
-10. **`leafOnDay = 0` means "disabled" upstream but still NOT at our pin.** The `> 0` gating arrived with PR #326, after `v2.1.0`. At `origin/master`, `pastLeafGrowth`/`pastLeafFall` check `params.leafOnDay > 0` / `params.leafOffDay > 0`, so 0 disables the trigger — that is how PEcAn switches off internal scheduling. **At v2.1.0 there is no such gate**: `pastLeafFall` returns `(day + time/24) >= params.leafOffDay` unconditionally, so `leafOffDay = 0` fires leaf fall on the first timestep of every year instead of disabling it. Verified against the pinned source. Never port a PEcAn-style zeroed parameter set to this binary.
+10. **`leafOnDay = 0` now means "disabled", and at our previous pin it did not.** `pastLeafGrowth` and `pastLeafFall` are gated on `params.leafOnDay > 0` / `params.leafOffDay > 0`, so zero switches the trigger off — which is how PEcAn disables internal scheduling when it supplies leaf events instead. This gating arrived with the prescribed-phenology work and is **absent from `v2.1.0`**, where `pastLeafFall` compared unconditionally and `leafOffDay = 0` fired leaf fall on the first timestep of every year. Mentioned because the previous pin behaved the other way, and a parameter set carried over from it will now behave differently.
+
+11. **A new required parameter arrived with the leaf events: `leafOnReallocFrac`.** Leaf-out has to take carbon from somewhere, and this caps how much of `plantWoodC + coarseRootC` it may draw on. SIPNET scales the transfer down if demand exceeds `(plantWoodC + coarseRootC) × leafOnReallocFrac`. Required unconditionally, so every param file needs it; upstream's Niwot fixture uses `0.2`.
 
 ## File Structure
 
 ```
 pySIPNET/
-├── sipnet/                       # git submodule — SIPNET source, pinned to v2.1.0
+├── sipnet/                       # git submodule — SIPNET source, pinned to v2.2.0-alpha.1
 ├── Makefile                      # `make sipnet`, `make sipnet-download`
 ├── pysipnet/
 │   ├── version.py                # pinned commit, target version, clim column counts

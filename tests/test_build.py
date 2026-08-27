@@ -28,9 +28,14 @@ from pysipnet.build import (
     build_sipnet,
     ensure_binary,
     init_submodule,
+    sipnet_build_tag,
     sipnet_version,
 )
-from pysipnet.version import SIPNET_PINNED_COMMIT, SIPNET_TARGET_VERSION
+from pysipnet.version import (
+    SIPNET_NUMERIC_VERSION,
+    SIPNET_PINNED_COMMIT,
+    SIPNET_PINNED_TAG,
+)
 
 # Skip marker for tests that need a compiled binary present.
 requires_binary = pytest.mark.skipif(
@@ -196,12 +201,40 @@ class TestBinaryMatchesThePin:
         )
 
     @requires_binary
-    def test_binary_reports_the_targeted_version(self):
-        """A binary left over from a previous pin would fail here."""
-        expected = SIPNET_TARGET_VERSION.lstrip("v")
-        assert sipnet_version().startswith(expected), (
-            f"binary reports {sipnet_version()!r} but this release targets "
-            f"{SIPNET_TARGET_VERSION!r}. Rebuild with 'make sipnet'."
+    def test_binary_was_built_from_the_pinned_tag(self):
+        """A binary left over from a previous pin would fail here.
+
+        Checks the ``git describe`` tag, not the numeric version. SIPNET's
+        version.h lags pre-release tags — at v2.2.0-alpha.1 it still reads
+        2.1.0 — so a numeric check would accept a binary from the wrong
+        release and report success.
+        """
+        assert sipnet_build_tag() == SIPNET_PINNED_TAG, (
+            f"binary was built from {sipnet_build_tag()!r} but this release pins "
+            f"{SIPNET_PINNED_TAG!r}. Rebuild with 'make sipnet'. "
+            f"(Full version string: {sipnet_version()!r}.)"
+        )
+
+    @requires_binary
+    def test_numeric_version_is_recorded_accurately(self):
+        """The numeric version is reported, not used for identity.
+
+        Recorded so that a change to it is noticed, and so the gap between it
+        and the tag stays visible rather than becoming a surprise.
+        """
+        assert sipnet_version().startswith(SIPNET_NUMERIC_VERSION)
+
+    @requires_binary
+    def test_the_numeric_version_alone_would_not_identify_the_pin(self):
+        """Documents why the identity check uses the tag.
+
+        If these two ever agree, the distinction still holds in principle but
+        this test stops being informative — so it asserts the mismatch that
+        motivates the design.
+        """
+        assert SIPNET_NUMERIC_VERSION != SIPNET_PINNED_TAG.removeprefix("v"), (
+            "numeric version now matches the tag; the identity check can stay "
+            "as it is, but this test no longer demonstrates why it exists"
         )
 
     @requires_binary

@@ -6,10 +6,11 @@ pySIPNET targets one exact SIPNET commit, recorded in `pysipnet/version.py` and
 checked out in the `sipnet/` submodule:
 
 ```
-1bd16b782c9941c98abcb9615e8626f1fd78c309   # v2.1.0, released 2026-04-17
+41fa853e7131f542c52fcc0f4e3ea76892b52eda   # v2.2.0-alpha.1
 ```
 
-This is the **v2.1.0** release tag, "Nitrogen Cycle, Methane, and Restart".
+This is the **v2.2.0-alpha.1** pre-release, created by the SIPNET developers so
+that everyone's analyses pin to the same version.
 
 Pinning to a commit rather than a branch means everyone who clones pySIPNET
 compiles the same model source, so results are reproducible and a version
@@ -18,9 +19,18 @@ its own.
 
 Two tests keep the pin honest, both in `tests/test_build.py`: one asserts the
 submodule is checked out at `SIPNET_PINNED_COMMIT`, the other that the compiled
-binary reports `SIPNET_TARGET_VERSION`. A stale binary left over from a previous
-pin has no other symptom, so without these it would quietly produce output from
-the wrong model.
+binary was built from `SIPNET_PINNED_TAG`. A stale binary left over from a
+previous pin has no other symptom, so without these it would quietly produce
+output from the wrong model.
+
+The second check reads the `git describe` tag, not the numeric version. SIPNET's
+`version.h` still declares `2.1.0` at this tag, so `sipnet --version` prints
+`2.1.0 (v2.2.0-alpha.1)` and the number alone cannot tell one release from
+another. Checking it would produce a test that passes against the wrong binary.
+
+Note also that a tag, unlike a commit, can be moved by whoever owns it. If
+upstream re-tags this pre-release the commit assertion fails, which is the
+behaviour we want.
 
 ## What this pin gives you
 
@@ -73,16 +83,19 @@ against that by running the binary and failing on any unknown-parameter line.
 
 ### Output file
 
-36 columns with a header row. Every column is always present: a switched-off
+35 columns with a header row. Every column is always present: a switched-off
 process writes zeros rather than omitting its column.
 
 Older SIPNET wrote a `Notes:` line above the header, which v2.1.0 removed. The
 output reader detects the header by content rather than expecting that line, so
-files from older versions still read.
+files from older versions still read. Columns are matched by name, never by
+position, which is why the count changing from 36 to 35 between v2.1.0 and this
+pin needed no reader change beyond mapping the new name.
 
 ## Moving to a newer SIPNET
 
-Bump `SIPNET_PINNED_COMMIT` and `SIPNET_TARGET_VERSION` together, update the
+Bump `SIPNET_PINNED_COMMIT`, `SIPNET_PINNED_TAG` and `SIPNET_NUMERIC_VERSION`
+together, refresh `SIPNET_RELEASE_ASSETS`, update the
 submodule, and rebuild with `make sipnet` — `build_sipnet()` trusts an existing
 binary unless you pass `force=True`.
 

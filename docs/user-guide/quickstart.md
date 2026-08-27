@@ -46,7 +46,7 @@ params = SIPNETParameters(
     phenology=PhenologyParams(
         leaf_off_day=270.0, gdd_leaf_on=100.0,
         leaf_growth=50.0, frac_leaf_fall=0.95,
-        leaf_allocation=0.25, leaf_turnover_rate=1.0,
+        leaf_allocation=0.25, leaf_turnover_rate=1.0, leaf_on_realloc_frac=0.2,
     ),
     respiration=RespirationParams(
         base_veg_resp=0.02, veg_resp_q10=2.0, growth_resp_frac=0.0,

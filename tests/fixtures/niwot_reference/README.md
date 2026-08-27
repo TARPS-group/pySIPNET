@@ -17,7 +17,7 @@ Copied verbatim from the SIPNET submodule's own smoke-test suite:
 
 Pinned SIPNET submodule commit at time of copy:
 
-    1bd16b782c9941c98abcb9615e8626f1fd78c309  (v2.1.0)
+    41fa853e7131f542c52fcc0f4e3ea76892b52eda  (v2.2.0-alpha.1)
 
 `sipnet.param` is byte-identical to the upstream file at that commit, and
 `sipnet.clim` matches its first 800 rows exactly. Keep it that way: the whole

@@ -33,12 +33,19 @@ is switched off, filling it with zeros. Grouped by what they describe:
 - **Nitrogen** (zero unless the nitrogen cycle is on): ``minN``, ``soilOrgN``,
   ``litterN``, ``n2o``, ``nLeaching``, ``nFixation``, ``nUptake``
 - **Methane** (zero unless anaerobic processes are on): ``ch4``
-- **Mass-balance checks**: ``bcdeltaC``, ``bcdeltaN``, the carbon and nitrogen
-  closure errors SIPNET computes for itself. Both should stay at or near zero;
-  a drift away from zero indicates a problem inside the model run.
+- **Nitrogen storage**: ``plantStorageN``, the pool leaf-out draws on
+
+SIPNET checks its own carbon and nitrogen closure, but at the pinned version it
+reports the result as a log warning from ``checkBalance()`` rather than as
+output columns. v2.1.0 wrote ``bcdeltaC`` and ``bcdeltaN`` instead; both names
+are still mapped so output saved from that version reads.
 
 ``microbeC``, ``litterWater`` and ``fPAR`` were written by older versions and
 are retained in the name mapping so previously saved output still reads.
+
+The column count is therefore 35 at the pinned version, and was 36 at v2.1.0.
+Nothing in the reader depends on the count: columns are matched by name, which
+is what lets one reader handle all of these.
 """
 
 from __future__ import annotations
@@ -82,11 +89,15 @@ SIPNET_TO_PYTHON_OUTPUT: dict[str, str] = {
     "nLeaching": "n_leaching",
     "nFixation": "n_fixation",
     "nUptake": "n_uptake",
+    # Plant nitrogen held in storage; leaf-out draws on this pool.
+    "plantStorageN": "plant_storage_n",
     # Methane; zero unless ModelFlags.anaerobic is on.
     "ch4": "ch4",
     # Carbon held back from allocation to represent storage lag.
     "nppStorage": "npp_storage",
-    # SIPNET's own mass-balance closure errors; should stay near zero.
+    # Written by SIPNET v2.1.0 as its mass-balance closure errors. The pinned
+    # version reports those as log warnings instead, but the names are kept so
+    # output saved from v2.1.0 still reads.
     "bcdeltaC": "balance_delta_c",
     "bcdeltaN": "balance_delta_n",
     # Written by SIPNET versions older than the pinned one; kept so that

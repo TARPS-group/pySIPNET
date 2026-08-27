@@ -110,6 +110,7 @@ def minimal_params():
             frac_leaf_fall=0.95,
             leaf_allocation=0.25,
             leaf_turnover_rate=1.0,
+            leaf_on_realloc_frac=0.2,
         ),
         respiration=RespirationParams(
             base_veg_resp=0.02,

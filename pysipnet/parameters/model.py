@@ -37,6 +37,7 @@ Each of these fields has ``per_year=True`` in its :class:`ParameterSpec`.
 - ``allocation.coarse_root_turnover_rate``
 - ``allocation.wood_turnover_rate``
 - ``phenology.leaf_turnover_rate``
+- ``phenology.leaf_on_realloc_frac``
 
 Allocation constraint
 ---------------------
@@ -102,6 +103,7 @@ UNSUPPORTED_FLAGS: dict[str, tuple[str, tuple[str, ...]]] = {
             "mineralNInit",
             "soilOrgNInit",
             "litterOrgNInit",
+            "plantStorageNInit",
             "nVolatilizationFrac",
             "nLeachingFrac",
             "leafCN",
@@ -110,6 +112,7 @@ UNSUPPORTED_FLAGS: dict[str, tuple[str, tuple[str, ...]]] = {
             "kCN",
             "nFixationFracMax",
             "halfNFixationMax",
+            "leafNResorptionFrac",
         ),
     ),
     "anaerobic": (
@@ -125,6 +128,10 @@ UNSUPPORTED_FLAGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "flooding": (
         "soil moisture above water holding capacity",
         ("waterDrainFrac",),
+    ),
+    "carbon_saturation": (
+        "soil and litter carbon pools that saturate rather than grow without limit",
+        ("soilCSaturation",),
     ),
 }
 
@@ -238,6 +245,15 @@ class ModelFlags(BaseModel):
     :data:`UNSUPPORTED_FLAGS`.
     """
 
+    carbon_saturation: bool = False
+    """Let soil and litter carbon saturate instead of accumulating without limit.
+
+    Requires ``litter_pool``.
+
+    **Not usable yet**: setting this raises, because ``soilCSaturation`` is not
+    modelled. See :data:`UNSUPPORTED_FLAGS`.
+    """
+
     flooding: bool = False
     """Allow soil moisture to rise above the soil's water holding capacity.
 
@@ -349,6 +365,7 @@ class ModelFlags(BaseModel):
             "LEAF_WATER": int(self.leaf_water),
             "LITTER_POOL": int(self.litter_pool),
             "SOIL_PHENOL": int(self.soil_phenol),
+            "CARBON_SATURATION": int(self.carbon_saturation),
             "NITROGEN_CYCLE": int(self.nitrogen_cycle),
             "ANAEROBIC": int(self.anaerobic),
             "FLOODING": int(self.flooding),
@@ -568,6 +585,16 @@ class PhenologyParams(BaseModel):
         per_year=True,
         description="Average leaf turnover rate (SIPNET param: leafTurnoverRate). "
         "Specified as year⁻¹; SIPNET divides by 365 for daily use.",
+    )
+    leaf_on_realloc_frac: float = param_field(
+        unit="1",
+        domain=_D.UNIT_INTERVAL,
+        description="Fraction of wood and coarse-root carbon that leaf-out may draw "
+        "on (SIPNET param: leafOnReallocFrac). Leaf-out needs carbon from "
+        "somewhere; this caps how much of the existing woody pools it can take, "
+        "so a large leafGrowth cannot empty them. SIPNET compares the demand "
+        "against (plantWoodC + coarseRootC) × this fraction and scales the "
+        "transfer down if it would exceed that.",
     )
 
 

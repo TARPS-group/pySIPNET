@@ -30,16 +30,17 @@ from pysipnet.build import (
     release_url,
 )
 from pysipnet.version import (
+    SIPNET_NUMERIC_VERSION,
+    SIPNET_PINNED_TAG,
     SIPNET_RELEASE_ASSETS,
     SIPNET_RELEASE_REPO,
     SIPNET_RELEASE_TAG,
-    SIPNET_TARGET_VERSION,
 )
 
 # A payload that behaves like the real binary for the one thing the installer
 # checks after unpacking: that `--version` reports the targeted release.
 FAKE_BINARY = f"""#!/bin/sh
-echo "SIPNET version {SIPNET_TARGET_VERSION.lstrip("v")} ({SIPNET_TARGET_VERSION})"
+echo "SIPNET version {SIPNET_NUMERIC_VERSION} ({SIPNET_PINNED_TAG})"
 """.encode()
 
 
@@ -502,7 +503,7 @@ class TestDownloadSipnet:
         good.write_bytes(b"the user's working binary")
         wrong = b'#!/bin/sh\necho "SIPNET version 9.9.9 (v9.9.9)"\n'
         served(_tar_bytes({BINARY_NAME: wrong}))
-        with pytest.raises(DownloadError, match="reports version"):
+        with pytest.raises(DownloadError, match="was built from"):
             download_sipnet(force=True)
         assert good.read_bytes() == b"the user's working binary", (
             "a failed download destroyed the binary the user already had"
@@ -570,13 +571,38 @@ class TestDownloadSipnet:
         """A binary from a different release must not be left installed.
 
         This is the check that catches a half-finished pin bump, where the
-        asset was updated but SIPNET_TARGET_VERSION was not, or vice versa.
+        asset was updated but SIPNET_PINNED_TAG was not, or vice versa. It
+        compares the git-describe tag, so it works even when the numeric
+        version happens to agree — which it does at a pre-release pin, where
+        version.h lags the tag.
         """
         wrong = b'#!/bin/sh\necho "SIPNET version 1.2.3 (v1.2.3)"\n'
         served(_tar_bytes({BINARY_NAME: wrong}))
-        with pytest.raises(DownloadError, match="reports version"):
+        with pytest.raises(DownloadError, match="was built from"):
             download_sipnet()
         assert not (tmp_path / BINARY_NAME).exists(), "a wrong-version binary was left behind"
+
+    def test_right_numeric_version_but_wrong_tag_is_refused(self, served, tmp_path):
+        """The case a numeric-version check would wave straight through.
+
+        At a pre-release pin SIPNET's version.h lags the tag, so several
+        releases report the same numeric version. A binary from the wrong one
+        is only distinguishable by its git-describe tag.
+        """
+        impostor = (
+            f'#!/bin/sh\necho "SIPNET version {SIPNET_NUMERIC_VERSION} (v2.1.0)"\n'
+        ).encode()
+        served(_tar_bytes({BINARY_NAME: impostor}))
+        with pytest.raises(DownloadError, match="was built from"):
+            download_sipnet()
+        assert not (tmp_path / BINARY_NAME).exists()
+
+    def test_untagged_binary_is_refused(self, served, tmp_path):
+        """A binary compiled outside a git checkout carries no tag to check."""
+        untagged = f'#!/bin/sh\necho "SIPNET version {SIPNET_NUMERIC_VERSION}"\n'.encode()
+        served(_tar_bytes({BINARY_NAME: untagged}))
+        with pytest.raises(DownloadError, match="untagged commit"):
+            download_sipnet()
 
     def test_binary_that_will_not_run_is_removed(self, served, tmp_path):
         served(_tar_bytes({BINARY_NAME: b"not an executable at all"}))
@@ -624,8 +650,7 @@ class TestAgainstTheRealRelease:
 
     def test_download_installs_a_runnable_binary(self, tmp_path, monkeypatch):
         """End-to-end against the real release, on platforms that have one."""
-        from pysipnet.build import platform_key, sipnet_version
-        from pysipnet.version import SIPNET_TARGET_VERSION
+        from pysipnet.build import platform_key, sipnet_build_tag
 
         if platform_key() not in SIPNET_RELEASE_ASSETS:
             pytest.skip(f"no prebuilt binary published for {platform_key()}")
@@ -634,5 +659,5 @@ class TestAgainstTheRealRelease:
         path = download_sipnet(force=True)
         # download_sipnet raises on every failure path, so path.exists() alone
         # would assert nothing. Run the binary instead.
-        assert sipnet_version().startswith(SIPNET_TARGET_VERSION.removeprefix("v"))
+        assert sipnet_build_tag() == SIPNET_PINNED_TAG
         assert path.stat().st_mode & 0o111

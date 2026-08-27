@@ -332,20 +332,49 @@ class TestLitterPool:
 
 
 class TestMassBalance:
-    """SIPNET reports its own carbon and nitrogen closure errors; check them.
+    """SIPNET checks its own carbon and nitrogen closure; read its verdict.
 
-    These columns are the model's internal audit of whether the pools it
-    updated match the fluxes it computed. They should sit at or very near zero.
-    A drift away from zero points at a problem inside the model run rather than
-    in our wrapping, so it is worth surfacing rather than ignoring.
+    At v2.1.0 the closure errors were output columns (``bcdeltaC`` /
+    ``bcdeltaN``) and this asserted they stayed near zero. The pinned version
+    reports them as log warnings from ``checkBalance()`` in ``balance.c``
+    instead, so the test reads stderr.
+
+    Reading SIPNET's verdict is better than re-deriving the balance ourselves:
+    it is the model's own accounting, and a change to how the model accounts
+    for carbon shows up here rather than needing our arithmetic updated to
+    match.
     """
 
-    def test_carbon_balance_closes(self, minimal_params):
+    def test_carbon_balance_does_not_warn(self, minimal_params):
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())
-        delta = result.outputs.data["balance_delta_c"].abs().max()
-        assert delta < 1e-3, f"largest carbon closure error was {delta}"
+        log = (result.provenance.stdout or "") + (result.provenance.stderr or "")
+        failures = [ln for ln in log.splitlines() if "Carbon balance check failed" in ln]
+        assert not failures, "SIPNET reported a carbon imbalance:\n" + "\n".join(failures[:5])
 
-    def test_nitrogen_balance_closes_when_the_cycle_is_off(self, minimal_params):
-        """With the nitrogen cycle off there are no nitrogen fluxes to reconcile."""
+    def test_nitrogen_balance_does_not_warn(self, minimal_params):
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())
-        assert result.outputs.data["balance_delta_n"].abs().max() < 1e-3
+        log = (result.provenance.stdout or "") + (result.provenance.stderr or "")
+        failures = [ln for ln in log.splitlines() if "Nitrogen balance check failed" in ln]
+        assert not failures, "SIPNET reported a nitrogen imbalance:\n" + "\n".join(failures[:5])
+
+    def test_the_balance_check_actually_runs(self, minimal_params):
+        """Guard against the check being silently compiled out or skipped.
+
+        These two tests pass trivially if SIPNET never checks anything, so
+        confirm the machinery is present in the pinned source.
+        """
+        from pathlib import Path as _Path
+
+        balance_c = _Path(__file__).parent.parent / "sipnet" / "src" / "sipnet" / "balance.c"
+        if not balance_c.exists():
+            pytest.skip("SIPNET submodule not populated")
+        text = balance_c.read_text()
+        assert "Carbon balance check failed" in text
+        assert "Nitrogen balance check failed" in text
+
+    def test_the_old_output_columns_are_really_gone(self, minimal_params):
+        """Documents why this class reads the log rather than the output."""
+        result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())
+        columns = set(result.outputs.data.columns)
+        assert "balance_delta_c" not in columns
+        assert "balance_delta_n" not in columns

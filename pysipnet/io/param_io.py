@@ -60,6 +60,7 @@ PYTHON_TO_SIPNET: dict[str, str] = {
     "phenology.frac_leaf_fall": "fracLeafFall",
     "phenology.leaf_allocation": "leafAllocation",
     "phenology.leaf_turnover_rate": "leafTurnoverRate",
+    "phenology.leaf_on_realloc_frac": "leafOnReallocFrac",
     # Respiration
     "respiration.base_veg_resp": "baseVegResp",
     "respiration.veg_resp_q10": "vegRespQ10",

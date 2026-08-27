@@ -102,6 +102,7 @@ params = SIPNETParameters(
         frac_leaf_fall=0.95,
         leaf_allocation=0.25,
         leaf_turnover_rate=1.0,  # year⁻¹
+        leaf_on_realloc_frac=0.2,  # cap on wood C drawn at leaf-out
     ),
     respiration=RespirationParams(
         base_veg_resp=0.02,        # year⁻¹ (SIPNET divides by 365 internally)

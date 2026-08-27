@@ -66,7 +66,12 @@ from pysipnet.result import RunProvenance, SIPNETResult
 from pysipnet.runner import ClimateStaging, SIPNETRunner
 
 # Version
-from pysipnet.version import PYSIPNET_VERSION, SIPNET_PINNED_COMMIT, SIPNET_TARGET_VERSION
+from pysipnet.version import (
+    PYSIPNET_VERSION,
+    SIPNET_NUMERIC_VERSION,
+    SIPNET_PINNED_COMMIT,
+    SIPNET_PINNED_TAG,
+)
 
 __version__ = PYSIPNET_VERSION
 
@@ -105,5 +110,6 @@ __all__ = [
     # Version
     "PYSIPNET_VERSION",
     "SIPNET_PINNED_COMMIT",
-    "SIPNET_TARGET_VERSION",
+    "SIPNET_PINNED_TAG",
+    "SIPNET_NUMERIC_VERSION",
 ]

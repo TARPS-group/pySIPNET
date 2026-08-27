@@ -42,10 +42,10 @@ import urllib.request
 from pathlib import Path
 
 from pysipnet.version import (
+    SIPNET_PINNED_TAG,
     SIPNET_RELEASE_ASSETS,
     SIPNET_RELEASE_REPO,
     SIPNET_RELEASE_TAG,
-    SIPNET_TARGET_VERSION,
 )
 
 _REPO_ROOT = Path(__file__).parent.parent
@@ -149,10 +149,44 @@ def sipnet_version() -> str:
         text=True,
         check=True,
     )
-    # SIPNET prints e.g. "SIPNET version 2.1.0 (v2.1.0)"; keep everything
-    # after the "version" keyword so the git tag suffix is preserved.
+    # SIPNET prints e.g. "SIPNET version 2.1.0 (v2.2.0-alpha.1)"; keep
+    # everything after the "version" keyword so the tag suffix is preserved.
     _, _, version = result.stdout.strip().partition("version ")
     return version or result.stdout.strip()
+
+
+def sipnet_build_tag(version_string: str | None = None) -> str:
+    """Return the ``git describe`` tag a binary was built from.
+
+    SIPNET's Makefile injects ``git describe --tags`` into the binary, and
+    ``--version`` prints it in parentheses after the numeric version::
+
+        SIPNET version 2.1.0 (v2.2.0-alpha.1)
+                              ^^^^^^^^^^^^^^
+
+    That parenthesised part is the only thing in the output that identifies
+    which source a binary came from. The numeric version cannot do the job: it
+    comes from ``version.h``, which lags behind pre-release tags — at
+    ``v2.2.0-alpha.1`` it still reads ``2.1.0``. Checking the numeric version
+    at a pre-release pin would accept a binary built from a different release
+    and report success.
+
+    Parameters
+    ----------
+    version_string:
+        Output of :func:`sipnet_version`. Read from the installed binary when
+        omitted.
+
+    Returns
+    -------
+    str
+        The tag, e.g. ``"v2.2.0-alpha.1"``. Empty if the binary carries no tag,
+        which happens when it was compiled outside a git checkout so the
+        Makefile had no ``git describe`` to inject.
+    """
+    text = sipnet_version() if version_string is None else version_string
+    match = re.search(r"\(([^)]*)\)", text)
+    return match.group(1).strip() if match else ""
 
 
 # ── Downloading a prebuilt binary ─────────────────────────────────────────────
@@ -508,8 +542,12 @@ def _check_staged_binary(path: Path) -> None:
     """Confirm a freshly unpacked binary is the release we expect.
 
     Asks the binary what it is rather than trusting the filename it arrived
-    under. A mismatch means the pinned asset and ``SIPNET_TARGET_VERSION`` have
+    under. A mismatch means the pinned asset and :data:`SIPNET_PINNED_TAG` have
     drifted apart, which is what a half-finished pin bump looks like.
+
+    Checks the ``git describe`` tag rather than the numeric version, because
+    the numeric version lags pre-release tags and would accept a binary from
+    the wrong release.
     """
     try:
         result = subprocess.run(
@@ -521,13 +559,11 @@ def _check_staged_binary(path: Path) -> None:
     _, _, reported = result.stdout.strip().partition("version ")
     reported = reported or result.stdout.strip()
 
-    expected = SIPNET_TARGET_VERSION.removeprefix("v")
-    # Match on the full version token so "2.1.05" and "2.1.0-rc1" do not pass
-    # as "2.1.0".
-    if not re.match(rf"{re.escape(expected)}(?![\w.])", reported):
+    tag = sipnet_build_tag(reported)
+    if tag != SIPNET_PINNED_TAG:
         raise DownloadError(
-            f"The downloaded binary reports version {reported!r}, but this "
-            f"pySIPNET targets {SIPNET_TARGET_VERSION!r}. It was not installed. "
-            "The pinned asset in pysipnet.version is probably out of step with "
-            "SIPNET_TARGET_VERSION."
+            f"The downloaded binary was built from {tag or 'an untagged commit'!r}, "
+            f"but this pySIPNET pins {SIPNET_PINNED_TAG!r}. It was not installed. "
+            f"(Full version string: {reported!r}.) The pinned asset in "
+            "pysipnet.version is probably out of step with SIPNET_PINNED_TAG."
         )
