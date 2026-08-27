@@ -209,8 +209,16 @@ class TestBinaryMatchesThePin:
         2.1.0 — so a numeric check would accept a binary from the wrong
         release and report success.
         """
-        assert sipnet_build_tag() == SIPNET_PINNED_TAG, (
-            f"binary was built from {sipnet_build_tag()!r} but this release pins "
+        tag = sipnet_build_tag()
+        assert tag, (
+            "the binary carries no build tag, so which SIPNET source it came from "
+            "cannot be verified. SIPNET's Makefile stamps in `git describe --tags`, "
+            "which is empty when the submodule has no tags — run "
+            "`git -C sipnet fetch --tags` and rebuild with `make sipnet`. "
+            f"(Full version string: {sipnet_version()!r}.)"
+        )
+        assert tag == SIPNET_PINNED_TAG, (
+            f"binary was built from {tag!r} but this release pins "
             f"{SIPNET_PINNED_TAG!r}. Rebuild with 'make sipnet'. "
             f"(Full version string: {sipnet_version()!r}.)"
         )
