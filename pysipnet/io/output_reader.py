@@ -18,7 +18,7 @@ run with ``--no-print-header`` produces.
 
 Columns at the pinned version
 -----------------------------
-36 columns, always all present: SIPNET writes a column even for a process that
+35 columns, always all present: SIPNET writes a column even for a process that
 is switched off, filling it with zeros. Grouped by what they describe:
 
 - **Time**: ``year``, ``day``, ``time``

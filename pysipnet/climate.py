@@ -52,8 +52,9 @@ the per-timestep total in Einstein m⁻².
 
 VPD and wind speed
 ~~~~~~~~~~~~~~~~~~
-SIPNET internally adds a tiny positive value to VPD and wind speed if they
-are zero, to avoid division by zero.  :meth:`ClimateDrivers.validate` flags
+SIPNET clamps VPD and wind speed up to a tiny positive value when they fall
+below it — note the test is "below", so small negatives are silently clamped
+too, not just zeros, to avoid division by zero.  :meth:`ClimateDrivers.validate` flags
 non-positive values as warnings rather than errors, matching SIPNET's
 behaviour while making the issue visible to the user.
 """
@@ -274,7 +275,7 @@ class ClimateDrivers:
 
             warnings.warn(
                 f"{n} timestep(s) have vpd ≤ 0 Pa. "
-                "SIPNET adds a tiny value internally to avoid division by zero, "
+                "SIPNET clamps these to a tiny positive value to avoid division by zero, "
                 "but this may indicate a data issue.",
                 stacklevel=3,
             )

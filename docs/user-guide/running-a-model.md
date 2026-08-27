@@ -288,24 +288,23 @@ Both `SIPNETModel` and `SIPNETRunner.run()` return a `SIPNETResult`.
 
 ```python
 print(result.outputs.data.columns.tolist())
-# 36 columns:
-#  'year', 'day', 'time',
-#  'plant_wood_c', 'plant_leaf_c', 'wood_creation', 'npp_storage',
-#  'soil_c', 'coarse_root_c', 'fine_root_c', 'litter_c',
-#  'soil_water', 'soil_wetness_frac', 'snow',
-#  'npp', 'nee', 'cum_nee', 'gpp',
-#  'r_aboveground', 'r_soil', 'r_root', 'ra', 'rh', 'rtot',
-#  'evapotranspiration', 'transpiration',
-#  'mineral_n', 'soil_organic_n', 'litter_n', 'n2o',
-#  'n_leaching', 'n_fixation', 'n_uptake', 'ch4',
-#  'balance_delta_c', 'balance_delta_n'
+# 35 columns:
+#  'year', 'day', 'time', 'plant_wood_c',
+#  'plant_leaf_c', 'wood_creation', 'soil_c', 'coarse_root_c',
+#  'fine_root_c', 'litter_c', 'soil_water', 'soil_wetness_frac',
+#  'snow', 'npp', 'nee', 'cum_nee',
+#  'gpp', 'r_aboveground', 'r_soil', 'r_root',
+#  'ra', 'rh', 'rtot', 'evapotranspiration',
+#  'transpiration', 'mineral_n', 'soil_organic_n', 'litter_n',
+#  'plant_storage_n', 'n2o', 'n_leaching', 'n_fixation',
+#  'n_uptake', 'ch4', 'npp_storage'
 ```
 
 Every column is always present. A process that is switched off writes zeros
 rather than omitting its column, so the nitrogen and methane columns are there
-but empty unless those processes are on. `balance_delta_c` and
-`balance_delta_n` are SIPNET's own mass-balance checks and should stay near
-zero.
+but empty unless those processes are on. SIPNET checks its own carbon and
+nitrogen closure but reports the result as a log warning rather than an
+output column, so a failed check appears in `result.provenance.stderr`.
 
 Key variables:
 
@@ -317,7 +316,7 @@ Key variables:
 | `ra` | g C m⁻² per timestep | Total autotrophic respiration |
 | `rh` | g C m⁻² per timestep | Heterotrophic respiration |
 | `evapotranspiration` | cm per timestep | Evapotranspiration |
-| `plant_wood_c` | g C m⁻² | Wood + root C pool |
+| `plant_wood_c` | g C m⁻² | Aboveground wood C; roots are separate columns |
 | `soil_c` | g C m⁻² | Soil C pool |
 
 ### Convenience accessors
@@ -371,7 +370,7 @@ list(SIPNET_PARAMS_BY_GROUP.keys())
 #  'allocation', 'water', 'leaf']
 
 # Total parameter count
-sum(len(ps) for ps in SIPNET_PARAMS_BY_GROUP.values())  # 57
+sum(len(ps) for ps in SIPNET_PARAMS_BY_GROUP.values())  # 58
 ```
 
 ### get_parameter_specs

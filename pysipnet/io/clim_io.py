@@ -152,13 +152,14 @@ def peek_clim_file(
             year_col, day_col = _YEAR_COL_IN_13, _DAY_COL_IN_13
         else:
             raise ValueError(
-                f"Expected {_N_COLS_13} or {_N_COLS_14} columns in a 'v1' climate "
+                f"Expected {_N_COLS_13} or {_N_COLS_14} columns in a 14-column-layout climate "
                 f"file at {path}, got {n_cols}."
             )
     elif n_columns == 12:
         if n_cols != _N_COLS_12:
             raise ValueError(
-                f"Expected {_N_COLS_12} columns in a 'v2' climate file at {path}, got {n_cols}."
+                f"Expected {_N_COLS_12} columns in a 12-column-layout climate file "
+                f"at {path}, got {n_cols}."
             )
         year_col, day_col = _YEAR_COL_IN_12, _DAY_COL_IN_12
     else:
@@ -248,7 +249,7 @@ def _read_14_column(path: Path) -> ClimateDrivers:
         data = raw.iloc[:, :12].copy()
     else:
         raise ValueError(
-            f"Expected {_N_COLS_13} or {_N_COLS_14} columns in a 'v1' climate file, "
+            f"Expected {_N_COLS_13} or {_N_COLS_14} columns in a 14-column-layout climate file, "
             f"got {n_cols}. Expected the 14- or 13-column layout."
         )
     data.columns = CLIM_COLUMNS  # type: ignore[assignment]
@@ -262,7 +263,7 @@ def _read_12_column(path: Path) -> ClimateDrivers:
     n_cols = raw.shape[1]
     if n_cols != _N_COLS_12:
         raise ValueError(
-            f"Expected {_N_COLS_12} columns in a 'v2' climate file, got {n_cols}. "
+            f"Expected {_N_COLS_12} columns in a 12-column-layout climate file, got {n_cols}. "
             "Expected the 12-column layout."
         )
     data = raw.copy()

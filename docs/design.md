@@ -112,11 +112,11 @@ From SIPNET v2.0.0 onward, model options are chosen at run time rather than comp
 - **Configuring SIPNET.** `to_config_keys()` renders the flags as the uppercase `sipnet.in` keys SIPNET reads. Every flag is written, including defaults, so a saved run does not depend on the binary's built-in defaults.
 - **Deciding which parameters are required.** `SIPNETParameters.validate_for_flags()` uses the flags to check the parameter set before SIPNET is invoked, so a mismatch is a Python error naming the missing field rather than an exit code from the binary.
 
-`ModelFlags` also rejects the three combinations SIPNET itself refuses (`gdd` with `soil_phenol`; `anaerobic` without `water_hresp`; `nitrogen_cycle` without both `litter_pool` and `anaerobic`), mirroring `validateContext()` in SIPNET's `src/common/context.c`.
+`ModelFlags` also rejects the four combinations SIPNET itself refuses (`gdd` with `soil_phenol`; `anaerobic` without `water_hresp`; `nitrogen_cycle` without both `litter_pool` and `anaerobic`), mirroring `validateContext()` in SIPNET's `src/common/context.c`.
 
-Separately, three flags are refused because *pySIPNET* cannot serve them: `nitrogen_cycle`, `anaerobic` and `flooding`. SIPNET supports all three, but each requires parameters `SIPNETParameters` does not define, so a run would fail inside SIPNET with "Did not find required parameter" rather than in Python. `UNSUPPORTED_FLAGS` in `pysipnet/parameters/model.py` records what each one needs; the error message reproduces that list. Removing an entry from that table is what enables the flag once its parameters exist.
+Separately, four flags are refused because *pySIPNET* cannot serve them: `nitrogen_cycle`, `anaerobic`, `flooding` and `carbon_saturation`. SIPNET supports all three, but each requires parameters `SIPNETParameters` does not define, so a run would fail inside SIPNET with "Did not find required parameter" rather than in Python. `UNSUPPORTED_FLAGS` in `pysipnet/parameters/model.py` records what each one needs; the error message reproduces that list. Removing an entry from that table is what enables the flag once its parameters exist.
 
-Earlier versions of pySIPNET compiled one binary per option combination and shipped a `ModelPreset` enum to select between them. Both are gone: arbitrary combinations are now free, so a closed set of presets would only get in the way. `ModelFlags.standard()` and `ModelFlags.forest()` remain as named starting points, and an optional `name` field carries that label into the run record.
+`ModelFlags.standard()` and `ModelFlags.forest()` are named starting points, not a closed set — any combination of flags is valid, subject to the restrictions above. An optional `name` field carries a label into the run record without affecting the model.
 
 ## Per-year rate parameters
 

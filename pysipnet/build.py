@@ -16,8 +16,8 @@ Compiling is the default. Downloading is available for the platforms upstream
 publishes binaries for, verifies a pinned checksum before unpacking anything,
 and never happens unless asked.
 
-There is a single binary. Every model option that pySIPNET can set — snow,
-litter pool, nitrogen cycle, and the rest — is chosen at run time through the
+There is a single binary. Every model option pySIPNET can set — snow, the
+litter pool, growth respiration and the rest — is chosen at run time through the
 ``sipnet.in`` config file that :class:`pysipnet.runner.SIPNETRunner` writes, so
 no compile-time configuration is involved.
 

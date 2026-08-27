@@ -67,7 +67,7 @@ CLIM_COLS_14: int = 14
 #
 # The SHA-256 of each archive is pinned here, exactly as the pinned commit is,
 # and is checked before anything is extracted. The digests come from GitHub's
-# own release metadata (`gh release view v2.1.0 --repo PecanProject/sipnet
+# own release metadata (`gh release view v2.2.0-alpha.1 --repo PecanProject/sipnet
 # --json assets`). Pinning them means the identity of a downloaded binary is a
 # reviewable part of this file rather than whatever the network returned.
 #

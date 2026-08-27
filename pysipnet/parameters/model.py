@@ -37,7 +37,6 @@ Each of these fields has ``per_year=True`` in its :class:`ParameterSpec`.
 - ``allocation.coarse_root_turnover_rate``
 - ``allocation.wood_turnover_rate``
 - ``phenology.leaf_turnover_rate``
-- ``phenology.leaf_on_realloc_frac``
 
 Allocation constraint
 ---------------------
@@ -168,8 +167,9 @@ class ModelFlags(BaseModel):
 
     Not every flag can be used
     --------------------------
-    ``nitrogen_cycle``, ``anaerobic`` and ``flooding`` are rejected. SIPNET
-    supports all three, but each needs parameters that
+    ``nitrogen_cycle``, ``anaerobic``, ``flooding`` and ``carbon_saturation``
+    are rejected. SIPNET
+    supports all four, but each needs parameters that
     :class:`SIPNETParameters` does not define yet, so a run would fail inside
     SIPNET rather than here. :data:`UNSUPPORTED_FLAGS` lists what each one
     needs.

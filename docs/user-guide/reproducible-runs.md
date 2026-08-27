@@ -56,7 +56,7 @@ my_run/
   "params": { ... },
   "climate": {"mode": "copy"},
   "has_events": false,
-  "sipnet_commit": "1bd16b78...",
+  "sipnet_commit": "41fa853e...",
   "pysipnet_version": "0.1.0.dev0",
   "created_at": "2026-05-29T14:32:01+00:00"
 }

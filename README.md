@@ -58,7 +58,7 @@ uv run mkdocs serve
 
 ## SIPNET version
 
-Pinned to the SIPNET **v2.1.0** release (commit `1bd16b78`). Model options are
+Pinned to the SIPNET **v2.2.0-alpha.1** pre-release (commit `41fa853e`). Model options are
 chosen at run time, so there is a single binary and no compiler flags. See
 [docs/sipnet-version.md](docs/sipnet-version.md).
 

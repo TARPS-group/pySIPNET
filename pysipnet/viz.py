@@ -191,7 +191,7 @@ def dashboard(
 ) -> go.Figure:
     """Build an interactive Plotly dashboard for a single SIPNET run.
 
-    The figure has six sections arranged vertically:
+    The figure has three sections arranged vertically:
 
     * **Run Configuration**: provenance table (flags, run ID, binary, status)
       and grouped parameter table (non-``None`` fields only)

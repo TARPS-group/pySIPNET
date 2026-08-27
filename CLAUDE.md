@@ -25,22 +25,15 @@ newer commits exist.
 Pinning by commit rather than branch means anyone who clones the repo compiles
 the same model source, and a version change is an explicit, reviewable edit.
 
-### Why this tag rather than a newer commit
+### Why a tag rather than a bare commit
 
-Three candidates were on the table: `v2.2.0-alpha.1` (this one), `bc96ae1`, and
-`d2fc7a2`. They form a strict linear chain — the tag is the **oldest** of the
-three, and `d2fc7a2` the newest, which is the opposite of how they were first
-described to us (the `-0400`/`-0700` author timestamps mislead; check ancestry).
+Newer commits exist on `master`. None of them change anything pySIPNET uses:
+the only model change since this tag is inside `if (ctx.nitrogenCycle)`, which
+`ModelFlags` refuses, and the rest touches `tools/`, which we do not use.
 
-The differences do not matter to pySIPNET:
-
-- tag → `bc96ae1` adds `checkMineralNLimitation()` in `limitations.c`, a real
-  model change but inside `if (ctx.nitrogenCycle)`, which `ModelFlags` refuses.
-- `bc96ae1` → `d2fc7a2` touches only `tools/sipnet_view.py`, which we do not use.
-
-So the tag was chosen for the property a bare commit cannot have: it is a name
-everyone can pin to and cite. If the group wants the tip, ask upstream to tag
-it rather than pinning a loose commit.
+A tag is a name everyone can pin to and cite; a loose commit is not. To move
+closer to the tip, ask upstream to tag the commit rather than pinning it
+directly.
 
 ### The trap: a pre-release tag can move
 
@@ -89,12 +82,13 @@ The submodule lives at `sipnet/`. `make sipnet` compiles it and copies the
 result to `.sipnet_cache/sipnet` (gitignored). Never commit the binary.
 `tests/test_build.py` asserts that the submodule is at
 `SIPNET_PINNED_COMMIT` and that the compiled binary reports
-`SIPNET_TARGET_VERSION`, so a stale binary or half-finished bump fails loudly
+`SIPNET_PINNED_TAG`, so a stale binary or half-finished bump fails loudly
 rather than producing quietly wrong output.
 
 When moving to a newer SIPNET, expect to touch: the required-parameter set,
 the output column list, the `sipnet.in` keys, and the golden fixtures. Bump
-`SIPNET_PINNED_COMMIT` and `SIPNET_TARGET_VERSION` together, and rebuild with
+`SIPNET_PINNED_COMMIT`, `SIPNET_PINNED_TAG` and `SIPNET_NUMERIC_VERSION`
+together, refresh `SIPNET_RELEASE_ASSETS`, and rebuild with
 `make sipnet` — `build_sipnet()` trusts an existing binary unless passed
 `force=True`.
 
@@ -185,11 +179,12 @@ saved run does not change meaning if a future default changes.
 
 Model flags: `GDD` (1), `SNOW` (1), `WATER_HRESP` (1), `GROWTH_RESP` (0),
 `LEAF_WATER` (0), `LITTER_POOL` (0), `SOIL_PHENOL` (0), `NITROGEN_CYCLE` (0),
-`ANAEROBIC` (0), `FLOODING` (0).
+`ANAEROBIC` (0), `FLOODING` (0), `CARBON_SATURATION` (0).
 
-`validateContext()` rejects three combinations, mirrored in `ModelFlags`:
+`validateContext()` rejects four combinations, mirrored in `ModelFlags`:
 `GDD` with `SOIL_PHENOL`; `ANAEROBIC` without `WATER_HRESP`; `NITROGEN_CYCLE`
-without both `LITTER_POOL` and `ANAEROBIC`.
+without both `LITTER_POOL` and `ANAEROBIC`; `CARBON_SATURATION` without
+`LITTER_POOL`.
 
 **`DO_SINGLE_OUTPUTS` must be plural.** SIPNET derives each config key from
 the C *field* name via `nameToKey`, not from the label it prints for the
@@ -293,12 +288,11 @@ Format: `year day <type> <type-specific params...>`, one event per line, and rec
 
 An unknown event keyword is a hard error. A wrong param **count** is not, in
 one direction: `sscanf` stops once it has filled its arguments, so a line with
-*too many* values is accepted and the surplus discarded without a word. That is
-how a tillage bug survived — pySIPNET wrote the three parameters older SIPNET
-took, v2.1.0 reads one, and the litter fraction was silently applied as the
-decomposition boost. `pysipnet/events.py` now checks the count exactly on read,
-and `tests/test_events_contract.py` asserts every arity against
-`NUM_*_PARAMS` in `sipnet/src/sipnet/events.h` so it cannot drift again.
+*too many* values is accepted and the surplus discarded without a word. A
+mismatched arity therefore applies the wrong quantity silently.
+`pysipnet/events.py` checks the count exactly on read, and
+`tests/test_events_contract.py` asserts every arity against `NUM_*_PARAMS` in
+`sipnet/src/sipnet/events.h`.
 
 Events produce an `events.out` file alongside the main output, recording what
 SIPNET actually applied — which is what makes this contract testable.
@@ -407,8 +401,8 @@ in either direction.
 Adding these is tracked in issue #26. Do it as its own opt-in group so the
 default parameter set stays as small as it is now, and start with `flooding` —
 one parameter, no flag dependencies, so it exercises the whole path with the
-least in the way. Note `fAnoxia` **does** exist
-at this pin, contradicting the earlier note that it was v2-only.
+least in the way. Note `fAnoxia` is registered
+`ctx.anaerobic || ctx.nitrogenCycle`, so either flag alone requires it.
 
 The `MICROBES` and `SOIL_QUALITY` processes were removed upstream, so their
 parameters are gone entirely rather than merely unreachable.
@@ -423,8 +417,8 @@ different parameters depending on `sipnet.in`. `ModelFlags` mirrors this in
 - **49 parameters are unconditionally required.**
 - Default flags (`gdd`, `snow`, `water_hresp`) add `gddLeafOn`, `snowMelt` and
   `soilRespMoistEffect` → **52 required**. The writer emits every parameter
-  that is not `None`, so the actual line count is 51 plus whichever optional
-  ones you set.
+  that is not `None`, so a file has those 52 plus whichever optional ones you
+  set.
 - `litter_pool` adds `litterBreakdownRate` and `fracLitterRespired` → **54**.
 - No obsolete placeholders. The previous pin needed 64 lines for the equivalent
   configuration.
@@ -437,7 +431,7 @@ different parameters depending on `sipnet.in`. `ModelFlags` mirrors this in
 
 3. **SIPNET expects files in the current working directory.** The runner writes all inputs to a fresh temp dir per run and executes the binary there. The generated `sipnet.in` sets `FILE_NAME = sipnet`, so SIPNET reads `sipnet.param` and `sipnet.clim` and writes `sipnet.out`.
 
-4. **Model options are runtime, and they change which parameters are required.** All ten (`GDD`, `SNOW`, `WATER_HRESP`, `GROWTH_RESP`, `LEAF_WATER`, `LITTER_POOL`, `SOIL_PHENOL`, `NITROGEN_CYCLE`, `ANAEROBIC`, `FLOODING`) are set in `sipnet.in`. One binary, `make sipnet`, no `-D` flags, no source patch. Because they change the required parameter set, the flags are part of the run specification, not a build detail — which is why `ModelFlags` is serialised into `RunConfig` and `RunProvenance`. SIPNET rejects three combinations (`validateContext()`); `ModelFlags` rejects them first.
+4. **Model options are runtime, and they change which parameters are required.** All ten (`GDD`, `SNOW`, `WATER_HRESP`, `GROWTH_RESP`, `LEAF_WATER`, `LITTER_POOL`, `SOIL_PHENOL`, `NITROGEN_CYCLE`, `ANAEROBIC`, `FLOODING`) are set in `sipnet.in`. One binary, `make sipnet`, no `-D` flags, no source patch. Because they change the required parameter set, the flags are part of the run specification, not a build detail — which is why `ModelFlags` is serialised into `RunConfig` and `RunProvenance`. SIPNET rejects four combinations (`validateContext()`); `ModelFlags` rejects them first.
 
 5. **No missing climate values.** Climate validation must be strict: every row must be complete, timesteps must be monotonically increasing, and the start/end dates must bracket the intended simulation period.
 

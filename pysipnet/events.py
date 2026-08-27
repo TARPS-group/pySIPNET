@@ -1,6 +1,6 @@
 """Agronomic event data structures and ``events.in`` file I/O.
 
-SIPNET supports five event types that alter model state at a specified
+pySIPNET writes five of the event types SIPNET accepts that alter model state at a specified
 (year, day) during a simulation run.
 
 Event file format

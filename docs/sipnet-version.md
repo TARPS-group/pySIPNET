@@ -89,8 +89,8 @@ process writes zeros rather than omitting its column.
 Older SIPNET wrote a `Notes:` line above the header, which v2.1.0 removed. The
 output reader detects the header by content rather than expecting that line, so
 files from older versions still read. Columns are matched by name, never by
-position, which is why the count changing from 36 to 35 between v2.1.0 and this
-pin needed no reader change beyond mapping the new name.
+position, so a column set that changes between versions costs only a mapping
+entry.
 
 ## Moving to a newer SIPNET
 
