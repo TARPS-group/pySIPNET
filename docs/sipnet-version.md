@@ -110,6 +110,8 @@ instead of from a fitted parameter. Useful for calibration, since it removes a
 dimension from the parameter space. It is mutually exclusive with the
 calculated triggers, and SIPNET refuses to start if both are configured.
 
-At the time of writing, v2.2.0 exists only as an alpha, and its rename of
-`FILE_NAME` to `FILE_PREFIX` has no config-file alias, so the key pySIPNET
-writes would be silently ignored. Worth revisiting when it ships.
+At the time of writing v2.2.0 exists only as a pre-release. Its rename of
+`FILE_NAME` to `FILE_PREFIX` keeps a config-file alias, so the key pySIPNET
+writes still works. The migration cost is elsewhere: a new required parameter
+(`leafOnReallocFrac`), the `bcdeltaC`/`bcdeltaN` output columns being replaced
+by a log warning, and three new event types to model.

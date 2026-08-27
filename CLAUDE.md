@@ -24,9 +24,13 @@ the same model source, and a version change is an explicit, reviewable edit.
 
 ### Why v2.1.0 and not something newer or older
 
-- **Newer.** `v2.2.0-alpha.1` is an alpha, and its `FILE_PREFIX` rename has no
-  config-file alias, so a `fileName` key is silently ignored. Revisit when
-  v2.2.0 ships; the prescribed-phenology events there are genuinely useful.
+- **Newer.** `v2.2.0-alpha.1` and later are pre-release. Note the
+  `FILE_NAME` → `FILE_PREFIX` rename there **does** have a config-file alias
+  (`nameToKey` maps `filename` → `fileprefix`), so our generated `sipnet.in`
+  still works — an earlier note in this file claimed otherwise and was wrong.
+  The real migration cost is a new required parameter (`leafOnReallocFrac`),
+  the removal of the `bcdeltaC`/`bcdeltaN` output columns, and three new event
+  types. See the pin-bump analysis in the PR discussion.
 - **Older.** Anything before `v2.0.0` chooses model options at compile time,
   which forces one binary per combination and a patch to the SIPNET source to
   make the switches overridable at all. `v2.0.0` also fixes two defects that
