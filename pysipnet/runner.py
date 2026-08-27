@@ -208,8 +208,10 @@ class SIPNETRunner:
         How file-backed climate instances are staged into the working
         directory.  See :class:`ClimateStaging`.
     workdir_base:
-        Parent directory for per-run temporary working directories.  Defaults
-        to the system temp directory.
+        Parent directory for per-run working directories.  Defaults to the
+        system temp directory.  Each run gets a freshly created subdirectory
+        with a unique name, so two runs never share one even when they share a
+        ``run_id``.
     keep_workdir:
         If ``True``, do not delete the working directory after the run.
         Useful for debugging.  Default is ``False``.
@@ -359,14 +361,21 @@ class SIPNETRunner:
             effective_output_dir = Path(output_dir)
 
         run_id = _check_run_id(run_id) if run_id else uuid.uuid4().hex
-        workdir = self.workdir_base / f"sipnet_{run_id}"
+
+        # The run id labels the run; it does not name the directory. Deriving
+        # the path from it would put two concurrent runs that share an id into
+        # the same directory under a shared temp dir, and because the run
+        # succeeds by reading whatever sipnet.out it finds, the result is wrong
+        # numbers rather than an error. mkdtemp guarantees a fresh directory,
+        # keeping the id in the prefix so it is still recognisable while
+        # debugging.
+        self.workdir_base.mkdir(parents=True, exist_ok=True)
+        workdir = Path(tempfile.mkdtemp(prefix=f"sipnet_{run_id}_", dir=self.workdir_base))
 
         # Validate output_dir before any I/O so errors are immediate and clear.
         if effective_output_dir is not None:
             self._check_output_dir(effective_output_dir, workdir)
             effective_output_dir.mkdir(parents=True, exist_ok=True)
-
-        workdir.mkdir(parents=True, exist_ok=True)
 
         try:
             write_param_file(parameters, flags, workdir / "sipnet.param")

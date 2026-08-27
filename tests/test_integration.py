@@ -218,18 +218,55 @@ class TestOutputIO:
         assert result.outputs.source_path is None, "Should be in-memory when output_dir=None"
         assert not runner_dir.exists(), "Runner-level dir should not be created"
 
-    def test_output_dir_inside_workdir_raises_before_run(self, minimal_params, tmp_path):
-        """output_dir inside the workdir raises ValueError before the binary runs."""
-        workdir_base = tmp_path / "workdirs"
-        runner = SIPNETRunner(
-            flags=ModelFlags.standard(),
-            workdir_base=workdir_base,
-        )
-        # The workdir will be workdir_base/sipnet_myrun — so a subdir of that is invalid.
-        bad_output_dir = workdir_base / "sipnet_myrun" / "outputs"
+    def test_output_dir_inside_workdir_is_refused(self, minimal_params, tmp_path):
+        """output_dir inside the workdir is refused before the binary runs.
+
+        The working directory is deleted after the run, so writing output into
+        it would delete the output too. The check is exercised directly rather
+        than by predicting the path: each run now gets a freshly created
+        directory with an unguessable name, which is what stops two concurrent
+        runs sharing one.
+        """
+        runner = SIPNETRunner(flags=ModelFlags.standard(), workdir_base=tmp_path)
+        workdir = tmp_path / "sipnet_somerun_abc123"
+        workdir.mkdir()
 
         with pytest.raises(ValueError, match="inside the run's working directory"):
-            runner.run(minimal_params, _make_climate(), run_id="myrun", output_dir=bad_output_dir)
+            runner._check_output_dir(workdir / "outputs", workdir)
+
+    def test_output_dir_outside_workdir_is_allowed(self, minimal_params, tmp_path):
+        runner = SIPNETRunner(flags=ModelFlags.standard(), workdir_base=tmp_path)
+        workdir = tmp_path / "sipnet_somerun_abc123"
+        workdir.mkdir()
+        runner._check_output_dir(tmp_path / "elsewhere", workdir)  # must not raise
+
+    def test_two_runs_sharing_a_run_id_get_separate_directories(self, minimal_params, tmp_path):
+        """The collision that silently swapped results between concurrent runs.
+
+        The working directory used to be named from the run id, so two runs
+        with the same id under a shared temp directory wrote to the same path.
+        Because a run succeeds by reading whatever sipnet.out it finds, the
+        symptom was wrong numbers rather than an error — and the module
+        docstring recommends exactly this pattern for ensembles.
+        """
+        runner = SIPNETRunner(flags=ModelFlags.standard(), workdir_base=tmp_path, keep_workdir=True)
+        first = runner.run(minimal_params, _make_climate(), run_id="member")
+        second = runner.run(minimal_params, _make_climate(), run_id="member")
+        assert first.provenance.workdir != second.provenance.workdir
+        assert first.provenance.workdir.exists()
+        assert second.provenance.workdir.exists()
+
+    def test_the_run_id_still_labels_the_directory(self, minimal_params, tmp_path):
+        """Unpredictable, but still recognisable while debugging."""
+        runner = SIPNETRunner(flags=ModelFlags.standard(), workdir_base=tmp_path, keep_workdir=True)
+        result = runner.run(minimal_params, _make_climate(), run_id="member42")
+        assert result.provenance.workdir.name.startswith("sipnet_member42_")
+
+    def test_a_run_id_that_escapes_the_workdir_base_is_refused(self, minimal_params, tmp_path):
+        """A run id becomes part of a path that is deleted afterwards."""
+        runner = SIPNETRunner(flags=ModelFlags.standard(), workdir_base=tmp_path)
+        with pytest.raises(ValueError, match="Invalid run_id"):
+            runner.run(minimal_params, _make_climate(), run_id="../../escape")
 
     def test_column_selection_returns_subset(self, minimal_params, tmp_path):
         """load(columns=...) returns only the requested columns plus time coords."""

@@ -12,6 +12,7 @@ plotly = pytest.importorskip("plotly")
 
 def _make_result(include_litter: bool = False):
     """Return a minimal SIPNETResult with synthetic outputs and climate."""
+    from pysipnet.output import SIPNETOutput
     from pysipnet.result import RunProvenance, SIPNETResult
 
     n = 10
@@ -58,7 +59,11 @@ def _make_result(include_litter: bool = False):
     provenance.returncode = 0
 
     result = MagicMock(spec=SIPNETResult)
-    result.outputs = ts
+    # Wrap the frame the way a real result does. Assigning a bare
+    # DataFrame here is what let dashboard() ship broken: the mock
+    # encoded the contract from before SIPNETOutput existed, so these
+    # tests certified an API the code no longer had.
+    result.outputs = SIPNETOutput.from_dataframe(ts)
     result.climate = climate
     result.provenance = provenance
     return result
@@ -132,6 +137,7 @@ class TestDashboard:
 
     def test_empty_outputs_raises(self):
         from pysipnet.climate import ClimateDrivers
+        from pysipnet.output import SIPNETOutput
         from pysipnet.result import RunProvenance, SIPNETResult
         from pysipnet.viz import dashboard
 
@@ -139,7 +145,7 @@ class TestDashboard:
         provenance.returncode = 1
 
         result = MagicMock(spec=SIPNETResult)
-        result.outputs = pd.DataFrame()
+        result.outputs = SIPNETOutput.from_dataframe(pd.DataFrame())
         result.climate = ClimateDrivers.from_dataframe(
             pd.DataFrame(
                 {
@@ -162,3 +168,38 @@ class TestDashboard:
 
         with pytest.raises(ValueError, match="empty"):
             dashboard(result)
+
+
+class TestDashboardOnARealResult:
+    """Exercise dashboard() against an actual run, not a mock.
+
+    Every other test here builds its result with MagicMock. That is what let
+    dashboard() ship broken: the mock assigned a bare DataFrame to
+    ``result.outputs``, encoding the contract from before SIPNETOutput existed,
+    so the tests passed while every real result raised AttributeError. A mock
+    can only ever assert the shape the author believed in.
+    """
+
+    def test_dashboard_accepts_a_real_result(self, minimal_params):
+        import warnings
+        from pathlib import Path
+
+        from pysipnet.build import binary_path
+        from pysipnet.climate import ClimateDrivers
+        from pysipnet.io.clim_io import read_clim_file
+        from pysipnet.parameters.model import ModelFlags
+        from pysipnet.runner import SIPNETRunner
+        from pysipnet.viz import dashboard
+
+        if not binary_path().exists():
+            pytest.skip("SIPNET binary not built; run 'make sipnet'")
+
+        reference = Path(__file__).parent / "fixtures" / "niwot_reference" / "sipnet.clim"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            full = read_clim_file(reference, n_columns=14)
+        climate = ClimateDrivers.from_dataframe(full.data.head(40).copy(), n_columns=14)
+
+        result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, climate)
+        figure = dashboard(result)
+        assert len(figure.data) > 0, "dashboard produced no traces"
