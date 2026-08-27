@@ -24,14 +24,17 @@ def _make_df(
             "day": range(start_doy, start_doy + n_days),
             "time": 0.0,
             "length": 1.0,
-            "tair": 15.0,
-            "tsoil": 10.0,
-            "par": 10.0,
-            "precip": 2.0,
-            "vpd": 800.0,
-            "vpd_soil": 400.0,
-            "vpress": 1200.0,
-            "wspd": 2.5,
+            # Every column a distinct, non-round value. With repeated or round
+            # numbers a round trip proves only the shape: swapping two columns
+            # in the writer, or truncating precision, would still compare equal.
+            "tair": 15.3125,
+            "tsoil": 10.0625,
+            "par": 21.8437,
+            "precip": 2.1875,
+            "vpd": 803.40625,
+            "vpd_soil": 401.703125,
+            "vpress": 1203.28125,
+            "wspd": 2.546875,
         }
     )
 

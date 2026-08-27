@@ -171,7 +171,12 @@ def param_field(
     """
     validate_unit_string(unit)
 
-    pydantic_kwargs: dict[str, Any] = {}
+    # Pydantic allows NaN and inf through by default, and the gt/ge bounds do
+    # not catch them: comparisons against NaN are always false and inf passes
+    # any lower bound. Either reaches SIPNET, which parses it with strtod and
+    # runs to completion — a NaN temperature parameter produces a whole run of
+    # zero productivity, exit code 0, and no warning anywhere.
+    pydantic_kwargs: dict[str, Any] = {"allow_inf_nan": False}
     if domain == ParameterDomain.POSITIVE:
         pydantic_kwargs["gt"] = 0
     elif domain == ParameterDomain.NON_NEGATIVE:

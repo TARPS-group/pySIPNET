@@ -8,6 +8,7 @@ focuses on the param writer/reader, which has no other direct coverage.
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from pysipnet.io.param_io import (
     PYTHON_TO_SIPNET,
@@ -356,3 +357,78 @@ class TestOutputHeaderDetection:
 
         df = read_output_file(self._write(tmp_path, self.HEADER, self.ROW_1), columns=["nee"])
         assert set(df.columns) == {"year", "day", "time", "nee"}
+
+
+class TestNonFiniteValuesAreRefused:
+    """NaN and inf must never reach SIPNET.
+
+    SIPNET parses both with strtod and runs to completion. A NaN temperature
+    parameter gives a whole run of zero productivity, exit code 0, and no
+    warning — output that looks entirely plausible. In a calibration loop a NaN
+    proposal becomes a finite, wrong likelihood instead of an error.
+    """
+
+    def test_nan_is_refused_at_construction(self):
+        from pysipnet.parameters.model import PhotosynthesisParams
+
+        with pytest.raises(ValidationError):
+            PhotosynthesisParams(
+                a_max=112.0,
+                a_max_frac=0.76,
+                base_fol_resp_frac=0.1,
+                psn_t_min=float("nan"),
+                psn_t_opt=24.0,
+                d_vpd_slope=0.05,
+                d_vpd_exp=1.0,
+                half_sat_par=17.0,
+                attenuation=0.5,
+            )
+
+    def test_inf_is_refused_at_construction(self):
+        from pysipnet.parameters.model import PhotosynthesisParams
+
+        with pytest.raises(ValidationError):
+            PhotosynthesisParams(
+                a_max=float("inf"),
+                a_max_frac=0.76,
+                base_fol_resp_frac=0.1,
+                psn_t_min=2.0,
+                psn_t_opt=24.0,
+                d_vpd_slope=0.05,
+                d_vpd_exp=1.0,
+                half_sat_par=17.0,
+                attenuation=0.5,
+            )
+
+    def test_writer_refuses_a_non_finite_value_that_skipped_validation(
+        self, tmp_path, minimal_params
+    ):
+        """model_construct bypasses validators, so the writer checks too."""
+        from pysipnet.parameters.model import ModelFlags
+
+        data = minimal_params.model_dump()
+        data["photosynthesis"]["a_max"] = float("nan")
+        sneaked = type(minimal_params).model_construct(
+            **{
+                k: type(getattr(minimal_params, k)).model_construct(**v)
+                if isinstance(v, dict)
+                else v
+                for k, v in data.items()
+            }
+        )
+        with pytest.raises(ValueError, match="Refusing to write"):
+            write_param_file(sneaked, ModelFlags.standard(), tmp_path / "sipnet.param")
+
+    def test_a_numpy_scalar_is_written_as_a_plain_number(self, tmp_path, minimal_params):
+        """repr() of a numpy scalar is 'np.float64(8.3)', which SIPNET reads as 0."""
+        import numpy as np
+
+        from pysipnet.parameters.model import ModelFlags
+
+        data = minimal_params.model_dump()
+        data["photosynthesis"]["a_max"] = np.float64(112.5)
+        params = type(minimal_params).model_validate(data)
+        path = tmp_path / "sipnet.param"
+        write_param_file(params, ModelFlags.standard(), path)
+        line = next(ln for ln in path.read_text().splitlines() if ln.startswith("aMax"))
+        assert line.split()[1] == "112.5", f"unparseable value written: {line!r}"

@@ -55,6 +55,7 @@ Each run writes ``sipnet_<run_id>.out`` inside ``output_dir``.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import tempfile
 import uuid
@@ -101,6 +102,30 @@ class ClimateStaging(StrEnum):
 
     COPY = "copy"
     SYMLINK = "symlink"
+
+
+_SAFE_RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _check_run_id(run_id: str) -> str:
+    """Return *run_id* if it is safe to use in a path, else raise.
+
+    The run id becomes a directory name under ``workdir_base``, and that
+    directory is deleted when the run finishes. Without this check a run id
+    containing ``..`` walks out of ``workdir_base``, so SIPNET's inputs are
+    written into some unrelated directory and the cleanup then removes it.
+
+    Ensemble run ids are often built from site or member identifiers read out
+    of data files, so this is reachable without anyone doing anything strange.
+    """
+    if not _SAFE_RUN_ID.match(run_id):
+        raise ValueError(
+            f"Invalid run_id {run_id!r}. A run id becomes a directory name, so it "
+            "may contain only letters, digits, dot, underscore and hyphen, and must "
+            "start with a letter or digit. Path separators and '..' are refused "
+            "because the run directory is deleted afterwards."
+        )
+    return run_id
 
 
 def _render_sipnet_in(flags: ModelFlags, *, events_enabled: bool) -> str:
@@ -333,7 +358,7 @@ class SIPNETRunner:
         else:
             effective_output_dir = Path(output_dir)
 
-        run_id = run_id or uuid.uuid4().hex
+        run_id = _check_run_id(run_id) if run_id else uuid.uuid4().hex
         workdir = self.workdir_base / f"sipnet_{run_id}"
 
         # Validate output_dir before any I/O so errors are immediate and clear.

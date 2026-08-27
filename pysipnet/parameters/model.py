@@ -176,7 +176,7 @@ class ModelFlags(BaseModel):
 
     Restrictions
     ------------
-    SIPNET refuses to start on three flag combinations, and this model rejects
+    SIPNET refuses to start on four flag combinations, and this model rejects
     them first so the problem is reported in Python rather than as an exit
     code from the binary:
 
@@ -334,6 +334,8 @@ class ModelFlags(BaseModel):
             problems.append("anaerobic requires water_hresp to be True")
         if self.nitrogen_cycle and not (self.litter_pool and self.anaerobic):
             problems.append("nitrogen_cycle requires both litter_pool and anaerobic to be True")
+        if self.carbon_saturation and not self.litter_pool:
+            problems.append("carbon_saturation requires litter_pool to be True")
 
         if problems:
             raise ValueError(

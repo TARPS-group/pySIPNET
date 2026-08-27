@@ -61,6 +61,19 @@ class TestRenderedContent:
         settings = _parse(_render_sipnet_in(ModelFlags(), events_enabled=True))
         assert settings["EVENTS"] == "1"
 
+    def test_requests_the_main_output_file(self):
+        """Written rather than assumed: if a future SIPNET defaulted this off,
+        there would be no output to read and the failure would look like a
+        missing file rather than a configuration change."""
+        settings = _parse(_render_sipnet_in(ModelFlags(), events_enabled=False))
+        assert settings["DO_MAIN_OUTPUT"] == "1"
+
+    def test_disables_the_per_variable_output_files(self):
+        """Note the plural: SIPNET derives this key from its C field name,
+        and the singular form its own docs give is silently ignored."""
+        settings = _parse(_render_sipnet_in(ModelFlags(), events_enabled=False))
+        assert settings["DO_SINGLE_OUTPUTS"] == "0"
+
     def test_includes_every_model_flag(self):
         settings = _parse(_render_sipnet_in(ModelFlags(), events_enabled=False))
         for key in ModelFlags().to_config_keys():

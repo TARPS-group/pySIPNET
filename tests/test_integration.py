@@ -10,6 +10,8 @@ Build the binary with::
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -378,3 +380,62 @@ class TestMassBalance:
         columns = set(result.outputs.data.columns)
         assert "balance_delta_c" not in columns
         assert "balance_delta_n" not in columns
+
+
+# ---------------------------------------------------------------------------
+# Events through the runner
+# ---------------------------------------------------------------------------
+
+
+class TestRunnerAppliesEvents:
+    """The runner's own event plumbing, which nothing else exercises.
+
+    `test_events_contract.py` writes `events.in` by hand and invokes the binary
+    directly, so it proves the file format but never that `SIPNETRunner.run`
+    writes that file, or that it sets `EVENTS` correctly. Removing the runner's
+    entire event block leaves the rest of the suite green.
+    """
+
+    @pytest.fixture
+    def tillage(self):
+        from pysipnet.events import EventSequence, TillageEvent
+
+        # Day 160 falls inside the synthetic climate built by _make_climate.
+        return EventSequence(events=[TillageEvent(year=2010, day=160, tillage_effect=0.4)])
+
+    def test_events_reach_sipnet(self, minimal_params, tillage):
+        """SIPNET echoes what it applied; the value must be the one we passed."""
+        runner = SIPNETRunner(flags=ModelFlags.standard(), keep_workdir=True)
+        result = runner.run(minimal_params, _make_climate(), events=tillage)
+        assert result.provenance.success, result.provenance.stderr
+
+        events_out = Path(result.provenance.workdir) / "events.out"
+        assert events_out.exists(), "the runner did not produce events.out"
+        text = events_out.read_text()
+        assert "till" in text, f"SIPNET applied no tillage event:\n{text}"
+        assert "0.4" in text, f"SIPNET applied a different value:\n{text}"
+
+    def test_events_file_is_written_into_the_workdir(self, minimal_params, tillage):
+        runner = SIPNETRunner(flags=ModelFlags.standard(), keep_workdir=True)
+        result = runner.run(minimal_params, _make_climate(), events=tillage)
+        written = (Path(result.provenance.workdir) / "events.in").read_text()
+        assert written.split() == ["2010", "160", "till", "0.4"]
+
+    def test_events_change_the_result(self, minimal_params, tillage):
+        """If the runner silently dropped events, this is what would notice."""
+        runner = SIPNETRunner(flags=ModelFlags.standard())
+        climate = _make_climate()
+        with_events = runner.run(minimal_params, climate, events=tillage)
+        without = runner.run(minimal_params, climate)
+        assert not np.allclose(
+            with_events.outputs.data["nee"].to_numpy(),
+            without.outputs.data["nee"].to_numpy(),
+        ), "applying a tillage event made no difference to NEE"
+
+    def test_no_events_means_events_are_switched_off(self, minimal_params):
+        """A stale events.in in the working directory must not be picked up."""
+        runner = SIPNETRunner(flags=ModelFlags.standard(), keep_workdir=True)
+        result = runner.run(minimal_params, _make_climate())
+        config = (Path(result.provenance.workdir) / "sipnet.in").read_text()
+        assert "EVENTS = 0" in config
+        assert not (Path(result.provenance.workdir) / "events.in").exists()

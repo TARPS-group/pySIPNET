@@ -75,13 +75,12 @@ class TestHarvestEvent:
             fraction_transferred_above=0.3,
             fraction_transferred_below=0.4,
         )
-        line = e._to_line()
-        tokens = line.split()
-        assert tokens[0] == "2024"
-        assert tokens[1] == "70"
-        assert tokens[2] == "harv"
-        assert float(tokens[3]) == pytest.approx(0.1)
-        assert float(tokens[6]) == pytest.approx(0.4)
+        tokens = e._to_line().split()
+        # Every position, not just the ends. SIPNET reads these by position, so
+        # a swap in the middle is silent: the run succeeds and applies the
+        # fractions to the wrong pools.
+        assert tokens[:3] == ["2024", "70", "harv"]
+        assert [float(t) for t in tokens[3:]] == pytest.approx([0.1, 0.2, 0.3, 0.4])
 
 
 # ---------------------------------------------------------------------------
@@ -155,8 +154,10 @@ class TestPlantingEvent:
             year=2024, day=70, leaf_c=10.0, wood_c=5.0, fine_root_c=4.0, coarse_root_c=3.0
         )
         tokens = e._to_line().split()
-        assert tokens[2] == "plant"
-        assert len(tokens) == 7  # year day plant leafC woodC fineRootC coarseRootC
+        # Distinct values in a known order: asserting only the length would let
+        # the four carbon pools be written in any order at all.
+        assert tokens[:3] == ["2024", "70", "plant"]
+        assert [float(t) for t in tokens[3:]] == pytest.approx([10.0, 5.0, 4.0, 3.0])
 
 
 # ---------------------------------------------------------------------------
