@@ -41,7 +41,7 @@ from __future__ import annotations
 
 from enum import IntEnum
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -294,7 +294,7 @@ class EventSequence(BaseModel):
                 raise ValueError(f"Unknown event type token {type_token!r} on line: {raw_line!r}")
             model_cls = _TYPE_TO_MODEL[event_type]
             params = _parse_params(event_type, year, day, tokens[3:])
-            events.append(model_cls.model_validate(params))
+            events.append(cast("AnyEvent", model_cls.model_validate(params)))
         return cls(events=events)
 
     # ── Properties ─────────────────────────────────────────────────────────
@@ -332,7 +332,7 @@ EVENT_ARITY: dict[str, int] = {
 }
 
 
-def _parse_params(event_type: str, year: int, day: int, tokens: list[str]) -> dict:
+def _parse_params(event_type: str, year: int, day: int, tokens: list[str]) -> dict[str, object]:
     """Convert raw token list to a kwarg dict for the appropriate event model."""
     base = {"year": year, "day": day}
 

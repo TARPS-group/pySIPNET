@@ -252,7 +252,7 @@ def _read_14_column(path: Path) -> ClimateDrivers:
             f"Expected {_N_COLS_13} or {_N_COLS_14} columns in a 14-column-layout climate file, "
             f"got {n_cols}. Expected the 14- or 13-column layout."
         )
-    data.columns = CLIM_COLUMNS  # type: ignore[assignment]
+    data.columns = CLIM_COLUMNS
     for col in ("year", "day"):
         data[col] = data[col].astype(int)
     return ClimateDrivers.from_dataframe(data, n_columns=14)
@@ -267,7 +267,7 @@ def _read_12_column(path: Path) -> ClimateDrivers:
             "Expected the 12-column layout."
         )
     data = raw.copy()
-    data.columns = CLIM_COLUMNS  # type: ignore[assignment]
+    data.columns = CLIM_COLUMNS
     for col in ("year", "day"):
         data[col] = data[col].astype(int)
     return ClimateDrivers.from_dataframe(data, n_columns=12)

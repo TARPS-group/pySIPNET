@@ -63,7 +63,7 @@ from pysipnet.output import SIPNETOutput
 # Parameters (top-level groups available via pysipnet.parameters)
 from pysipnet.parameters.model import SIPNET_PARAMS_BY_GROUP, ModelFlags, SIPNETParameters
 from pysipnet.result import RunProvenance, SIPNETResult
-from pysipnet.runner import ClimateStaging, SIPNETRunner
+from pysipnet.runner import ClimateStaging, SIPNETRunError, SIPNETRunner
 
 # Version
 from pysipnet.version import (
@@ -80,6 +80,7 @@ __all__ = [
     "SIPNETModel",
     # Runner
     "SIPNETRunner",
+    "SIPNETRunError",
     "ClimateStaging",
     # Config (reproducible workflows)
     "RunConfig",

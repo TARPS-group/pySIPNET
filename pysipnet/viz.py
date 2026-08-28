@@ -15,7 +15,7 @@ Requires the optional ``viz`` dependency group::
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import plotly.graph_objects as go
@@ -335,7 +335,7 @@ def dashboard(
 
     # ── Variable-selector dropdowns (flux and pool panels) ───────────────────
 
-    def _selector_buttons(trace_indices: dict[str, int], all_label: str) -> list[dict]:
+    def _selector_buttons(trace_indices: dict[str, int], all_label: str) -> list[dict[str, Any]]:
         idxs = list(trace_indices.values())
         labels = list(trace_indices.keys())
         n = len(idxs)

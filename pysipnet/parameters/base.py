@@ -69,14 +69,14 @@ from __future__ import annotations
 import dataclasses
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, cast
 
 import pint
 from pydantic import BaseModel, Field
 
 _MISSING: Any = dataclasses.MISSING
 
-_ureg = pint.UnitRegistry()
+_ureg = pint.UnitRegistry()  # type: ignore[var-annotated]
 
 
 class ParameterDomain(StrEnum):
@@ -204,7 +204,10 @@ def param_field(
             "constituent": constituent,
             "domain": domain.value,
             "per_year": per_year,
-            "_spec": spec,
+            # ParameterSpec is a dataclass, not JSON — it is carried here so
+            # get_parameter_specs can recover the full spec from a model class.
+            # Pydantic does not inspect this key.
+            "_spec": spec,  # type: ignore[dict-item]
         },
         **pydantic_kwargs,
     )
@@ -227,7 +230,7 @@ def get_parameter_specs(model_cls: type[BaseModel], prefix: str = "") -> dict[st
         path = f"{prefix}.{name}" if prefix else name
         extra = field_info.json_schema_extra
         if isinstance(extra, dict) and "_spec" in extra:
-            result[path] = extra["_spec"]
+            result[path] = cast("ParameterSpec", extra["_spec"])
         else:
             annotation = field_info.annotation
             if (

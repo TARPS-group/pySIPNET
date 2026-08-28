@@ -27,6 +27,13 @@ jobs:
       - name: ruff format check
         run: uv run ruff format --check pysipnet/ tests/
 
+      # pyproject sets [tool.mypy] strict = true. Running it here is what
+      # keeps that setting meaningful: dashboard() shipped broken because it
+      # treated a wrapper as a DataFrame, which mypy flags and nothing else
+      # caught — its tests mocked the wrapper away.
+      - name: mypy
+        run: uv run mypy pysipnet/
+
   # ── Tests ─────────────────────────────────────────────────────────────────
   test:
     name: Test (Python ${{ matrix.python-version }})

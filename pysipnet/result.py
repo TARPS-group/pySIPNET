@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -84,7 +84,7 @@ class SIPNETResult:
     provenance: RunProvenance
     events: EventSequence | None = field(default=None)
 
-    def to_xarray(self):
+    def to_xarray(self) -> Any:
         """Convert the output timeseries to an :class:`xarray.Dataset`.
 
         The returned Dataset uses ``(year, day, time)`` as a multi-level

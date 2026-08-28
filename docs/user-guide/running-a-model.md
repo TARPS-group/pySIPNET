@@ -171,6 +171,17 @@ runner = SIPNETRunner(flags=ModelFlags.standard())
 result = runner.run(params, climate)
 
 print(result.provenance.success)   # True if returncode == 0
+```
+
+A failed run raises `SIPNETRunError`, carrying SIPNET's own stdout and stderr —
+that is where the reason lives. Pass `check=False` to get a result object
+instead, which is what you want in an ensemble where one member failing should
+not stop the rest:
+
+```python
+result = runner.run(params, climate, check=False)
+if not result.provenance.success:
+    print(result.provenance.stderr)
 print(result.provenance.stderr)    # SIPNET's stderr output, if any
 ```
 

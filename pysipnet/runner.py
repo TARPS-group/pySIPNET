@@ -61,7 +61,7 @@ import tempfile
 import uuid
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from pysipnet.build import BINARY_NAME
 from pysipnet.parameters.model import ModelFlags
@@ -102,6 +102,30 @@ class ClimateStaging(StrEnum):
 
     COPY = "copy"
     SYMLINK = "symlink"
+
+
+class SIPNETRunError(RuntimeError):
+    """SIPNET exited non-zero, or produced no output file.
+
+    Carries everything needed to diagnose the run without re-running it. The
+    binary writes the actual reason to stdout or stderr — a missing parameter,
+    an unreadable climate file — so those are the first place to look.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        returncode: int,
+        stdout: str,
+        stderr: str,
+        workdir: Path,
+    ) -> None:
+        super().__init__(message)
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+        self.workdir = workdir
 
 
 _SAFE_RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -295,6 +319,7 @@ class SIPNETRunner:
         run_id: str | None = None,
         events: EventSequence | None = None,
         output_dir: Path | str | None | object = _UNSET,
+        check: bool = True,
     ) -> SIPNETResult:
         """Execute SIPNET and return a parsed result.
 
@@ -353,12 +378,13 @@ class SIPNETRunner:
         flags = self.flags
 
         # Resolve effective output_dir (per-call overrides runner-level default).
+        effective_output_dir: Path | None
         if output_dir is _UNSET:
             effective_output_dir = self.output_dir
         elif output_dir is None:
             effective_output_dir = None
         else:
-            effective_output_dir = Path(output_dir)
+            effective_output_dir = Path(cast("str | Path", output_dir))
 
         run_id = _check_run_id(run_id) if run_id else uuid.uuid4().hex
 
@@ -411,6 +437,27 @@ class SIPNETRunner:
             )
 
             out_src = workdir / "sipnet.out"
+            if check and not (provenance.returncode == 0 and out_src.exists()):
+                # Returning an empty frame here would defer the failure to
+                # whatever the caller does next — typically result.nee(), which
+                # raises KeyError a long way from the cause, with SIPNET's own
+                # explanation stranded on the provenance object. In an ensemble
+                # the empties are collected silently.
+                reason = (
+                    f"SIPNET exited with code {provenance.returncode}"
+                    if provenance.returncode != 0
+                    else "SIPNET exited cleanly but wrote no output file"
+                )
+                raise SIPNETRunError(
+                    f"{reason} (run_id={run_id!r}).\n"
+                    f"stderr:\n{proc.stderr or '(empty)'}\n"
+                    f"stdout:\n{proc.stdout or '(empty)'}\n"
+                    "Pass check=False to get a result object instead of this error.",
+                    returncode=provenance.returncode,
+                    stdout=proc.stdout,
+                    stderr=proc.stderr,
+                    workdir=workdir,
+                )
             outputs = self._build_output(provenance, out_src, effective_output_dir, run_id)
 
         finally:

@@ -225,6 +225,10 @@ class ClimateDrivers:
         if self._data is None:
             from pysipnet.io.clim_io import read_clim_file
 
+            if self.source_path is None:
+                raise ValueError(
+                    "This ClimateDrivers has neither loaded data nor a file to read from."
+                )
             self._data = read_clim_file(self.source_path, n_columns=self.n_columns).data
         return self._data
 

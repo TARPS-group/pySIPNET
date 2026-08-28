@@ -476,3 +476,50 @@ class TestRunnerAppliesEvents:
         config = (Path(result.provenance.workdir) / "sipnet.in").read_text()
         assert "EVENTS = 0" in config
         assert not (Path(result.provenance.workdir) / "events.in").exists()
+
+
+class TestFailedRunsRaise:
+    """A failed run must not come back looking like a successful empty one.
+
+    Returning an empty DataFrame deferred the failure to whatever the caller
+    did next — usually ``result.nee()``, which raises KeyError a long way from
+    the cause, while SIPNET's own explanation sat unread on the provenance
+    object. In an ensemble the empties were collected silently.
+    """
+
+    @pytest.fixture
+    def broken_climate(self):
+        """A climate frame SIPNET refuses: no rows to read."""
+        from pysipnet.climate import ClimateDrivers
+
+        return ClimateDrivers.from_dataframe(_make_climate().data.head(0).copy())
+
+    def test_a_failed_run_raises(self, minimal_params, broken_climate):
+        from pysipnet.runner import SIPNETRunError
+
+        with pytest.raises(SIPNETRunError):
+            SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, broken_climate)
+
+    def test_the_error_carries_sipnets_own_explanation(self, minimal_params, broken_climate):
+        """The reason lives in SIPNET's output; the exception must surface it."""
+        from pysipnet.runner import SIPNETRunError
+
+        with pytest.raises(SIPNETRunError) as exc:
+            SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, broken_climate)
+        assert exc.value.returncode != 0
+        combined = exc.value.stdout + exc.value.stderr
+        assert combined.strip(), "the error carried neither stdout nor stderr"
+        assert "climate" in str(exc.value).lower()
+
+    def test_check_false_returns_a_result_instead(self, minimal_params, broken_climate):
+        """Opt-out for ensembles, where one failure should not stop the rest."""
+        result = SIPNETRunner(flags=ModelFlags.standard()).run(
+            minimal_params, broken_climate, check=False
+        )
+        assert result.provenance.success is False
+        assert result.outputs.data.empty
+
+    def test_a_successful_run_is_unaffected(self, minimal_params):
+        result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())
+        assert result.provenance.success
+        assert not result.outputs.data.empty

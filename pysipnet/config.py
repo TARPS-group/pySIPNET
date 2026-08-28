@@ -141,7 +141,7 @@ class RunConfig:
             climate_meta = {"mode": _MODE_COPY}
 
         has_events = self.events is not None and len(self.events) > 0
-        if has_events:
+        if self.events is not None and has_events:
             self.events.to_file(path / "events.in")
 
         config_data = {

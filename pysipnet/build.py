@@ -39,7 +39,9 @@ import tarfile
 import tempfile
 import urllib.error
 import urllib.request
+from http.client import HTTPMessage
 from pathlib import Path
+from typing import IO, Any
 
 from pysipnet.version import (
     SIPNET_PINNED_TAG,
@@ -295,13 +297,21 @@ class _HttpsOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
     plaintext and expose the fetch to anyone on the network path.
     """
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: IO[bytes],
+        code: int,
+        msg: str,
+        headers: HTTPMessage,
+        newurl: str,
+    ) -> urllib.request.Request | None:
         if not newurl.lower().startswith("https://"):
             raise DownloadError(f"Refusing to follow a redirect to a non-HTTPS address: {newurl!r}")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def _open_url(url: str, timeout: float):
+def _open_url(url: str, timeout: float) -> Any:
     """Open *url* over HTTPS, refusing to be redirected off it.
 
     The one place this module touches the network. Kept separate so tests have

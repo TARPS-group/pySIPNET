@@ -114,8 +114,19 @@ class SIPNETOutput:
         if self._data is None:
             from pysipnet.io.output_reader import read_output_file
 
-            self._data = read_output_file(self.source_path)
+            self._data = read_output_file(self._require_source())
         return self._data
+
+    def _require_source(self) -> Path:
+        """Return the backing file path, or explain why there isn't one.
+
+        An instance holds either in-memory data or a path to read from. If
+        neither is set the object was built past its constructor, and reading
+        would otherwise fail somewhere deeper with a less obvious message.
+        """
+        if self.source_path is None:
+            raise ValueError("This SIPNETOutput has neither loaded data nor a file to read from.")
+        return self.source_path
 
     def load(self, columns: list[str] | None = None) -> pd.DataFrame:
         """Explicitly load output data, optionally restricting to a column subset.
@@ -157,7 +168,7 @@ class SIPNETOutput:
 
         from pysipnet.io.output_reader import read_output_file
 
-        return read_output_file(self.source_path, columns=list(requested))
+        return read_output_file(self._require_source(), columns=list(requested))
 
     # ── Properties ─────────────────────────────────────────────────────────────
 
@@ -174,4 +185,4 @@ class SIPNETOutput:
         if self.source_path is not None:
             loaded = "loaded" if self._data is not None else "not yet loaded"
             return f"SIPNETOutput(source_path={str(self.source_path)!r}, {loaded})"
-        return f"SIPNETOutput(in_memory, timesteps={len(self._data)})"
+        return f"SIPNETOutput(in_memory, timesteps={len(self.data)})"
