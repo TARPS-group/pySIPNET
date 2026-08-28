@@ -17,7 +17,9 @@ memory/
 
 # uv
 .venv/
-uv.lock
+# uv.lock is deliberately NOT ignored: CI installs from it with --locked so a
+# dependency release cannot break a branch that nobody touched. It constrains
+# only our own environment, never anyone installing pySIPNET.
 
 # MkDocs build output
 site/

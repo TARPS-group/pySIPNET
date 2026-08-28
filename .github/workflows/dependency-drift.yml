@@ -1,0 +1,46 @@
+# Our normal CI installs from uv.lock, so it cannot notice that a new release
+# of numpy, pandas or pydantic has broken us. This job re-resolves everything
+# to the newest versions the constraints allow and runs the full suite, so that
+# drift shows up on a schedule we control rather than landing on whoever
+# happens to push next.
+#
+# A failure here does not mean the branch is broken. It means an upstream
+# release disagrees with us, and someone should decide whether to adapt or to
+# add a constraint.
+name: Dependency drift
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  unpinned:
+    name: Newest allowed dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Fetch SIPNET tags
+        run: git -C sipnet fetch --tags --force --depth=1 origin
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
+
+      - name: Resolve and install newest allowed dependencies
+        run: uv sync --all-groups --upgrade
+
+      - name: Record what was actually resolved
+        run: uv pip list
+
+      - name: Build SIPNET binary
+        run: make sipnet
+
+      - name: Run tests
+        run: uv run pytest tests/ --tb=short -q
+
+      - name: mypy
+        run: uv run mypy pysipnet/

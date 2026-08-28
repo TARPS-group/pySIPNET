@@ -19,7 +19,7 @@ jobs:
           enable-cache: true
 
       - name: Install dev dependencies
-        run: uv sync --all-groups
+        run: uv sync --all-groups --locked
 
       - name: ruff check
         run: uv run ruff check pysipnet/ tests/
@@ -62,7 +62,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --all-groups
+        run: uv sync --all-groups --locked
 
       # Cache the compiled binary keyed on the submodule commit so the
       # expensive compile step is skipped on reruns with no SIPNET changes.
