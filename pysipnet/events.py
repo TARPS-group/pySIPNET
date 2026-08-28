@@ -1,6 +1,6 @@
 """Agronomic event data structures and ``events.in`` file I/O.
 
-SIPNET supports five event types that alter model state at a specified
+pySIPNET writes five of the event types SIPNET accepts that alter model state at a specified
 (year, day) during a simulation run.
 
 Event file format
@@ -22,7 +22,7 @@ The event type token and its parameters:
 +---------------+--------+----------------------------------------------------+
 | ``plant``     | leafC woodC fineRootC coarseRootC | Planting: g C m⁻²    |
 +---------------+--------+----------------------------------------------------+
-| ``till``      | fracLitter somMod litMod | Tillage: fraction and modifiers        |
+| ``till``      | tillageEffect            | Tillage: decomposition-rate boost      |
 +---------------+--------+----------------------------------------------------+
 
 Events must be listed in chronological order (SIPNET errors otherwise).
@@ -41,7 +41,7 @@ from __future__ import annotations
 
 from enum import IntEnum
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -173,34 +173,34 @@ class PlantingEvent(BaseModel):
 
 
 class TillageEvent(BaseModel):
-    """Disturb the soil, transferring litter and modifying decomposition rates."""
+    """Disturb the soil, temporarily speeding up decomposition.
+
+    Tillage raises the heterotrophic respiration rate by ``tillage_effect``,
+    and that boost then decays exponentially back to nothing. Several tillage
+    events add together.
+
+    Takes a single value. Earlier SIPNET versions took three
+    (``fractionLitterTransferred``, ``somDecompModifier``,
+    ``litterDecompModifier``); v2.1.0 replaced them with this one, and
+    SIPNET reads only the first value on the line, so writing the old three
+    silently fed a litter fraction in as the decomposition boost.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     type: Literal["tillage"] = "tillage"
     year: int = Field(gt=0)
     day: int = Field(ge=1, le=366)
-    fraction_litter_transferred: float = Field(
+    tillage_effect: float = Field(
         ge=0,
-        le=1,
-        description="Fraction of surface litter pool moved to soil pool.",
-    )
-    som_decomp_modifier: float = Field(
-        ge=0,
-        description="Multiplicative modifier on soil organic matter decomposition rate.",
-    )
-    litter_decomp_modifier: float = Field(
-        ge=0,
-        description="Multiplicative modifier on litter decomposition rate.",
+        description="How much this tillage raises the decomposition rate "
+        "(SIPNET param: tillageEffect). The rate is scaled by "
+        "1 + the accumulated effect, so 0 means no change. The boost decays "
+        "exponentially and is dropped once it falls below 0.01.",
     )
 
     def _to_line(self) -> str:
-        return (
-            f"{self.year}  {self.day}  till"
-            f"  {self.fraction_litter_transferred}"
-            f"  {self.som_decomp_modifier}"
-            f"  {self.litter_decomp_modifier}"
-        )
+        return f"{self.year}  {self.day}  till  {self.tillage_effect}"
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +294,7 @@ class EventSequence(BaseModel):
                 raise ValueError(f"Unknown event type token {type_token!r} on line: {raw_line!r}")
             model_cls = _TYPE_TO_MODEL[event_type]
             params = _parse_params(event_type, year, day, tokens[3:])
-            events.append(model_cls.model_validate(params))
+            events.append(cast("AnyEvent", model_cls.model_validate(params)))
         return cls(events=events)
 
     # ── Properties ─────────────────────────────────────────────────────────
@@ -315,9 +315,35 @@ class EventSequence(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _parse_params(event_type: str, year: int, day: int, tokens: list[str]) -> dict:
+# How many values each event type carries after "year day <type>".
+#
+# SIPNET checks these too, but only that it read *at least* enough: sscanf
+# stops when it has filled its arguments, so a line with extra values is
+# accepted and the surplus discarded. Reading one here without checking would
+# lose the same values just as quietly, so the count is checked exactly.
+#
+# These match NUM_*_PARAMS in sipnet/src/sipnet/events.h at the pinned version.
+EVENT_ARITY: dict[str, int] = {
+    "harvest": 4,
+    "irrigation": 2,
+    "fertilization": 3,
+    "planting": 4,
+    "tillage": 1,
+}
+
+
+def _parse_params(event_type: str, year: int, day: int, tokens: list[str]) -> dict[str, object]:
     """Convert raw token list to a kwarg dict for the appropriate event model."""
     base = {"year": year, "day": day}
+
+    expected = EVENT_ARITY.get(event_type)
+    if expected is not None and len(tokens) != expected:
+        raise ValueError(
+            f"{event_type} event at ({year}, {day}) has {len(tokens)} parameter(s), "
+            f"expected {expected}. SIPNET would read the first {expected} and "
+            f"discard the rest without complaining, so this is rejected here instead. "
+            f"Values found: {' '.join(tokens) or '(none)'}"
+        )
     try:
         if event_type == "harvest":
             fRA, fRB, fTA, fTB = (float(t) for t in tokens[:4])
@@ -348,9 +374,7 @@ def _parse_params(event_type: str, year: int, day: int, tokens: list[str]) -> di
         if event_type == "tillage":
             return {
                 **base,
-                "fraction_litter_transferred": float(tokens[0]),
-                "som_decomp_modifier": float(tokens[1]),
-                "litter_decomp_modifier": float(tokens[2]),
+                "tillage_effect": float(tokens[0]),
             }
     except (IndexError, ValueError) as exc:
         raise ValueError(

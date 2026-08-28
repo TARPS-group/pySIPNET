@@ -4,7 +4,7 @@
 wraps a :class:`~pysipnet.runner.SIPNETRunner` and a baseline parameter set,
 and exposes a single ``__call__`` interface::
 
-    runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+    runner = SIPNETRunner(flags=ModelFlags.standard())
     model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
     result           = model()                          # baseline run
@@ -12,7 +12,7 @@ and exposes a single ``__call__`` interface::
     result_site_b    = model(climate=other_climate)     # different drivers
     result_both      = model(a_max=120.0, climate=other_climate)
 
-Any SIPNET v1 parameter name (see
+Any SIPNET parameter name (see
 :data:`~pysipnet.parameters.SIPNET_PARAMS_BY_GROUP`) can be passed as a keyword
 argument to override the baseline value for that run.  The reserved names
 ``climate`` and ``events`` pass a
@@ -37,12 +37,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from pysipnet.parameters.v1 import SIPNET_PARAMS_BY_GROUP
+from pysipnet.parameters.model import SIPNET_PARAMS_BY_GROUP
 
 if TYPE_CHECKING:
     from pysipnet.climate import ClimateDrivers
     from pysipnet.events import EventSequence
-    from pysipnet.parameters.v1 import SIPNETParametersV1
+    from pysipnet.parameters.model import SIPNETParameters
     from pysipnet.result import SIPNETResult
     from pysipnet.runner import SIPNETRunner
 
@@ -60,9 +60,9 @@ _RESERVED_FIELDS: frozenset[str] = frozenset({"climate", "events"})
 
 
 def _apply_overrides(
-    base: SIPNETParametersV1,
+    base: SIPNETParameters,
     overrides: dict[str, Any],
-) -> SIPNETParametersV1:
+) -> SIPNETParameters:
     """Return a new parameter set with the given values overridden.
 
     Serialises *base* to a plain dict, applies the overrides at the
@@ -80,17 +80,17 @@ def _apply_overrides(
 
     Returns
     -------
-    SIPNETParametersV1
+    SIPNETParameters
         New instance with the specified parameters updated; all others
         unchanged.
     """
-    from pysipnet.parameters.v1 import SIPNETParametersV1
+    from pysipnet.parameters.model import SIPNETParameters
 
     current = base.model_dump()
     for param_name, value in overrides.items():
         group = _PARAM_TO_GROUP[param_name]
         current[group][param_name] = value
-    return SIPNETParametersV1.model_validate(current)
+    return SIPNETParameters.model_validate(current)
 
 
 # ── SIPNETModel ────────────────────────────────────────────────────────────────
@@ -100,11 +100,11 @@ class SIPNETModel:
     """High-level SIPNET model interface with an override-friendly callable API.
 
     :class:`SIPNETModel` wraps a :class:`~pysipnet.runner.SIPNETRunner` and a
-    baseline :class:`~pysipnet.parameters.v1.SIPNETParametersV1`.  Each call
+    baseline :class:`~pysipnet.parameters.model.SIPNETParameters`.  Each call
     accepts any combination of parameter overrides, a climate replacement, and
     an optional event sequence::
 
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        runner = SIPNETRunner(flags=ModelFlags.standard())
         model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
         result        = model()                         # baseline run
@@ -112,7 +112,7 @@ class SIPNETModel:
         result_site_b = model(climate=other_climate)    # swap climate drivers
         result_both   = model(a_max=140.0, climate=other_climate)
 
-    Any SIPNET v1 parameter name is accepted as a keyword argument.
+    Any SIPNET parameter name is accepted as a keyword argument.
     Unrecognised names raise :class:`ValueError` immediately.  Invalid
     parameter values (e.g., a negative ``a_max``) raise
     :class:`pydantic.ValidationError` before the binary is invoked.
@@ -133,7 +133,7 @@ class SIPNETModel:
     ----------
     runner:
         The :class:`~pysipnet.runner.SIPNETRunner` to use for execution.
-        Determines the binary preset and any execution options
+        Determines the model flags and any execution options
         (``keep_workdir``, ``timeout``, etc.).
     base_params:
         Baseline parameter set.  Any parameter not overridden in a given call
@@ -149,7 +149,7 @@ class SIPNETModel:
 
     .. code-block:: python
 
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        runner = SIPNETRunner(flags=ModelFlags.standard())
         model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
         nee_by_a_max = {
@@ -162,7 +162,7 @@ class SIPNETModel:
         self,
         runner: SIPNETRunner,
         *,
-        base_params: SIPNETParametersV1,
+        base_params: SIPNETParameters,
         base_climate: ClimateDrivers | None = None,
     ) -> None:
         self._runner = runner
@@ -189,7 +189,7 @@ class SIPNETModel:
             Optional management event sequence.
         **param_overrides:
             Parameter values to override for this run.  Each key must be a
-            valid SIPNET v1 parameter name (see
+            valid SIPNET parameter name (see
             :data:`~pysipnet.parameters.SIPNET_PARAMS_BY_GROUP`).
             Unrecognised keys raise :class:`ValueError` immediately.
 
@@ -236,8 +236,8 @@ class SIPNETModel:
         return self._runner
 
     @property
-    def base_params(self) -> SIPNETParametersV1:
-        """The baseline :class:`~pysipnet.parameters.v1.SIPNETParametersV1`."""
+    def base_params(self) -> SIPNETParameters:
+        """The baseline :class:`~pysipnet.parameters.model.SIPNETParameters`."""
         return self._base_params
 
     @property
@@ -249,6 +249,6 @@ class SIPNETModel:
         """Return a concise string representation."""
         has_climate = self._base_climate is not None
         return (
-            f"SIPNETModel(preset={self._runner.preset!r}, "
+            f"SIPNETModel(flags={self._runner.flags!r}, "
             f"base_climate={'set' if has_climate else 'None'})"
         )

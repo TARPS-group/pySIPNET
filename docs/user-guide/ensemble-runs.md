@@ -1,7 +1,7 @@
 # Ensemble Runs
 
 This guide explains how to run SIPNET over many parameter and climate
-configurations using [PyEns](https://github.com/andrewroberts/pyens).  It
+configurations using [PyEns](https://github.com/arob5/PyEns).  It
 assumes you are comfortable with the single-run interface covered in
 [Running a Model](running-a-model.md).
 
@@ -52,9 +52,9 @@ construct one.  You give it a runner and a *baseline* parameter set; each
 call applies a dict of overrides on top of that baseline:
 
 ```python
-from pysipnet import SIPNETRunner, ModelPreset, SIPNETModel
+from pysipnet import SIPNETRunner, ModelFlags, SIPNETModel
 
-runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+runner = SIPNETRunner(flags=ModelFlags.standard())
 model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 ```
 
@@ -65,7 +65,7 @@ result = model(a_max=112.0, base_veg_resp=0.02)
 print(result.outputs.data[["nee", "gpp"]].sum())
 ```
 
-Any SIPNET v1 parameter name can be passed as a keyword argument.  The
+Any SIPNET parameter name can be passed as a keyword argument.  The
 reserved names `climate` and `events` pass a `ClimateDrivers` or
 `EventSequence` directly through to the runner.
 
@@ -77,8 +77,7 @@ To sweep a single parameter, define a PyEns `Axis` for the sweep dimension
 and a `Grid` of values, then run through `EnsembleRunner`:
 
 ```python
-from pyens import Axis, EnsembleSpec, Grid, EnsembleRunner
-from pyens.backends import SequentialBackend
+from pyens import Axis, EnsembleSpec, Grid, EnsembleRunner, SequentialBackend
 
 a_max_values = [80.0, 90.0, 100.0, 110.0, 120.0, 130.0, 140.0]
 ax   = Axis("a_max", size=len(a_max_values))
@@ -137,14 +136,13 @@ multiple ensemble members.
 
 ```python
 import numpy as np
-from pyens import Axis, EnsembleSpec, Fixed, EnsembleRunner
-from pyens.backends import LocalBackend
-from pysipnet import SIPNETModel
+from pyens import Axis, EnsembleSpec, EnsembleRunner, LocalBackend
+from pysipnet import ClimateDrivers, SIPNETModel
 from pysipnet.ensemble import sipnet_site_fields, sipnet_member_fields
 
 # ── Data ──────────────────────────────────────────────────────────────────────
-clim_hf = ClimateDrivers.from_file("data/harvard_forest.clim", version="v1")
-clim_nr = ClimateDrivers.from_file("data/niwot_ridge.clim",    version="v1")
+clim_hf = ClimateDrivers.from_file("data/harvard_forest.clim", n_columns=14)
+clim_nr = ClimateDrivers.from_file("data/niwot_ridge.clim",    n_columns=14)
 
 # ── Axes ──────────────────────────────────────────────────────────────────────
 sites   = Axis("site",   labels=["harvard_forest", "niwot_ridge"])
@@ -221,7 +219,7 @@ if result.n_failed > 0:
 
 A failed run is one where the model callable raised an exception — for
 example, a `ValidationError` from an invalid parameter combination, or a
-`subprocess.CalledProcessError` if SIPNET itself exits non-zero.  Failed
+`SIPNETRunError` if SIPNET itself exits non-zero.  Failed
 runs are stored in position rather than dropped, so the indices of `outputs`
 and `coordinates` always correspond.
 
@@ -281,8 +279,6 @@ print(spec.describe())
 ```
 
 This is especially useful before submitting to an HPC cluster.
-
----
 
 ---
 

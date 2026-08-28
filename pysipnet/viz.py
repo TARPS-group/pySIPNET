@@ -15,7 +15,7 @@ Requires the optional ``viz`` dependency group::
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import plotly.graph_objects as go
@@ -93,7 +93,7 @@ def _provenance_table(result: SIPNETResult) -> go.Table:
 
     prov = result.provenance
     try:
-        preset = str(prov.preset)
+        flags = prov.flags.name or "custom"
         rid = str(prov.run_id)
         run_id = (rid[:10] + "…") if len(rid) > 11 else rid
         binary = (
@@ -101,10 +101,10 @@ def _provenance_table(result: SIPNETResult) -> go.Table:
         )
         status = "✓ Success" if prov.returncode == 0 else f"✗ Failed (returncode {prov.returncode})"
     except Exception:
-        preset = run_id = binary = status = "N/A"
+        flags = run_id = binary = status = "N/A"
 
-    keys = ["Preset", "Run ID", "Binary", "Status"]
-    vals = [preset, run_id, str(binary), status]
+    keys = ["Model flags", "Run ID", "Binary", "Status"]
+    vals = [flags, run_id, str(binary), status]
     colors = [_ROW_A if i % 2 == 0 else _ROW_B for i in range(len(keys))]
 
     return go.Table(
@@ -191,9 +191,9 @@ def dashboard(
 ) -> go.Figure:
     """Build an interactive Plotly dashboard for a single SIPNET run.
 
-    The figure has six sections arranged vertically:
+    The figure has three sections arranged vertically:
 
-    * **Run Configuration**: provenance table (preset, run ID, binary, status)
+    * **Run Configuration**: provenance table (flags, run ID, binary, status)
       and grouped parameter table (non-``None`` fields only)
     * **Climate Inputs** (2 × 2 grid): air temperature, PAR, precipitation, VPD
     * **Model Outputs**: flux panel (NEE, GPP, ET, Rₐ, Rₕ) with a
@@ -226,13 +226,14 @@ def dashboard(
             "Install with: pip install pysipnet[viz]"
         ) from exc
 
-    if result.outputs.empty:
+    # result.outputs is a SIPNETOutput wrapper; the DataFrame is .data.
+    ts = result.outputs.data
+    if ts.empty:
         raise ValueError(
             "result.outputs is empty — the SIPNET run may have failed "
             f"(returncode={result.provenance.returncode})."
         )
 
-    ts = result.outputs
     clim = result.climate.data
 
     x_ts = ts["year"] + (ts["day"] - 1) / 365
@@ -334,7 +335,7 @@ def dashboard(
 
     # ── Variable-selector dropdowns (flux and pool panels) ───────────────────
 
-    def _selector_buttons(trace_indices: dict[str, int], all_label: str) -> list[dict]:
+    def _selector_buttons(trace_indices: dict[str, int], all_label: str) -> list[dict[str, Any]]:
         idxs = list(trace_indices.values())
         labels = list(trace_indices.keys())
         n = len(idxs)

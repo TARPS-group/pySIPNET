@@ -13,9 +13,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pysipnet.climate import ClimateDrivers
     from pysipnet.events import EventSequence
-    from pysipnet.parameters.v1 import SIPNETParametersV1
+    from pysipnet.parameters.model import ModelFlags, SIPNETParameters
     from pysipnet.result import SIPNETResult
-    from pysipnet.runner import ModelPreset
 
 _MODE_COPY = "copy"
 _MODE_REFERENCE = "reference"
@@ -26,7 +25,7 @@ class RunConfig:
     """Serialisable specification for a single SIPNET run.
 
     A ``RunConfig`` captures everything needed to reproduce a model run:
-    the binary preset, the full parameter set, the climate forcing, and any
+    the model flags, the full parameter set, the climate forcing, and any
     management events.  Use :meth:`save` to write it to disk and
     :meth:`load` to reconstruct it.
 
@@ -36,8 +35,8 @@ class RunConfig:
 
     Parameters
     ----------
-    preset:
-        Which compiled binary preset to use.
+    flags:
+        Which optional SIPNET processes were switched on.
     params:
         Full parameter set for the run.
     climate:
@@ -49,11 +48,11 @@ class RunConfig:
     --------
     Save and reload a run configuration::
 
-        config = RunConfig(preset=ModelPreset.STANDARD, params=params, climate=climate)
+        config = RunConfig(flags=ModelFlags.standard(), params=params, climate=climate)
         config.save("my_run/")
 
         config2 = RunConfig.load("my_run/")
-        runner  = SIPNETRunner(preset=config2.preset)
+        runner  = SIPNETRunner(flags=config2.flags)
         result  = runner.run(config2.params, config2.climate)
 
     Promote an exploratory result to a saved configuration::
@@ -63,8 +62,8 @@ class RunConfig:
         config.save("interesting_run/")
     """
 
-    preset: ModelPreset
-    params: SIPNETParametersV1
+    flags: ModelFlags
+    params: SIPNETParameters
     climate: ClimateDrivers
     events: EventSequence | None = None
 
@@ -85,7 +84,7 @@ class RunConfig:
         .. code-block:: text
 
             <path>/
-            ├── config.json   # preset, params, climate mode, metadata
+            ├── config.json   # flags, params, climate mode, metadata
             ├── sipnet.clim   # present only when reference_only=False (default)
             └── events.in     # present only when events were supplied
 
@@ -142,11 +141,11 @@ class RunConfig:
             climate_meta = {"mode": _MODE_COPY}
 
         has_events = self.events is not None and len(self.events) > 0
-        if has_events:
+        if self.events is not None and has_events:
             self.events.to_file(path / "events.in")
 
         config_data = {
-            "preset": self.preset.value,
+            "flags": self.flags.model_dump(mode="json"),
             "params": self.params.model_dump(mode="json"),
             "climate": climate_meta,
             "has_events": has_events,
@@ -191,8 +190,7 @@ class RunConfig:
         """
         from pysipnet.climate import ClimateDrivers
         from pysipnet.events import EventSequence
-        from pysipnet.parameters.v1 import SIPNETParametersV1
-        from pysipnet.runner import ModelPreset
+        from pysipnet.parameters.model import ModelFlags, SIPNETParameters
 
         path = Path(path)
         config_path = path / "config.json"
@@ -202,8 +200,8 @@ class RunConfig:
             )
         data = json.loads(config_path.read_text())
 
-        preset = ModelPreset(data["preset"])
-        params = SIPNETParametersV1.model_validate(data["params"])
+        flags = ModelFlags.model_validate(data["flags"])
+        params = SIPNETParameters.model_validate(data["params"])
 
         clim_meta = data["climate"]
         if clim_meta["mode"] == _MODE_COPY:
@@ -231,7 +229,7 @@ class RunConfig:
         if data.get("has_events"):
             events = EventSequence.from_file(path / "events.in")
 
-        return cls(preset=preset, params=params, climate=climate, events=events)
+        return cls(flags=flags, params=params, climate=climate, events=events)
 
     @classmethod
     def from_result(cls, result: SIPNETResult) -> RunConfig:
@@ -247,7 +245,7 @@ class RunConfig:
             :meth:`~pysipnet.runner.SIPNETRunner.run`.
         """
         return cls(
-            preset=result.provenance.preset,
+            flags=result.provenance.flags,
             params=result.parameters,
             climate=result.climate,
             events=result.events,

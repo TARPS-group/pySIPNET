@@ -8,15 +8,69 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 SAMPLE_CLIM_V1 = DATA_DIR / "era5_site1.clim"
 
 
+@pytest.fixture(scope="session")
+def sipnet_source_params() -> set[str]:
+    """Every parameter name the pinned SIPNET source registers.
+
+    Read straight out of the C source rather than hard-coded, so a test that
+    checks our assumptions about SIPNET is checking the SIPNET we actually
+    ship, not a list that can quietly go stale.
+
+    SIPNET registers each parameter with a call of the form::
+
+        initializeOneModelParam(modelParams, "aMax", &(params.aMax), 1);
+    """
+    import re
+
+    source_dir = Path(__file__).parent.parent / "sipnet" / "src"
+    if not source_dir.exists():
+        pytest.skip("SIPNET submodule not populated; run 'git submodule update --init sipnet'")
+
+    pattern = re.compile(r'initializeOneModelParam\(\s*\w+\s*,\s*"([A-Za-z_0-9]+)"')
+    names: set[str] = set()
+    for path in source_dir.rglob("*.c"):
+        names.update(pattern.findall(path.read_text()))
+
+    if not names:
+        pytest.fail(f"No parameter registrations found under {source_dir}; has the C API changed?")
+    return names
+
+
+@pytest.fixture
+def reference_fixture_dir() -> Path:
+    """Directory holding a known-good sipnet.param and sipnet.clim pair.
+
+    Used by tests that need to run the real binary on realistic inputs.
+    """
+    return Path(__file__).parent / "fixtures" / "niwot_reference"
+
+
+@pytest.fixture
+def reference_clim_path() -> Path:
+    """Path to the committed reference climate file.
+
+    Prefer this over :func:`sample_clim_path` for anything that must run in
+    CI: it lives under ``tests/fixtures/`` and is tracked by git, whereas
+    ``data/`` is gitignored and absent from a fresh clone.
+    """
+    return Path(__file__).parent / "fixtures" / "niwot_reference" / "sipnet.clim"
+
+
 @pytest.fixture
 def sample_clim_path() -> Path:
-    """Path to the sample v1 climate file."""
+    """Path to the sample climate file in the gitignored ``data/`` directory.
+
+    Skips when absent, which is the normal state in CI and after a fresh
+    clone. Use :func:`reference_clim_path` for tests that must always run.
+    """
+    if not SAMPLE_CLIM_V1.exists():
+        pytest.skip(f"Sample climate data not present at {SAMPLE_CLIM_V1} (data/ is gitignored)")
     return SAMPLE_CLIM_V1
 
 
 @pytest.fixture
 def minimal_params():
-    """A minimal but valid SIPNETParametersV1 for testing."""
+    """A minimal but valid SIPNETParameters for testing."""
     from pysipnet.parameters import (
         AllocationParams,
         InitialConditions,
@@ -24,11 +78,11 @@ def minimal_params():
         PhenologyParams,
         PhotosynthesisParams,
         RespirationParams,
-        SIPNETParametersV1,
+        SIPNETParameters,
         WaterParams,
     )
 
-    return SIPNETParametersV1(
+    return SIPNETParameters(
         initial_conditions=InitialConditions(
             plant_wood=30000.0,
             lai=0.0,
@@ -56,6 +110,7 @@ def minimal_params():
             frac_leaf_fall=0.95,
             leaf_allocation=0.25,
             leaf_turnover_rate=1.0,
+            leaf_on_realloc_frac=0.2,
         ),
         respiration=RespirationParams(
             base_veg_resp=0.02,
@@ -83,7 +138,6 @@ def minimal_params():
             frozen_soil_eff=0.1,
             wue_const=10.0,
             soil_whc=12.0,
-            litter_whc=5.0,
             immed_evap_frac=0.1,
             fast_flow_frac=0.1,
             snow_melt=0.15,

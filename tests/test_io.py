@@ -8,16 +8,16 @@ focuses on the param writer/reader, which has no other direct coverage.
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from pysipnet.io.param_io import (
-    _OBSOLETE_DEFAULTS,
     PYTHON_TO_SIPNET,
     SIPNET_TO_PYTHON,
     _flatten,
     read_param_file,
     write_param_file,
 )
-from pysipnet.parameters.v1 import ModelFlagsV1
+from pysipnet.parameters.model import ModelFlags
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -26,7 +26,7 @@ from pysipnet.parameters.v1 import ModelFlagsV1
 
 @pytest.fixture
 def flags():
-    return ModelFlagsV1.standard()
+    return ModelFlags.standard()
 
 
 # ---------------------------------------------------------------------------
@@ -48,12 +48,6 @@ class TestNameMappings:
     def test_all_paths_have_exactly_one_dot(self):
         for path in PYTHON_TO_SIPNET:
             assert path.count(".") == 1, f"Expected single dot in {path!r}"
-
-    def test_obsolete_defaults_names_not_in_main_mapping(self):
-        """Obsolete params must not accidentally shadow a real param."""
-        main_names = set(PYTHON_TO_SIPNET.values())
-        for name in _OBSOLETE_DEFAULTS:
-            assert name not in main_names, f"{name!r} appears in both mappings"
 
 
 # ---------------------------------------------------------------------------
@@ -105,20 +99,6 @@ class TestWriteParamFile:
         write_param_file(minimal_params, flags, path)
         assert any(line.startswith("!") for line in path.read_text().splitlines())
 
-    def test_all_obsolete_defaults_written(self, tmp_path, minimal_params, flags):
-        path = tmp_path / "sipnet.param"
-        write_param_file(minimal_params, flags, path)
-        written = read_param_file(path)
-        for name in _OBSOLETE_DEFAULTS:
-            assert name in written, f"Obsolete param {name!r} missing from file"
-
-    def test_obsolete_values_match_defaults(self, tmp_path, minimal_params, flags):
-        path = tmp_path / "sipnet.param"
-        write_param_file(minimal_params, flags, path)
-        written = read_param_file(path)
-        for name, expected in _OBSOLETE_DEFAULTS.items():
-            assert written[name] == pytest.approx(expected)
-
     def test_none_fields_not_written(self, tmp_path, minimal_params, flags):
         """Fields with None values must not appear in the file at all."""
         path = tmp_path / "sipnet.param"
@@ -135,18 +115,18 @@ class TestWriteParamFile:
 
     def test_validate_for_flags_called(self, tmp_path, flags):
         """write_param_file must fail if snow_melt is missing with SNOW=1."""
-        from pysipnet.parameters.v1 import (
+        from pysipnet.parameters.model import (
             AllocationParams,
             InitialConditions,
             LeafPhysiologyParams,
             PhenologyParams,
             PhotosynthesisParams,
             RespirationParams,
-            SIPNETParametersV1,
+            SIPNETParameters,
             WaterParams,
         )
 
-        params = SIPNETParametersV1(
+        params = SIPNETParameters(
             initial_conditions=InitialConditions(
                 plant_wood=1.0,
                 lai=0.0,
@@ -173,6 +153,7 @@ class TestWriteParamFile:
                 frac_leaf_fall=0.95,
                 leaf_allocation=0.25,
                 leaf_turnover_rate=1.0,
+                leaf_on_realloc_frac=0.2,
             ),
             respiration=RespirationParams(
                 base_veg_resp=0.02,
@@ -200,7 +181,6 @@ class TestWriteParamFile:
                 frozen_soil_eff=0.1,
                 wue_const=10.0,
                 soil_whc=12.0,
-                litter_whc=5.0,
                 immed_evap_frac=0.1,
                 fast_flow_frac=0.1,
                 rd_const=100.0,
@@ -297,3 +277,158 @@ class TestRoundtrip:
             parts = line.split()
             assert len(parts) >= 2, f"Unparseable line: {raw_line!r}"
             float(parts[1])  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# read_output_file — header detection
+# ---------------------------------------------------------------------------
+
+
+class TestOutputHeaderDetection:
+    """The reader must find the header in all three layouts SIPNET produces.
+
+    Getting this wrong is quiet rather than loud. When the reader mistakes the
+    header for something else it falls back to numbered columns, so every
+    lookup by name fails later and far from the cause — or worse, the header
+    row is parsed as data and every column is off by one row.
+    """
+
+    HEADER = "year day time plantWoodC nee"
+    ROW_1 = "1998 305 0.00 5759.61 0.742"
+    ROW_2 = "1998 306 0.00 5760.10 0.751"
+
+    def _write(self, tmp_path, *lines):
+        path = tmp_path / "sipnet.out"
+        path.write_text("\n".join(lines) + "\n")
+        return path
+
+    def test_header_then_data(self, tmp_path):
+        """The layout the pinned SIPNET version writes."""
+        from pysipnet.io.output_reader import read_output_file
+
+        df = read_output_file(self._write(tmp_path, self.HEADER, self.ROW_1, self.ROW_2))
+        assert list(df.columns) == ["year", "day", "time", "plant_wood_c", "nee"]
+        assert len(df) == 2
+
+    def test_notes_line_then_header_then_data(self, tmp_path):
+        """The layout SIPNET wrote up to and including v2.0.0."""
+        from pysipnet.io.output_reader import read_output_file
+
+        df = read_output_file(
+            self._write(tmp_path, "Notes: (PlantWoodC in g C/m^2;", self.HEADER, self.ROW_1)
+        )
+        assert list(df.columns) == ["year", "day", "time", "plant_wood_c", "nee"]
+        assert len(df) == 1
+
+    def test_data_only(self, tmp_path):
+        """A binary run with --no-print-header; columns can only be positional."""
+        from pysipnet.io.output_reader import read_output_file
+
+        df = read_output_file(self._write(tmp_path, self.ROW_1, self.ROW_2))
+        assert list(df.columns) == [0, 1, 2, 3, 4]
+        assert len(df) == 2
+
+    def test_header_row_is_not_counted_as_data(self, tmp_path):
+        """The classic off-by-one: a header parsed as a timestep."""
+        from pysipnet.io.output_reader import read_output_file
+
+        df = read_output_file(self._write(tmp_path, self.HEADER, self.ROW_1, self.ROW_2))
+        assert df["year"].tolist() == [1998, 1998]
+
+    def test_unmapped_column_keeps_its_sipnet_name(self, tmp_path):
+        """A column added by a future SIPNET version must still be readable."""
+        from pysipnet.io.output_reader import read_output_file
+
+        df = read_output_file(
+            self._write(tmp_path, "year day time somethingNew", "1998 305 0.00 1.5")
+        )
+        assert "somethingNew" in df.columns
+
+    def test_empty_file_gives_an_empty_frame(self, tmp_path):
+        from pysipnet.io.output_reader import read_output_file
+
+        path = tmp_path / "sipnet.out"
+        path.write_text("")
+        assert read_output_file(path).empty
+
+    def test_column_selection_keeps_the_time_coordinates(self, tmp_path):
+        """year/day/time identify each row, so they survive any selection."""
+        from pysipnet.io.output_reader import read_output_file
+
+        df = read_output_file(self._write(tmp_path, self.HEADER, self.ROW_1), columns=["nee"])
+        assert set(df.columns) == {"year", "day", "time", "nee"}
+
+
+class TestNonFiniteValuesAreRefused:
+    """NaN and inf must never reach SIPNET.
+
+    SIPNET parses both with strtod and runs to completion. A NaN temperature
+    parameter gives a whole run of zero productivity, exit code 0, and no
+    warning — output that looks entirely plausible. In a calibration loop a NaN
+    proposal becomes a finite, wrong likelihood instead of an error.
+    """
+
+    def test_nan_is_refused_at_construction(self):
+        from pysipnet.parameters.model import PhotosynthesisParams
+
+        with pytest.raises(ValidationError):
+            PhotosynthesisParams(
+                a_max=112.0,
+                a_max_frac=0.76,
+                base_fol_resp_frac=0.1,
+                psn_t_min=float("nan"),
+                psn_t_opt=24.0,
+                d_vpd_slope=0.05,
+                d_vpd_exp=1.0,
+                half_sat_par=17.0,
+                attenuation=0.5,
+            )
+
+    def test_inf_is_refused_at_construction(self):
+        from pysipnet.parameters.model import PhotosynthesisParams
+
+        with pytest.raises(ValidationError):
+            PhotosynthesisParams(
+                a_max=float("inf"),
+                a_max_frac=0.76,
+                base_fol_resp_frac=0.1,
+                psn_t_min=2.0,
+                psn_t_opt=24.0,
+                d_vpd_slope=0.05,
+                d_vpd_exp=1.0,
+                half_sat_par=17.0,
+                attenuation=0.5,
+            )
+
+    def test_writer_refuses_a_non_finite_value_that_skipped_validation(
+        self, tmp_path, minimal_params
+    ):
+        """model_construct bypasses validators, so the writer checks too."""
+        from pysipnet.parameters.model import ModelFlags
+
+        data = minimal_params.model_dump()
+        data["photosynthesis"]["a_max"] = float("nan")
+        sneaked = type(minimal_params).model_construct(
+            **{
+                k: type(getattr(minimal_params, k)).model_construct(**v)
+                if isinstance(v, dict)
+                else v
+                for k, v in data.items()
+            }
+        )
+        with pytest.raises(ValueError, match="Refusing to write"):
+            write_param_file(sneaked, ModelFlags.standard(), tmp_path / "sipnet.param")
+
+    def test_a_numpy_scalar_is_written_as_a_plain_number(self, tmp_path, minimal_params):
+        """repr() of a numpy scalar is 'np.float64(8.3)', which SIPNET reads as 0."""
+        import numpy as np
+
+        from pysipnet.parameters.model import ModelFlags
+
+        data = minimal_params.model_dump()
+        data["photosynthesis"]["a_max"] = np.float64(112.5)
+        params = type(minimal_params).model_validate(data)
+        path = tmp_path / "sipnet.param"
+        write_param_file(params, ModelFlags.standard(), path)
+        line = next(ln for ln in path.read_text().splitlines() if ln.startswith("aMax"))
+        assert line.split()[1] == "112.5", f"unparseable value written: {line!r}"

@@ -13,7 +13,7 @@ pySIPNET uses a git **submodule** to track the pinned SIPNET source.  You must
 clone with `--recurse-submodules` to get it:
 
 ```bash
-git clone --recurse-submodules https://github.com/andrewroberts/pySIPNET.git
+git clone --recurse-submodules https://github.com/TARPS-group/pySIPNET.git
 cd pySIPNET
 ```
 
@@ -71,54 +71,72 @@ The `Makefile` at the repo root compiles SIPNET from the pinned submodule
 source.  Binaries are placed in `.sipnet_cache/`.
 
 ```bash
-make sipnet           # builds all presets (standard + forest)
-make sipnet-standard  # build only the standard preset
-make sipnet-forest    # build only the forest preset
+make sipnet           # builds the one SIPNET binary
 ```
 
-!!! note "What the build does"
-    Before compiling, the build applies a small source patch
-    (`patches/apply_flags_patch.py`) that wraps SIPNET's compile-time flag
-    `#define` statements with `#ifndef` guards.  This enables the preset
-    system to override flags via `-D` compiler arguments without modifying
-    the SIPNET source permanently.  The patch is idempotent and does not
-    change model behaviour.
+### Without a C compiler
 
-### Available presets
+If compiling is inconvenient, fetch the binary the SIPNET project publishes
+with each release:
 
-| Preset       | Binary name          | Active flags                         |
-|:-------------|:---------------------|:-------------------------------------|
-| `standard`   | `sipnet_standard`    | SNOW=1, GDD=1, WATER_HRESP=1         |
-| `forest`     | `sipnet_forest`      | standard + LITTER_POOL=1             |
+```bash
+make sipnet-download
+```
 
-### Custom presets
+Available for `macos-arm64` and `linux-x86_64` only; on any other platform,
+compile from source instead. The archive's SHA-256 is pinned in
+`pysipnet/version.py` and verified before anything is unpacked, and the
+installed binary is then asked for its version to confirm it is the release
+pySIPNET targets. Any mismatch aborts and leaves nothing installed.
 
-To add a new flag combination, extend the `Makefile` with a new target and
-register it in `pysipnet/runner.py` (`ModelPreset` enum).  See the existing
-`sipnet-forest` target as a template.
+Compiling from source stays the default. Downloading never happens on its own —
+you have to ask for it.
+
+!!! note "One binary, no compiler flags"
+    The build passes no configuration to the compiler. Every model option is
+    chosen when a run starts, not when SIPNET is compiled, so a single binary
+    covers every configuration pySIPNET can ask for.
+
+### Choosing model options
+
+Options are set per run, through
+[`ModelFlags`](api/index.md), and pySIPNET writes them into the
+`sipnet.in` file it generates for each run:
+
+```python
+from pysipnet import ModelFlags, SIPNETRunner
+
+runner = SIPNETRunner(flags=ModelFlags.forest())          # named starting point
+runner = SIPNETRunner(flags=ModelFlags(litter_pool=True))  # or build your own
+```
+
+`ModelFlags.standard()` and `ModelFlags.forest()` are conveniences, not a
+closed list — any valid combination of flags works without rebuilding.
 
 ## 4. Verify the installation
 
 ```bash
 uv run python -c "import pysipnet; print(pysipnet.__version__)"
-uv run pytest tests/ -m "not integration"   # fast tests (no binary required)
+uv run pytest tests/ -m "not integration and not network"   # fast tests (no binary required)
 uv run pytest tests/ -m integration         # full tests (requires compiled binary)
 ```
 
 ## Upgrading SIPNET
 
-The SIPNET source is pinned to commit `e4abf14f` (the last pre-v2 commit).
+The SIPNET source is pinned to the v2.2.0-alpha.1 pre-release (commit `41fa853e`).
 To update the pin:
 
 1. Navigate to the submodule: `cd sipnet/`
 2. Check out the new target commit: `git checkout <new-commit>`
 3. Return to the repo root and stage the change: `cd .. && git add sipnet/`
 4. Commit the update: `git commit -m "chore: update SIPNET pin to <short-hash>"`
-5. Update `pysipnet/version.py` (`SIPNET_PINNED_COMMIT`) and this page.
-6. Rebuild all binaries: `make clean-sipnet sipnet`
+5. Update `pysipnet/version.py` — `SIPNET_PINNED_COMMIT`, `SIPNET_PINNED_TAG`,
+   `SIPNET_NUMERIC_VERSION` and `SIPNET_RELEASE_ASSETS` all move together — and
+   this page.
+6. Rebuild the binary: `make clean-sipnet sipnet`
 7. Run the full test suite: `uv run pytest`
 
 !!! warning "Regenerate documentation after any version change"
     If file formats or parameters change with the new SIPNET pin, update
-    `pysipnet/parameters/v1.py`, `pysipnet/io/`, and `docs/sipnet-version.md`
+    `pysipnet/parameters/model.py`, `pysipnet/io/`, and `docs/sipnet-version.md`
     accordingly.

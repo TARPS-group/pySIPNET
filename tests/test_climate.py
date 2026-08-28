@@ -7,8 +7,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from pysipnet.climate import CLIM_COLUMNS_V1, ClimateDrivers
-from pysipnet.runner import ClimateStaging, ModelPreset, SIPNETRunner
+from pysipnet.climate import CLIM_COLUMNS, ClimateDrivers
+from pysipnet.parameters.model import ModelFlags
+from pysipnet.runner import ClimateStaging, SIPNETRunner
 
 
 def _make_df(
@@ -23,14 +24,17 @@ def _make_df(
             "day": range(start_doy, start_doy + n_days),
             "time": 0.0,
             "length": 1.0,
-            "tair": 15.0,
-            "tsoil": 10.0,
-            "par": 10.0,
-            "precip": 2.0,
-            "vpd": 800.0,
-            "vpd_soil": 400.0,
-            "vpress": 1200.0,
-            "wspd": 2.5,
+            # Every column a distinct, non-round value. With repeated or round
+            # numbers a round trip proves only the shape: swapping two columns
+            # in the writer, or truncating precision, would still compare equal.
+            "tair": 15.3125,
+            "tsoil": 10.0625,
+            "par": 21.8437,
+            "precip": 2.1875,
+            "vpd": 803.40625,
+            "vpd_soil": 401.703125,
+            "vpress": 1203.28125,
+            "wspd": 2.546875,
         }
     )
 
@@ -44,7 +48,7 @@ class TestFromDataframe:
     def test_happy_path(self):
         cd = ClimateDrivers.from_dataframe(_make_df())
         assert cd.n_timesteps == 5
-        assert list(cd.data.columns) == CLIM_COLUMNS_V1
+        assert list(cd.data.columns) == CLIM_COLUMNS
 
     def test_extra_columns_ignored(self):
         df = _make_df()
@@ -53,18 +57,18 @@ class TestFromDataframe:
         assert "extra" not in cd.data.columns
 
     def test_column_order_normalised(self):
-        df = _make_df()[list(reversed(CLIM_COLUMNS_V1))]
+        df = _make_df()[list(reversed(CLIM_COLUMNS))]
         cd = ClimateDrivers.from_dataframe(df)
-        assert list(cd.data.columns) == CLIM_COLUMNS_V1
+        assert list(cd.data.columns) == CLIM_COLUMNS
 
     def test_missing_column_raises(self):
         df = _make_df().drop(columns=["par"])
         with pytest.raises(ValueError, match="missing required columns"):
             ClimateDrivers.from_dataframe(df)
 
-    def test_version_stored(self):
-        cd = ClimateDrivers.from_dataframe(_make_df(), version="v1", loc=7)
-        assert cd.version == "v1"
+    def test_layout_stored(self):
+        cd = ClimateDrivers.from_dataframe(_make_df(), n_columns=14, loc=7)
+        assert cd.n_columns == 14
         assert cd.loc == 7
 
     def test_data_is_a_copy(self):
@@ -168,7 +172,7 @@ class TestProperties:
         cd = ClimateDrivers.from_dataframe(_make_df(n_days=5, start_doy=100, year=2020))
         r = repr(cd)
         assert "ClimateDrivers" in r
-        assert "v1" in r
+        assert "n_columns=14" in r
         assert "5" in r  # timestep count
 
 
@@ -182,7 +186,7 @@ class TestFileIO:
         cd = ClimateDrivers.from_dataframe(_make_df(n_days=7))
         path = tmp_path / "test.clim"
         cd.to_file(path)
-        cd2 = ClimateDrivers.from_file(path, version="v1")
+        cd2 = ClimateDrivers.from_file(path, n_columns=14)
         pd.testing.assert_frame_equal(
             cd.data.reset_index(drop=True),
             cd2.data.reset_index(drop=True),
@@ -224,7 +228,7 @@ class TestFileIO:
         path13 = tmp_path / "test13.clim"
         path13.write_text(stripped)
 
-        cd13 = ClimateDrivers.from_file(path13, version="v1")
+        cd13 = ClimateDrivers.from_file(path13, n_columns=14)
         pd.testing.assert_frame_equal(
             cd.data.reset_index(drop=True),
             cd13.data.reset_index(drop=True),
@@ -236,13 +240,13 @@ class TestFileIO:
         path = tmp_path / "bad.clim"
         path.write_text("1 2 3 4 5\n6 7 8 9 10\n")
         with pytest.raises(ValueError, match="Expected 13 or 14 columns"):
-            ClimateDrivers.from_file(path, version="v1")
+            ClimateDrivers.from_file(path, n_columns=14)
 
     def test_roundtrip_v2(self, tmp_path):
-        cd = ClimateDrivers.from_dataframe(_make_df(n_days=7), version="v2")
-        path = tmp_path / "test_v2.clim"
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=7), n_columns=12)
+        path = tmp_path / "test_12_column.clim"
         cd.to_file(path)
-        cd2 = ClimateDrivers.from_file(path, version="v2")
+        cd2 = ClimateDrivers.from_file(path, n_columns=12)
         pd.testing.assert_frame_equal(
             cd.data.reset_index(drop=True),
             cd2.data.reset_index(drop=True),
@@ -251,16 +255,16 @@ class TestFileIO:
         )
 
     def test_v2_file_has_12_columns(self, tmp_path):
-        cd = ClimateDrivers.from_dataframe(_make_df(n_days=3), version="v2")
-        path = tmp_path / "test_v2.clim"
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=3), n_columns=12)
+        path = tmp_path / "test_12_column.clim"
         cd.to_file(path)
         first_line = path.read_text().splitlines()[0]
         assert len(first_line.split()) == 12
 
     def test_v2_file_starts_with_year(self, tmp_path):
         """v2 has no loc column — first token is year."""
-        cd = ClimateDrivers.from_dataframe(_make_df(n_days=3, year=2021), version="v2")
-        path = tmp_path / "test_v2.clim"
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=3, year=2021), n_columns=12)
+        path = tmp_path / "test_12_column.clim"
         cd.to_file(path)
         first_line = path.read_text().splitlines()[0]
         assert first_line.split()[0] == "2021"
@@ -269,14 +273,14 @@ class TestFileIO:
         path = tmp_path / "bad_v2.clim"
         path.write_text("1 2 3 4 5\n6 7 8 9 10\n")
         with pytest.raises(ValueError, match="Expected 12 columns"):
-            ClimateDrivers.from_file(path, version="v2")
+            ClimateDrivers.from_file(path, n_columns=12)
 
-    def test_v2_version_preserved_after_roundtrip(self, tmp_path):
-        cd = ClimateDrivers.from_dataframe(_make_df(n_days=5), version="v2")
-        path = tmp_path / "test_v2.clim"
+    def test_12_column_layout_preserved_after_roundtrip(self, tmp_path):
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=5), n_columns=12)
+        path = tmp_path / "test_12_column.clim"
         cd.to_file(path)
-        cd2 = ClimateDrivers.from_file(path, version="v2")
-        assert cd2.version == "v2"
+        cd2 = ClimateDrivers.from_file(path, n_columns=12)
+        assert cd2.n_columns == 12
 
 
 # ---------------------------------------------------------------------------
@@ -347,14 +351,14 @@ class TestFromPath:
         bad = tmp_path / "bad.clim"
         bad.write_text("1 2 3\n4 5 6\n")
         with pytest.raises(ValueError, match="columns"):
-            ClimateDrivers.from_path(bad, version="v1")
+            ClimateDrivers.from_path(bad, n_columns=14)
 
-    def test_version_stored(self, tmp_path):
-        cd = ClimateDrivers.from_dataframe(_make_df(n_days=3), version="v1")
+    def test_layout_stored(self, tmp_path):
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=3), n_columns=14)
         path = tmp_path / "test.clim"
         cd.to_file(path)
-        ref = ClimateDrivers.from_path(path, version="v1")
-        assert ref.version == "v1"
+        ref = ClimateDrivers.from_path(path, n_columns=14)
+        assert ref.n_columns == 14
 
     def test_repr_does_not_load_data(self, tmp_path):
         _, path = self._write(tmp_path, n_days=5, start_doy=100, year=2021)
@@ -372,7 +376,7 @@ class TestFromPath:
 
 class TestClimateStaging:
     def _runner(self, staging: ClimateStaging) -> SIPNETRunner:
-        return SIPNETRunner(preset=ModelPreset.STANDARD, climate_staging=staging)
+        return SIPNETRunner(flags=ModelFlags.standard(), climate_staging=staging)
 
     def test_in_memory_writes_file(self, tmp_path):
         runner = self._runner(ClimateStaging.COPY)
@@ -433,5 +437,5 @@ class TestClimateStaging:
         assert dest.resolve() == src.resolve()
 
     def test_default_staging_is_copy(self):
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        runner = SIPNETRunner(flags=ModelFlags.standard())
         assert runner.climate_staging == ClimateStaging.COPY

@@ -1,71 +1,134 @@
 # SIPNET Version Contract
 
-## Pinned commit
+## Pinned release
 
-pySIPNET v0.x targets a single SIPNET commit:
+pySIPNET targets one exact SIPNET commit, recorded in `pysipnet/version.py` and
+checked out in the `sipnet/` submodule:
 
 ```
-e4abf14f2445133c785b756025a2e39e60c7760f
+41fa853e7131f542c52fcc0f4e3ea76892b52eda   # v2.2.0-alpha.1
 ```
 
-This is the last commit before PR #114 ("SIP78 Convert switches to run time options part 3") migrated SIPNET's compile-time feature flags to runtime CLI arguments, marking the boundary between what we call **v1** (compile-time flags, 14-column climate file) and **v2** (runtime flags, 12-column climate file).
+This is the **v2.2.0-alpha.1** pre-release, created by the SIPNET developers so
+that everyone's analyses pin to the same version.
 
-No formal tag exists at this commit.  The nearest tag is `v1.3.0` (commit `8ff893e`), which predates it by several cleanup PRs.
+Pinning to a commit rather than a branch means everyone who clones pySIPNET
+compiles the same model source, so results are reproducible and a version
+change is a deliberate, reviewable edit rather than something that happens on
+its own.
 
-## What changed between v1 and v2
+Two tests keep the pin honest, both in `tests/test_build.py`: one asserts the
+submodule is checked out at `SIPNET_PINNED_COMMIT`, the other that the compiled
+binary was built from `SIPNET_PINNED_TAG`. A stale binary left over from a
+previous pin has no other symptom, so without these it would quietly produce
+output from the wrong model.
+
+The second check reads the `git describe` tag, not the numeric version. SIPNET's
+`version.h` still declares `2.1.0` at this tag, so `sipnet --version` prints
+`2.1.0 (v2.2.0-alpha.1)` and the number alone cannot tell one release from
+another. Checking it would produce a test that passes against the wrong binary.
+
+Note also that a tag, unlike a commit, can be moved by whoever owns it. If
+upstream re-tags this pre-release the commit assertion fails, which is the
+behaviour we want.
+
+## What this pin gives you
+
+**Model options are chosen when you run, not when you compile.** From SIPNET
+v2.0.0 onward, every feature switch lives in the `sipnet.in` config file. There
+is one binary, built by `make sipnet` with no compiler flags, and pySIPNET
+expresses the configuration as a
+[`ModelFlags`](api/index.md) object written into that file for each run.
+
+Earlier SIPNET versions chose these options at compile time, which meant one
+binary per combination of options and a patch to the SIPNET source to make the
+switches overridable at all. Both are gone.
+
+**The litter pool works.** Before v2.0.0 the litter pool did not compile, and
+the commit that fixed compilation still left soil respiration unassigned on
+that code path, so soil carbon accumulated without ever respiring.
+
+**Wood carbon is counted once.** Up to v2.0.0, the wood pool update added
+photosynthesis and wood creation together. v2.1.0 separates the wood pool from
+a storage-lag term. This changes results, which is why parameter values fitted
+against an older SIPNET do not carry over.
+
+## File formats at this pin
 
 ### Climate file
 
-| Format | Columns | Notes |
-|:-------|:--------|:------|
-| v1     | 14      | Col 1: location index (ignored). Col 14: soilWetness (ignored). |
-| v2     | 12      | Location and soilWetness columns removed. |
+SIPNET decides which layout it has been given by counting the columns on the
+first line.
 
-The sample file `data/era5_site1.clim` is in v1 format.
+| Columns | Notes |
+|:--------|:------|
+| 12      | The current layout: `year day time length tair tsoil par precip vpd vpdSoil vPress wspd`. |
+| 14      | An older layout carrying the same 12 values, plus a leading site identifier and a trailing soil wetness value. SIPNET parses those two extra fields and then ignores them. |
+
+Anything else is a hard error, including 13 columns, which an earlier SIPNET
+accepted.
+
+pySIPNET writes 14 columns. SIPNET accepts them, noting in its log that it took
+the older layout. Both layouts can be read, selected with `n_columns=12` or
+`n_columns=14`. Note the discriminator is
+the column count, not a version: one SIPNET version reads both.
 
 ### Parameter file
 
-Both versions use a 2-column format (`name  value`) with `!` comments.  v1 files may have up to 6 columns (name, value, changeable, min, max, sigma); SIPNET silently ignores columns 3+.
+Two columns, `name  value`, with `!` for comments. Files may carry extra
+columns from older tooling; SIPNET warns and ignores them.
 
-### Compile-time flags
+An unrecognised parameter name is only a warning, so a renamed parameter would
+silently stop having any effect. `tests/test_param_file_contract.py` guards
+against that by running the binary and failing on any unknown-parameter line.
 
-In v1, model features are controlled by `#define` constants in the C source.
-Changing a feature requires recompilation.  In v2, all features became runtime
-flags (CLI arguments and `sipnet.in`).
+### Output file
 
-The pySIPNET build system patches v1 to allow flag overrides via `-D` compiler
-arguments.  See [Installation](installation.md) for details.
+35 columns with a header row. Every column is always present: a switched-off
+process writes zeros rather than omitting its column.
 
-**Remaining compile-time flags at the pinned commit:**
+Older SIPNET wrote a `Notes:` line above the header, which v2.1.0 removed. The
+output reader detects the header by content rather than expecting that line, so
+files from older versions still read. Columns are matched by name, never by
+position, so a column set that changes between versions costs only a mapping
+entry.
 
-| Flag | Default | Controls |
-|:-----|:--------|:---------|
-| `SNOW` | 1 (on) | Snowpack tracking |
-| `GDD` | 1 (on) | Growing degree-day phenology |
-| `WATER_HRESP` | 1 (on) | Soil moisture effect on Rh |
-| `GROWTH_RESP` | 0 (off) | Explicit growth respiration |
-| `LEAF_WATER` | 0 (off) | Leaf water pool for sub-daily ET |
-| `LITTER_POOL` | 0 (off) | Separate litter C pool |
-| `SOIL_PHENOL` | 0 (off) | Soil-temperature phenology (⊕ with GDD) |
-| `HEADER` | 0 (off) | Column header in output file |
+## Moving to a newer SIPNET
 
-pySIPNET always compiles with `HEADER=1` so the output parser can rely on the
-header row.
+Bump `SIPNET_PINNED_COMMIT`, `SIPNET_PINNED_TAG` and `SIPNET_NUMERIC_VERSION`
+together, refresh `SIPNET_RELEASE_ASSETS`, update the
+submodule, and rebuild with `make sipnet` — `build_sipnet()` trusts an existing
+binary unless you pass `force=True`.
 
-### Output format
+Expect to revisit:
 
-v1 output includes columns `fPAR`, `microbeC`, and `litterWater` that are
-absent in v2.  When these features are compiled out (off), the columns output
-zero.
+1. **Required parameters.** Which parameters SIPNET insists on, and the
+   conditions attached to them, are mirrored in
+   `SIPNETParameters.validate_for_flags`.
+2. **Model flags.** Any new feature switch belongs in `ModelFlags`, along with
+   the restrictions SIPNET enforces on combining it with others.
+3. **Output columns.** New columns need entries in
+   `SIPNET_TO_PYTHON_OUTPUT`; unmapped ones keep their SIPNET spelling rather
+   than being dropped.
+4. **Golden fixtures.** Regenerate with `python -m tests.test_golden` and
+   review the diff, recording the before-and-after values in the commit.
 
-## Extension to v2
+The public API — `SIPNETRunner.run(params, climate)` — should not need to
+change.
 
-When SIPNET v2 stabilises, the extension path is:
+## Not yet used from this pin
 
-1. Add a new submodule pointer (or a parallel submodule path) for the v2 source.
-2. Implement `pysipnet/io/clim_io_v2.py` with the 12-column reader/writer.
-3. Implement `pysipnet/parameters/v2.py` with the updated parameter set.
-4. Extend `ModelPreset` with v2 presets.
-5. Route `ClimateDrivers(version="v2")` and `SIPNETParametersV2` through the new adapters.
+Two capabilities exist in the pinned SIPNET but are not wired up in pySIPNET
+yet.
 
-The public API (`SIPNETRunner.run(params, climate)`) does not need to change.
+**Prescribed phenology.** `leafon` and `leafoff` events in the events file set
+leaf-out and leaf-fall timing from observed dates instead of from a fitted
+parameter, which removes a dimension from the calibration problem. They are
+mutually exclusive with the calculated triggers: SIPNET refuses to start if
+both are configured. Three event types are unmodelled in total — `leafon`,
+`leafoff` and `plantdeath` — and `tests/test_events_contract.py` fails if a
+fourth appears upstream. Tracked in issue #25.
+
+**Restart checkpoints.** `RESTART_IN` and `RESTART_OUT` save and reload model
+state, which is the efficient route to sequential data assimilation. Tracked in
+issue #24.

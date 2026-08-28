@@ -10,7 +10,7 @@ import pytest
 
 from pysipnet.climate import ClimateDrivers
 from pysipnet.config import RunConfig
-from pysipnet.runner import ModelPreset
+from pysipnet.parameters.model import ModelFlags
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -58,7 +58,7 @@ def file_backed_climate(tmp_path, in_memory_climate) -> ClimateDrivers:
 class TestCopyMode:
     def test_creates_config_json_and_clim(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=in_memory_climate,
         )
@@ -68,7 +68,7 @@ class TestCopyMode:
 
     def test_no_events_file_by_default(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=in_memory_climate,
         )
@@ -77,7 +77,7 @@ class TestCopyMode:
 
     def test_save_returns_resolved_path(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=in_memory_climate,
         )
@@ -86,7 +86,7 @@ class TestCopyMode:
 
     def test_config_json_climate_mode_is_copy(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=in_memory_climate,
         )
@@ -96,7 +96,7 @@ class TestCopyMode:
 
     def test_metadata_fields_present(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=in_memory_climate,
         )
@@ -106,19 +106,19 @@ class TestCopyMode:
         assert "pysipnet_version" in data
         assert "created_at" in data
 
-    def test_roundtrip_preset(self, tmp_path, minimal_params, in_memory_climate):
+    def test_roundtrip_flags(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=in_memory_climate,
         )
         config.save(tmp_path / "run")
         loaded = RunConfig.load(tmp_path / "run")
-        assert loaded.preset == ModelPreset.STANDARD
+        assert loaded.flags == ModelFlags.standard()
 
     def test_roundtrip_params(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=in_memory_climate,
         )
@@ -128,7 +128,7 @@ class TestCopyMode:
 
     def test_roundtrip_climate_timesteps(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=in_memory_climate,
         )
@@ -138,7 +138,7 @@ class TestCopyMode:
 
     def test_loaded_climate_is_file_backed(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=in_memory_climate,
         )
@@ -148,7 +148,7 @@ class TestCopyMode:
 
     def test_roundtrip_no_events(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=in_memory_climate,
         )
@@ -165,7 +165,7 @@ class TestCopyMode:
             ]
         )
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=in_memory_climate,
             events=events,
@@ -179,19 +179,19 @@ class TestCopyMode:
         assert ev.year == 2020
         assert ev.day == 5
 
-    def test_forest_preset_roundtrips(self, tmp_path, minimal_params, in_memory_climate):
+    def test_forest_flags_roundtrip(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
-            preset=ModelPreset.FOREST,
+            flags=ModelFlags.forest(),
             params=minimal_params,
             climate=in_memory_climate,
         )
         config.save(tmp_path / "run")
         loaded = RunConfig.load(tmp_path / "run")
-        assert loaded.preset == ModelPreset.FOREST
+        assert loaded.flags == ModelFlags.forest()
 
     def test_overwrites_existing_directory(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=in_memory_climate,
         )
@@ -199,7 +199,7 @@ class TestCopyMode:
         # Save again — should not raise
         config.save(tmp_path / "run")
         loaded = RunConfig.load(tmp_path / "run")
-        assert loaded.preset == ModelPreset.STANDARD
+        assert loaded.flags == ModelFlags.standard()
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ class TestCopyMode:
 class TestReferenceOnly:
     def test_no_clim_file_written(self, tmp_path, minimal_params, file_backed_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=file_backed_climate,
         )
@@ -219,7 +219,7 @@ class TestReferenceOnly:
 
     def test_config_json_records_path_and_hash(self, tmp_path, minimal_params, file_backed_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=file_backed_climate,
         )
@@ -230,20 +230,20 @@ class TestReferenceOnly:
         assert "sha256" in data["climate"]
         assert len(data["climate"]["sha256"]) == 64  # hex SHA-256
 
-    def test_roundtrip_preset_and_params(self, tmp_path, minimal_params, file_backed_climate):
+    def test_roundtrip_flags_and_params(self, tmp_path, minimal_params, file_backed_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=file_backed_climate,
         )
         config.save(tmp_path / "run", reference_only=True)
         loaded = RunConfig.load(tmp_path / "run")
-        assert loaded.preset == ModelPreset.STANDARD
+        assert loaded.flags == ModelFlags.standard()
         assert loaded.params.model_dump() == minimal_params.model_dump()
 
     def test_roundtrip_climate_timesteps(self, tmp_path, minimal_params, file_backed_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=file_backed_climate,
         )
@@ -253,7 +253,7 @@ class TestReferenceOnly:
 
     def test_raises_for_in_memory_climate(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=in_memory_climate,
         )
@@ -262,7 +262,7 @@ class TestReferenceOnly:
 
     def test_load_raises_if_file_missing(self, tmp_path, minimal_params, file_backed_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=file_backed_climate,
         )
@@ -278,7 +278,7 @@ class TestReferenceOnly:
 
     def test_hash_mismatch_warns(self, tmp_path, minimal_params, file_backed_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=file_backed_climate,
         )
@@ -294,7 +294,7 @@ class TestReferenceOnly:
 
     def test_matching_hash_no_warning(self, tmp_path, minimal_params, file_backed_climate):
         config = RunConfig(
-            preset=ModelPreset.STANDARD,
+            flags=ModelFlags.standard(),
             params=minimal_params,
             climate=file_backed_climate,
         )
@@ -328,13 +328,13 @@ class TestLoadErrors:
 
 
 class TestFromResult:
-    def test_from_result_copies_preset_params_climate(self, minimal_params, in_memory_climate):
-        from pysipnet.parameters.v1 import ModelFlagsV1
+    def test_from_result_copies_flags_params_climate(self, minimal_params, in_memory_climate):
+        from pysipnet.parameters.model import ModelFlags
         from pysipnet.result import RunProvenance, SIPNETResult
 
         provenance = RunProvenance(
-            preset=ModelPreset.STANDARD,
-            binary_path=Path("/fake/sipnet_standard"),
+            flags=ModelFlags.standard(),
+            binary_path=Path("/fake/sipnet"),
             run_id="test-abc",
             workdir=Path("/fake/workdir"),
             returncode=0,
@@ -346,26 +346,26 @@ class TestFromResult:
             outputs=pd.DataFrame(),
             parameters=minimal_params,
             climate=in_memory_climate,
-            flags=ModelFlagsV1.standard(),
+            flags=ModelFlags.standard(),
             provenance=provenance,
             events=None,
         )
         config = RunConfig.from_result(result)
-        assert config.preset == ModelPreset.STANDARD
+        assert config.flags == ModelFlags.standard()
         assert config.params.model_dump() == minimal_params.model_dump()
         assert config.events is None
 
     def test_from_result_preserves_events(self, minimal_params, in_memory_climate):
         from pysipnet.events import EventSequence, IrrigationEvent, IrrigationMethod
-        from pysipnet.parameters.v1 import ModelFlagsV1
+        from pysipnet.parameters.model import ModelFlags
         from pysipnet.result import RunProvenance, SIPNETResult
 
         events = EventSequence(
             events=[IrrigationEvent(year=2020, day=10, amount=5.0, method=IrrigationMethod.CANOPY)]
         )
         provenance = RunProvenance(
-            preset=ModelPreset.FOREST,
-            binary_path=Path("/fake/sipnet_forest"),
+            flags=ModelFlags.forest(),
+            binary_path=Path("/fake/sipnet"),
             run_id="test-xyz",
             workdir=Path("/fake/workdir"),
             returncode=0,
@@ -377,11 +377,11 @@ class TestFromResult:
             outputs=pd.DataFrame(),
             parameters=minimal_params,
             climate=in_memory_climate,
-            flags=ModelFlagsV1.forest(),
+            flags=ModelFlags.forest(),
             provenance=provenance,
             events=events,
         )
         config = RunConfig.from_result(result)
-        assert config.preset == ModelPreset.FOREST
+        assert config.flags == ModelFlags.forest()
         assert config.events is not None
         assert len(config.events) == 1

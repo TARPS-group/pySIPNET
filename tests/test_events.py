@@ -75,13 +75,12 @@ class TestHarvestEvent:
             fraction_transferred_above=0.3,
             fraction_transferred_below=0.4,
         )
-        line = e._to_line()
-        tokens = line.split()
-        assert tokens[0] == "2024"
-        assert tokens[1] == "70"
-        assert tokens[2] == "harv"
-        assert float(tokens[3]) == pytest.approx(0.1)
-        assert float(tokens[6]) == pytest.approx(0.4)
+        tokens = e._to_line().split()
+        # Every position, not just the ends. SIPNET reads these by position, so
+        # a swap in the middle is silent: the run succeeds and applies the
+        # fractions to the wrong pools.
+        assert tokens[:3] == ["2024", "70", "harv"]
+        assert [float(t) for t in tokens[3:]] == pytest.approx([0.1, 0.2, 0.3, 0.4])
 
 
 # ---------------------------------------------------------------------------
@@ -155,8 +154,10 @@ class TestPlantingEvent:
             year=2024, day=70, leaf_c=10.0, wood_c=5.0, fine_root_c=4.0, coarse_root_c=3.0
         )
         tokens = e._to_line().split()
-        assert tokens[2] == "plant"
-        assert len(tokens) == 7  # year day plant leafC woodC fineRootC coarseRootC
+        # Distinct values in a known order: asserting only the length would let
+        # the four carbon pools be written in any order at all.
+        assert tokens[:3] == ["2024", "70", "plant"]
+        assert [float(t) for t in tokens[3:]] == pytest.approx([10.0, 5.0, 4.0, 3.0])
 
 
 # ---------------------------------------------------------------------------
@@ -166,36 +167,25 @@ class TestPlantingEvent:
 
 class TestTillageEvent:
     def test_valid(self):
-        e = TillageEvent(
-            year=2020,
-            day=100,
-            fraction_litter_transferred=0.1,
-            som_decomp_modifier=1.2,
-            litter_decomp_modifier=1.3,
-        )
-        assert e.som_decomp_modifier == pytest.approx(1.2)
+        e = TillageEvent(year=2020, day=100, tillage_effect=1.2)
+        assert e.tillage_effect == pytest.approx(1.2)
 
-    def test_fraction_above_one_raises(self):
+    def test_zero_effect_is_allowed(self):
+        """Zero means the run is unchanged, which is a legitimate thing to say."""
+        assert TillageEvent(year=2020, day=100, tillage_effect=0.0).tillage_effect == 0.0
+
+    def test_negative_effect_raises(self):
+        """Tillage speeds decomposition up; a negative boost is not meaningful."""
         with pytest.raises(ValidationError):
-            TillageEvent(
-                year=2020,
-                day=100,
-                fraction_litter_transferred=1.5,
-                som_decomp_modifier=1.0,
-                litter_decomp_modifier=1.0,
-            )
+            TillageEvent(year=2020, day=100, tillage_effect=-0.1)
 
-    def test_to_line(self):
-        e = TillageEvent(
-            year=2022,
-            day=45,
-            fraction_litter_transferred=0.1,
-            som_decomp_modifier=0.2,
-            litter_decomp_modifier=0.3,
-        )
+    def test_to_line_writes_exactly_one_value(self):
+        """SIPNET v2.1.0 reads one value and discards any surplus in silence."""
+        e = TillageEvent(year=2022, day=45, tillage_effect=0.2)
         tokens = e._to_line().split()
         assert tokens[2] == "till"
-        assert len(tokens) == 6
+        assert len(tokens) == 4, f"expected 'year day till value', got {tokens}"
+        assert float(tokens[3]) == pytest.approx(0.2)
 
 
 # ---------------------------------------------------------------------------
@@ -277,13 +267,7 @@ class TestEventSequence:
             events=[
                 IrrigationEvent(year=2022, day=40, amount=5.0, method=IrrigationMethod.CANOPY),
                 FertilizationEvent(year=2022, day=40, org_n=15.0, org_c=5.0, min_n=10.0),
-                TillageEvent(
-                    year=2022,
-                    day=45,
-                    fraction_litter_transferred=0.1,
-                    som_decomp_modifier=0.2,
-                    litter_decomp_modifier=0.3,
-                ),
+                TillageEvent(year=2022, day=45, tillage_effect=0.2),
                 PlantingEvent(
                     year=2022, day=46, leaf_c=10.0, wood_c=5.0, fine_root_c=4.0, coarse_root_c=3.0
                 ),
@@ -325,7 +309,7 @@ class TestEventSequence:
         content = (
             "2022  40  irrig  5   0\n"
             "2022  40  fert   15 5 10\n"
-            "2022  45  till   0.1 0.2 0.3\n"
+            "2022  45  till   0.2\n"
             "2022  46  plant  10 5 4 3\n"
             "2022  250 harv   0.4 0.1 0.2 0.3\n"
         )

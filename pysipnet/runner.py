@@ -10,31 +10,31 @@ making it trivial to parallelise them with any executor (``concurrent.futures``,
 Dask, Parsl, Ray, etc.)::
 
     from concurrent.futures import ProcessPoolExecutor
-    from pysipnet.runner import SIPNETRunner, ModelPreset
+    from pysipnet.runner import SIPNETRunner
 
-    runner = SIPNETRunner(preset=ModelPreset.FOREST)
+    runner = SIPNETRunner(flags=ModelFlags.forest())
 
     def run_one(config_dict):
-        from pysipnet.parameters.v1 import SIPNETParametersV1
+        from pysipnet.parameters.model import SIPNETParameters
         from pysipnet.climate import ClimateDrivers
         import pandas as pd
-        params  = SIPNETParametersV1.model_validate(config_dict["params"])
+        params  = SIPNETParameters.model_validate(config_dict["params"])
         climate = ClimateDrivers.from_dataframe(pd.DataFrame(config_dict["climate"]))
         return runner.run(params, climate).outputs.data.to_dict()
 
     with ProcessPoolExecutor() as pool:
         results = list(pool.map(run_one, ensemble_configs))
 
-Presets and binaries
---------------------
-A :class:`ModelPreset` selects a pre-compiled SIPNET binary.  Binaries are
-stored in ``.sipnet_cache/`` at the repo root and are built with::
+The SIPNET binary
+-----------------
+There is a single SIPNET binary, stored in ``.sipnet_cache/`` at the repo root
+and built with::
 
-    make sipnet   # builds all presets
-    make sipnet-standard
-    make sipnet-forest
+    make sipnet
 
-The cache directory can be overridden via ``SIPNETRunner(cache_dir=...)``.
+Every model option is chosen at run time and written into ``sipnet.in``, so one
+binary serves every configuration. The cache directory can be overridden via
+``SIPNETRunner(cache_dir=...)``.
 
 Output persistence
 ------------------
@@ -43,7 +43,7 @@ Set ``output_dir`` to copy ``sipnet.out`` to a stable location before cleanup
 and return a file-backed :class:`~pysipnet.output.SIPNETOutput` instead::
 
     runner = SIPNETRunner(
-        preset=ModelPreset.STANDARD,
+        flags=ModelFlags.standard(),
         output_dir=Path("ensemble_out"),
     )
     results = [runner.run(params_i, climate, run_id=f"m{i}") for i in range(1000)]
@@ -55,18 +55,22 @@ Each run writes ``sipnet_<run_id>.out`` inside ``output_dir``.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import tempfile
 import uuid
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+
+from pysipnet.build import BINARY_NAME
+from pysipnet.parameters.model import ModelFlags
 
 if TYPE_CHECKING:
     from pysipnet.climate import ClimateDrivers
     from pysipnet.events import EventSequence
     from pysipnet.output import SIPNETOutput
-    from pysipnet.parameters.v1 import ModelFlagsV1, SIPNETParametersV1
+    from pysipnet.parameters.model import SIPNETParameters
     from pysipnet.result import RunProvenance, SIPNETResult
 
 # Sentinel used to distinguish "not passed" from None in output_dir overrides.
@@ -100,45 +104,105 @@ class ClimateStaging(StrEnum):
     SYMLINK = "symlink"
 
 
-class ModelPreset(StrEnum):
-    """Named SIPNET v1 binary presets.
+class SIPNETRunError(RuntimeError):
+    """SIPNET exited non-zero, or produced no output file.
 
-    Each preset corresponds to a fixed set of compile-time flags (see
-    ``Makefile`` for the exact ``-D`` values).  The preset selects the
-    binary from ``.sipnet_cache/`` and determines which
-    :class:`~pysipnet.parameters.v1.ModelFlagsV1` fields are active.
-
-    +----------+--------------------------------------------+
-    | Preset   | Active flags                               |
-    +==========+============================================+
-    | STANDARD | SNOW=1 GDD=1 WATER_HRESP=1                 |
-    +----------+--------------------------------------------+
-    | FOREST   | STANDARD + LITTER_POOL=1                   |
-    +----------+--------------------------------------------+
+    Carries everything needed to diagnose the run without re-running it. The
+    binary writes the actual reason to stdout or stderr — a missing parameter,
+    an unreadable climate file — so those are the first place to look.
     """
 
-    STANDARD = "standard"
-    """Default v1 configuration: snow, GDD phenology, moisture-sensitive Rh."""
+    def __init__(
+        self,
+        message: str,
+        *,
+        returncode: int,
+        stdout: str,
+        stderr: str,
+        workdir: Path,
+    ) -> None:
+        super().__init__(message)
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+        self.workdir = workdir
 
-    FOREST = "forest"
-    """Standard + explicit litter C pool (required for sites with distinct
-    litter dynamics, e.g. boreal or deciduous forest)."""
 
-    @property
-    def flags(self) -> ModelFlagsV1:
-        """Return the :class:`~pysipnet.parameters.v1.ModelFlagsV1` for this preset."""
-        from pysipnet.parameters.v1 import ModelFlagsV1
+_SAFE_RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
-        if self == ModelPreset.STANDARD:
-            return ModelFlagsV1.standard()
-        if self == ModelPreset.FOREST:
-            return ModelFlagsV1.forest()
-        raise NotImplementedError(f"Flags not defined for preset {self!r}")
 
-    @property
-    def binary_name(self) -> str:
-        """Filename of the compiled binary in the cache directory."""
-        return f"sipnet_{self.value}"
+def _check_run_id(run_id: str) -> str:
+    """Return *run_id* if it is safe to use in a path, else raise.
+
+    The run id becomes a directory name under ``workdir_base``, and that
+    directory is deleted when the run finishes. Without this check a run id
+    containing ``..`` walks out of ``workdir_base``, so SIPNET's inputs are
+    written into some unrelated directory and the cleanup then removes it.
+
+    Ensemble run ids are often built from site or member identifiers read out
+    of data files, so this is reachable without anyone doing anything strange.
+    """
+    if not _SAFE_RUN_ID.match(run_id):
+        raise ValueError(
+            f"Invalid run_id {run_id!r}. A run id becomes a directory name, so it "
+            "may contain only letters, digits, dot, underscore and hyphen, and must "
+            "start with a letter or digit. Path separators and '..' are refused "
+            "because the run directory is deleted afterwards."
+        )
+    return run_id
+
+
+def _render_sipnet_in(flags: ModelFlags, *, events_enabled: bool) -> str:
+    """Build the contents of the ``sipnet.in`` config file for one run.
+
+    SIPNET reads its run configuration from this file. Everything pySIPNET
+    depends on is written explicitly, including settings that match SIPNET's
+    own defaults, so a saved run keeps its meaning even if a future SIPNET
+    changes one of those defaults.
+
+    Settings pySIPNET does not rely on — ``QUIET``, ``EVENTS_PREFIX``,
+    ``DUMP_CONFIG``, ``INPUT_FILE`` — are left out and take SIPNET's defaults.
+
+    Parameters
+    ----------
+    flags:
+        Model options for this run.
+    events_enabled:
+        Whether an ``events.in`` file was written alongside this config. When
+        no events are supplied this is turned off explicitly, so a stale
+        ``events.in`` left in the working directory cannot be picked up.
+
+    Returns
+    -------
+    str
+        File contents, one ``KEY = VALUE`` pair per line.
+    """
+    settings: dict[str, object] = {
+        # Look for sipnet.param and sipnet.clim, and write sipnet.out.
+        "FILE_NAME": "sipnet",
+        # Always emit the column-name header row: the output reader matches
+        # columns by name, so results stay parseable even when a flag change
+        # alters which columns SIPNET writes.
+        "PRINT_HEADER": 1,
+        # Written rather than assumed: if a future SIPNET defaulted this off,
+        # there would be no output file to read and the failure would look
+        # like a missing file rather than a configuration change.
+        "DO_MAIN_OUTPUT": 1,
+        # We parse the combined output, so the per-variable files are just
+        # extra work and extra files in the working directory.
+        #
+        # Note the plural. SIPNET builds its config keys from the C *field*
+        # name (doSingleOutputs), not from the label it prints for the setting
+        # (DO_SINGLE_OUTPUT), and the two disagree here. The singular form —
+        # the one SIPNET's own docs give — is silently ignored.
+        "DO_SINGLE_OUTPUTS": 0,
+        "EVENTS": int(events_enabled),
+    }
+    settings.update(flags.to_config_keys())
+
+    lines = ["! SIPNET run configuration - generated by pySIPNET"]
+    lines += [f"{key} = {value}" for key, value in settings.items()]
+    return "\n".join(lines) + "\n"
 
 
 class SIPNETRunner:
@@ -146,8 +210,12 @@ class SIPNETRunner:
 
     Parameters
     ----------
-    preset:
-        Which compiled binary preset to use.
+    flags:
+        Which optional SIPNET processes to switch on for every run made by
+        this runner. Defaults to :meth:`ModelFlags.standard`. The flags also
+        decide which parameters must be present, so a mismatch between these
+        and the parameters passed to :meth:`run` is reported before SIPNET is
+        invoked.
     output_dir:
         Directory where output files are copied after each run.  When set,
         ``sipnet.out`` is copied to ``<output_dir>/sipnet_<run_id>.out``
@@ -164,8 +232,10 @@ class SIPNETRunner:
         How file-backed climate instances are staged into the working
         directory.  See :class:`ClimateStaging`.
     workdir_base:
-        Parent directory for per-run temporary working directories.  Defaults
-        to the system temp directory.
+        Parent directory for per-run working directories.  Defaults to the
+        system temp directory.  Each run gets a freshly created subdirectory
+        with a unique name, so two runs never share one even when they share a
+        ``run_id``.
     keep_workdir:
         If ``True``, do not delete the working directory after the run.
         Useful for debugging.  Default is ``False``.
@@ -176,7 +246,7 @@ class SIPNETRunner:
 
     def __init__(
         self,
-        preset: ModelPreset = ModelPreset.STANDARD,
+        flags: ModelFlags | None = None,
         *,
         output_dir: Path | str | None = None,
         climate_staging: ClimateStaging = ClimateStaging.COPY,
@@ -185,7 +255,7 @@ class SIPNETRunner:
         keep_workdir: bool = False,
         timeout: float = 300.0,
     ) -> None:
-        self.preset = preset
+        self.flags = flags if flags is not None else ModelFlags.standard()
         self.output_dir = Path(output_dir) if output_dir is not None else None
         self.climate_staging = climate_staging
         self.cache_dir = Path(cache_dir) if cache_dir else _DEFAULT_CACHE_DIR
@@ -195,8 +265,8 @@ class SIPNETRunner:
 
     @property
     def binary_path(self) -> Path:
-        """Absolute path to the SIPNET binary for the selected preset."""
-        return self.cache_dir / self.preset.binary_name
+        """Absolute path to the SIPNET binary this runner will execute."""
+        return self.cache_dir / BINARY_NAME
 
     def _check_binary(self) -> None:
         if not self.binary_path.exists():
@@ -243,12 +313,13 @@ class SIPNETRunner:
 
     def run(
         self,
-        parameters: SIPNETParametersV1,
+        parameters: SIPNETParameters,
         climate: ClimateDrivers,
         *,
         run_id: str | None = None,
         events: EventSequence | None = None,
         output_dir: Path | str | None | object = _UNSET,
+        check: bool = True,
     ) -> SIPNETResult:
         """Execute SIPNET and return a parsed result.
 
@@ -258,10 +329,11 @@ class SIPNETRunner:
 
         Working directory
         -----------------
-        The working directory is ``<workdir_base>/sipnet_<run_id>/``.  It is
-        created with ``exist_ok=True``, so re-using the same ``run_id`` simply
-        overwrites the previous run's input files.  Use distinct ``run_id``
-        values if you need to compare runs.
+        The working directory is ``<workdir_base>/sipnet_<run_id>_<random>/``,
+        created by :func:`tempfile.mkdtemp`.  The random suffix means every run
+        gets its own directory even when two runs share a ``run_id``, so
+        concurrent runs cannot overwrite each other's files.  The name is not
+        predictable in advance; read it from ``provenance.workdir``.
 
         Parameters
         ----------
@@ -304,25 +376,33 @@ class SIPNETRunner:
         from pysipnet.result import RunProvenance, SIPNETResult
 
         self._check_binary()
-        flags = self.preset.flags
+        flags = self.flags
 
         # Resolve effective output_dir (per-call overrides runner-level default).
+        effective_output_dir: Path | None
         if output_dir is _UNSET:
             effective_output_dir = self.output_dir
         elif output_dir is None:
             effective_output_dir = None
         else:
-            effective_output_dir = Path(output_dir)
+            effective_output_dir = Path(cast("str | Path", output_dir))
 
-        run_id = run_id or uuid.uuid4().hex
-        workdir = self.workdir_base / f"sipnet_{run_id}"
+        run_id = _check_run_id(run_id) if run_id else uuid.uuid4().hex
+
+        # The run id labels the run; it does not name the directory. Deriving
+        # the path from it would put two concurrent runs that share an id into
+        # the same directory under a shared temp dir, and because the run
+        # succeeds by reading whatever sipnet.out it finds, the result is wrong
+        # numbers rather than an error. mkdtemp guarantees a fresh directory,
+        # keeping the id in the prefix so it is still recognisable while
+        # debugging.
+        self.workdir_base.mkdir(parents=True, exist_ok=True)
+        workdir = Path(tempfile.mkdtemp(prefix=f"sipnet_{run_id}_", dir=self.workdir_base))
 
         # Validate output_dir before any I/O so errors are immediate and clear.
         if effective_output_dir is not None:
             self._check_output_dir(effective_output_dir, workdir)
             effective_output_dir.mkdir(parents=True, exist_ok=True)
-
-        workdir.mkdir(parents=True, exist_ok=True)
 
         try:
             write_param_file(parameters, flags, workdir / "sipnet.param")
@@ -330,11 +410,13 @@ class SIPNETRunner:
 
             if events is not None:
                 events.to_file(workdir / "events.in")
-                events_flag = "1"
+                events_enabled = True
             else:
-                events_flag = "0"
+                events_enabled = False
 
-            (workdir / "sipnet.in").write_text(f"fileName = sipnet\nEVENTS = {events_flag}\n")
+            (workdir / "sipnet.in").write_text(
+                _render_sipnet_in(flags, events_enabled=events_enabled)
+            )
 
             proc = subprocess.run(
                 [str(self.binary_path)],
@@ -345,7 +427,7 @@ class SIPNETRunner:
             )
 
             provenance = RunProvenance(
-                preset=self.preset,
+                flags=flags,
                 binary_path=self.binary_path,
                 run_id=run_id,
                 workdir=workdir,
@@ -356,6 +438,27 @@ class SIPNETRunner:
             )
 
             out_src = workdir / "sipnet.out"
+            if check and not (provenance.returncode == 0 and out_src.exists()):
+                # Returning an empty frame here would defer the failure to
+                # whatever the caller does next — typically result.nee(), which
+                # raises KeyError a long way from the cause, with SIPNET's own
+                # explanation stranded on the provenance object. In an ensemble
+                # the empties are collected silently.
+                reason = (
+                    f"SIPNET exited with code {provenance.returncode}"
+                    if provenance.returncode != 0
+                    else "SIPNET exited cleanly but wrote no output file"
+                )
+                raise SIPNETRunError(
+                    f"{reason} (run_id={run_id!r}).\n"
+                    f"stderr:\n{proc.stderr or '(empty)'}\n"
+                    f"stdout:\n{proc.stdout or '(empty)'}\n"
+                    "Pass check=False to get a result object instead of this error.",
+                    returncode=provenance.returncode,
+                    stdout=proc.stdout,
+                    stderr=proc.stderr,
+                    workdir=workdir,
+                )
             outputs = self._build_output(provenance, out_src, effective_output_dir, run_id)
 
         finally:

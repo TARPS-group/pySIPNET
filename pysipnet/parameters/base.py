@@ -57,10 +57,10 @@ Every Pydantic model that uses :func:`param_field` stores a
 :func:`get_parameter_specs` to retrieve a flat ``{dotted.path: ParameterSpec}``
 dict from a model class, suitable for building bijector maps::
 
-    from pysipnet.parameters.v1 import SIPNETParametersV1
+    from pysipnet.parameters.model import SIPNETParameters
     from pysipnet.parameters.base import get_parameter_specs, ParameterDomain
 
-    specs = get_parameter_specs(SIPNETParametersV1)
+    specs = get_parameter_specs(SIPNETParameters)
     positive_params = {k for k, s in specs.items() if s.domain == ParameterDomain.POSITIVE}
 """
 
@@ -69,14 +69,14 @@ from __future__ import annotations
 import dataclasses
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, cast
 
 import pint
 from pydantic import BaseModel, Field
 
 _MISSING: Any = dataclasses.MISSING
 
-_ureg = pint.UnitRegistry()
+_ureg = pint.UnitRegistry()  # type: ignore[var-annotated]
 
 
 class ParameterDomain(StrEnum):
@@ -171,7 +171,12 @@ def param_field(
     """
     validate_unit_string(unit)
 
-    pydantic_kwargs: dict[str, Any] = {}
+    # Pydantic allows NaN and inf through by default, and the gt/ge bounds do
+    # not catch them: comparisons against NaN are always false and inf passes
+    # any lower bound. Either reaches SIPNET, which parses it with strtod and
+    # runs to completion — a NaN temperature parameter produces a whole run of
+    # zero productivity, exit code 0, and no warning anywhere.
+    pydantic_kwargs: dict[str, Any] = {"allow_inf_nan": False}
     if domain == ParameterDomain.POSITIVE:
         pydantic_kwargs["gt"] = 0
     elif domain == ParameterDomain.NON_NEGATIVE:
@@ -199,7 +204,10 @@ def param_field(
             "constituent": constituent,
             "domain": domain.value,
             "per_year": per_year,
-            "_spec": spec,
+            # ParameterSpec is a dataclass, not JSON — it is carried here so
+            # get_parameter_specs can recover the full spec from a model class.
+            # Pydantic does not inspect this key.
+            "_spec": spec,  # type: ignore[dict-item]
         },
         **pydantic_kwargs,
     )
@@ -214,7 +222,7 @@ def get_parameter_specs(model_cls: type[BaseModel], prefix: str = "") -> dict[st
 
     Example::
 
-        specs = get_parameter_specs(SIPNETParametersV1)
+        specs = get_parameter_specs(SIPNETParameters)
         # {"photosynthesis.a_max": ParameterSpec(...), ...}
     """
     result: dict[str, ParameterSpec] = {}
@@ -222,7 +230,7 @@ def get_parameter_specs(model_cls: type[BaseModel], prefix: str = "") -> dict[st
         path = f"{prefix}.{name}" if prefix else name
         extra = field_info.json_schema_extra
         if isinstance(extra, dict) and "_spec" in extra:
-            result[path] = extra["_spec"]
+            result[path] = cast("ParameterSpec", extra["_spec"])
         else:
             annotation = field_info.annotation
             if (

@@ -17,15 +17,15 @@ Everything lives in memory.  No files are created (beyond the transient
 working directory that pySIPNET manages automatically).
 
 ```python
-from pysipnet import SIPNETRunner, SIPNETModel, ModelPreset, SIPNETParametersV1, ClimateDrivers
+from pysipnet import SIPNETRunner, SIPNETModel, ModelFlags, SIPNETParameters, ClimateDrivers
 
-# params: SIPNETParametersV1 = ...  (see Running a Model for full construction)
-params: SIPNETParametersV1 = ...
+# params: SIPNETParameters = ...  (see Running a Model for full construction)
+params: SIPNETParameters = ...
 
 # Load climate directly into memory
-climate = ClimateDrivers.from_file("data/era5_site1.clim", version="v1")
+climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
 
-runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+runner = SIPNETRunner(flags=ModelFlags.standard())
 model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
 result = model()
@@ -54,10 +54,10 @@ size is manageable.
 
 ```python
 from pathlib import Path
-from pysipnet import SIPNETRunner, ModelPreset, ClimateDrivers, ClimateStaging
+from pysipnet import SIPNETRunner, ModelFlags, ClimateDrivers, ClimateStaging
 
 runner = SIPNETRunner(
-    preset=ModelPreset.STANDARD,
+    flags=ModelFlags.standard(),
     climate_staging=ClimateStaging.COPY,   # or SYMLINK on Linux/macOS
 )
 
@@ -70,7 +70,7 @@ site_files = [
 results = {}
 for path in site_files:
     # Climate file is not read into Python memory — only staged to the workdir
-    climate = ClimateDrivers.from_path(path, version="v1")
+    climate = ClimateDrivers.from_path(path, n_columns=14)
     result = runner.run(params, climate, run_id=Path(path).stem)
 
     # Output is eagerly parsed into memory (default behaviour)
@@ -93,16 +93,16 @@ post-processing, or where memory is constrained.
 
 ```python
 from pathlib import Path
-from pysipnet import SIPNETRunner, ModelPreset
+from pysipnet import SIPNETRunner, ModelFlags
 
-# param_samples is a list of SIPNETParametersV1 objects, one per ensemble member
+# param_samples is a list of SIPNETParameters objects, one per ensemble member
 # (e.g. produced by a parameter sampling routine)
-param_samples: list[SIPNETParametersV1] = [...]
+param_samples: list[SIPNETParameters] = [...]
 
 output_dir = Path("ensemble_outputs")
 
 runner = SIPNETRunner(
-    preset=ModelPreset.STANDARD,
+    flags=ModelFlags.standard(),
     output_dir=output_dir,        # each run copies sipnet.out here
 )
 
@@ -136,13 +136,13 @@ Column-selective loading avoids parsing columns you will never use.
 ```python
 from pathlib import Path
 import pandas as pd
-from pysipnet import SIPNETRunner, ModelPreset
+from pysipnet import SIPNETRunner, ModelFlags
 
-# param_samples is a list of SIPNETParametersV1 objects, one per ensemble member
-param_samples: list[SIPNETParametersV1] = [...]
+# param_samples is a list of SIPNETParameters objects, one per ensemble member
+param_samples: list[SIPNETParameters] = [...]
 
 runner = SIPNETRunner(
-    preset=ModelPreset.STANDARD,
+    flags=ModelFlags.standard(),
     output_dir=Path("ensemble_outputs"),
 )
 
@@ -173,16 +173,16 @@ and shared across many members; maximum I/O throughput.
 
 ```python
 from pathlib import Path
-from pysipnet import SIPNETRunner, ModelPreset, ClimateDrivers, ClimateStaging
+from pysipnet import SIPNETRunner, ModelFlags, ClimateDrivers, ClimateStaging
 
-# param_samples is a list of SIPNETParametersV1 objects, one per ensemble member
-param_samples: list[SIPNETParametersV1] = [...]
+# param_samples is a list of SIPNETParameters objects, one per ensemble member
+param_samples: list[SIPNETParameters] = [...]
 
 # One shared climate file for all members
-climate = ClimateDrivers.from_path("data/era5_site1.clim", version="v1")
+climate = ClimateDrivers.from_path("data/era5_site1.clim", n_columns=14)
 
 runner = SIPNETRunner(
-    preset=ModelPreset.STANDARD,
+    flags=ModelFlags.standard(),
     climate_staging=ClimateStaging.SYMLINK,   # SIPNET reads original file — no copy
     output_dir=Path("ensemble_outputs"),       # outputs saved, not held in memory
 )
@@ -209,20 +209,20 @@ re-running the model.
 
 ```python
 from pathlib import Path
-from pysipnet import SIPNETRunner, ModelPreset, ClimateDrivers, ClimateStaging
+from pysipnet import SIPNETRunner, ModelFlags, ClimateDrivers, ClimateStaging
 
 run_dir = Path("runs/experiment_01")
 run_dir.mkdir(parents=True, exist_ok=True)
 
 runner = SIPNETRunner(
-    preset=ModelPreset.STANDARD,
+    flags=ModelFlags.standard(),
     climate_staging=ClimateStaging.SYMLINK,
     output_dir=run_dir / "outputs",
     keep_workdir=True,           # also retain inputs in the working directory
     workdir_base=run_dir / "workdirs",
 )
 
-climate = ClimateDrivers.from_path("data/era5_site1.clim", version="v1")
+climate = ClimateDrivers.from_path("data/era5_site1.clim", n_columns=14)
 result = runner.run(params, climate, run_id="baseline")
 
 # After the run, the directory tree looks like:

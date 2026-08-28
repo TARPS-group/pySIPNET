@@ -3,14 +3,14 @@
 Quickstart::
 
     from pysipnet import (
-        SIPNETRunner, ModelPreset, SIPNETModel,
-        SIPNETParametersV1, ModelFlagsV1,
+        SIPNETRunner, SIPNETModel,
+        SIPNETParameters, ModelFlags,
         ClimateDrivers,
     )
 
-    params  = SIPNETParametersV1(...)
-    climate = ClimateDrivers.from_file("site.clim", version="v1")
-    runner  = SIPNETRunner(preset=ModelPreset.STANDARD)
+    params  = SIPNETParameters(...)
+    climate = ClimateDrivers.from_file("site.clim")
+    runner  = SIPNETRunner(flags=ModelFlags.standard())
     model   = SIPNETModel(runner, base_params=params, base_climate=climate)
 
     result = model()                    # baseline run
@@ -29,7 +29,13 @@ With agronomic events::
 
 # Runner
 # Build utilities
-from pysipnet.build import build_preset, ensure_binary
+from pysipnet.build import (
+    DownloadError,
+    build_sipnet,
+    download_sipnet,
+    ensure_binary,
+    sipnet_version,
+)
 
 # Climate
 from pysipnet.climate import ClimateDrivers
@@ -55,12 +61,17 @@ from pysipnet.model import SIPNETModel
 from pysipnet.output import SIPNETOutput
 
 # Parameters (top-level groups available via pysipnet.parameters)
-from pysipnet.parameters.v1 import SIPNET_PARAMS_BY_GROUP, ModelFlagsV1, SIPNETParametersV1
+from pysipnet.parameters.model import SIPNET_PARAMS_BY_GROUP, ModelFlags, SIPNETParameters
 from pysipnet.result import RunProvenance, SIPNETResult
-from pysipnet.runner import ClimateStaging, ModelPreset, SIPNETRunner
+from pysipnet.runner import ClimateStaging, SIPNETRunError, SIPNETRunner
 
 # Version
-from pysipnet.version import PYSIPNET_VERSION, SIPNET_PINNED_COMMIT, SIPNET_TARGET_VERSION
+from pysipnet.version import (
+    PYSIPNET_VERSION,
+    SIPNET_NUMERIC_VERSION,
+    SIPNET_PINNED_COMMIT,
+    SIPNET_PINNED_TAG,
+)
 
 __version__ = PYSIPNET_VERSION
 
@@ -69,7 +80,7 @@ __all__ = [
     "SIPNETModel",
     # Runner
     "SIPNETRunner",
-    "ModelPreset",
+    "SIPNETRunError",
     "ClimateStaging",
     # Config (reproducible workflows)
     "RunConfig",
@@ -78,8 +89,8 @@ __all__ = [
     "SIPNETOutput",
     "RunProvenance",
     # Parameters
-    "SIPNETParametersV1",
-    "ModelFlagsV1",
+    "SIPNETParameters",
+    "ModelFlags",
     "SIPNET_PARAMS_BY_GROUP",
     # Climate
     "ClimateDrivers",
@@ -92,10 +103,14 @@ __all__ = [
     "PlantingEvent",
     "TillageEvent",
     # Build
-    "build_preset",
+    "build_sipnet",
+    "download_sipnet",
+    "DownloadError",
     "ensure_binary",
+    "sipnet_version",
     # Version
     "PYSIPNET_VERSION",
     "SIPNET_PINNED_COMMIT",
-    "SIPNET_TARGET_VERSION",
+    "SIPNET_PINNED_TAG",
+    "SIPNET_NUMERIC_VERSION",
 ]

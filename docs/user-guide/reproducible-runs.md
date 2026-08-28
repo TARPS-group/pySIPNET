@@ -8,7 +8,7 @@ run, a large ensemble, or an iterative workflow.
 
 ## Why reproducibility matters
 
-A model run is defined by four things: the binary preset, the parameter set,
+A model run is defined by four things: the model flags, the parameter set,
 the climate forcing, and any management events.  In interactive work, these
 inputs are live Python objects in memory.  When a session ends, they are
 gone.  Reproducibility means being able to reconstruct those inputs precisely
@@ -23,16 +23,16 @@ model to produce a given result.
 ## `RunConfig`: saving and loading a run specification
 
 `RunConfig` is pySIPNET's first-class abstraction for a complete, reusable
-run specification.  It holds the preset, parameters, climate, and (optionally)
+run specification.  It holds the flags, parameters, climate, and (optionally)
 events, and knows how to write itself to disk and reconstruct itself.
 
 ### Saving
 
 ```python
-from pysipnet import RunConfig, ModelPreset
+from pysipnet import RunConfig, ModelFlags
 
 config = RunConfig(
-    preset=ModelPreset.STANDARD,
+    flags=ModelFlags.standard(),
     params=params,
     climate=climate,
 )
@@ -43,7 +43,7 @@ config.save("my_run/")
 
 ```
 my_run/
-├── config.json    # preset, parameters, climate mode, metadata
+├── config.json    # flags, parameters, climate mode, metadata
 ├── sipnet.clim    # climate data (default — see below)
 └── events.in      # only written when events were provided
 ```
@@ -52,11 +52,11 @@ my_run/
 
 ```json
 {
-  "preset": "standard",
+  "flags": {"snow": true, "gdd": true, "litter_pool": false, "name": "standard"},
   "params": { ... },
   "climate": {"mode": "copy"},
   "has_events": false,
-  "sipnet_commit": "e4abf14f...",
+  "sipnet_commit": "41fa853e...",
   "pysipnet_version": "0.1.0.dev0",
   "created_at": "2026-05-29T14:32:01+00:00"
 }
@@ -72,7 +72,7 @@ to build.
 from pysipnet import RunConfig, SIPNETRunner
 
 config = RunConfig.load("my_run/")
-runner = SIPNETRunner(preset=config.preset)
+runner = SIPNETRunner(flags=config.flags)
 result = runner.run(config.params, config.climate, events=config.events)
 ```
 
@@ -105,10 +105,10 @@ config would waste disk space.  Passing `reference_only=True` instead stores
 only the absolute path and a SHA-256 hash of the source file:
 
 ```python
-from pysipnet import ClimateDrivers, ModelPreset, RunConfig
+from pysipnet import ClimateDrivers, ModelFlags, RunConfig
 
 climate = ClimateDrivers.from_path("data/era5_site1.clim")
-config = RunConfig(preset=ModelPreset.STANDARD, params=params, climate=climate)
+config = RunConfig(flags=ModelFlags.standard(), params=params, climate=climate)
 config.save("context/", reference_only=True)
 ```
 
@@ -159,7 +159,7 @@ from pysipnet import RunConfig, SIPNETRunner, SIPNETModel
 context = RunConfig.load("my_ensemble/context/")
 overrides = pd.read_csv("my_ensemble/overrides.csv", index_col="member_id")
 
-runner = SIPNETRunner(preset=context.preset)
+runner = SIPNETRunner(flags=context.flags)
 model  = SIPNETModel(runner, base_params=context.params, base_climate=context.climate)
 
 row = overrides.loc[42]
@@ -174,15 +174,25 @@ manifest: it describes the ensemble axes and the parameter grids along them.
 Save the shared context and the spec together so that the full specification
 is self-contained:
 
+!!! warning "Requires an unreleased PyEns"
+    `EnsembleSpec.dump` and `EnsembleSpec.load` are not on PyEns' default
+    branch yet, so the install command in
+    [Installation](../installation.md#ensemble-module-pyens) does not provide
+    them. Until that work merges, install the branch that carries it:
+
+    ```bash
+    pip install "git+https://github.com/arob5/PyEns.git@dev/axis-id-and-serialization"
+    ```
+
 ```python
 from pyens import Axis, EnsembleSpec, EnsembleRunner
 from pyens.backends import LocalBackend
-from pysipnet import ModelPreset, RunConfig, SIPNETModel, SIPNETRunner
+from pysipnet import ModelFlags, RunConfig, SIPNETModel, SIPNETRunner
 from pysipnet.ensemble import sipnet_member_fields
 
 # Define the shared context first — it is the source of truth for the run
-context = RunConfig(preset=ModelPreset.STANDARD, params=base_params, climate=climate)
-runner  = SIPNETRunner(preset=context.preset)
+context = RunConfig(flags=ModelFlags.standard(), params=base_params, climate=climate)
+runner  = SIPNETRunner(flags=context.flags)
 model   = SIPNETModel(runner, base_params=context.params, base_climate=context.climate)
 
 # Build and run the ensemble
@@ -235,16 +245,16 @@ pySIPNET does not provide classes for this.
 For a typical iterative run, two artefacts together make the workflow fully
 reproducible:
 
-**1. A shared `RunConfig`** — written once at the start, capturing the preset,
+**1. A shared `RunConfig`** — written once at the start, capturing the flags,
 the fixed (non-varying) parameters, and the climate.  Use `reference_only=True`
 to avoid copying the climate file for every evaluation.
 
 ```python
-from pysipnet import ClimateDrivers, ModelPreset, RunConfig, SIPNETModel, SIPNETRunner
+from pysipnet import ClimateDrivers, ModelFlags, RunConfig, SIPNETModel, SIPNETRunner
 
 climate = ClimateDrivers.from_path("data/era5_site1.clim")
-context = RunConfig(preset=ModelPreset.STANDARD, params=base_params, climate=climate)
-runner  = SIPNETRunner(preset=context.preset)
+context = RunConfig(flags=ModelFlags.standard(), params=base_params, climate=climate)
+runner  = SIPNETRunner(flags=context.flags)
 model   = SIPNETModel(runner, base_params=context.params, base_climate=context.climate)
 context.save("experiment/context/", reference_only=True)
 ```
@@ -256,14 +266,18 @@ parameter values sampled, log-posterior or likelihood, acceptance flag, etc.
 ```python
 import csv
 
-log_path = open("experiment/run_log.csv", "w", newline="")
-writer = csv.DictWriter(log_path, fieldnames=["iter", "a_max", "base_veg_resp", "log_lik"])
-writer.writeheader()
+with open("experiment/run_log.csv", "w", newline="") as log_file:
+    writer = csv.DictWriter(
+        log_file, fieldnames=["iter", "a_max", "base_veg_resp", "log_lik"]
+    )
+    writer.writeheader()
 
-for i, (a_max, bvr) in enumerate(sampler):
-    result = model(a_max=a_max, base_veg_resp=bvr)
-    log_lik = compute_log_likelihood(result)
-    writer.writerow({"iter": i, "a_max": a_max, "base_veg_resp": bvr, "log_lik": log_lik})
+    for i, (a_max, bvr) in enumerate(sampler):
+        result = model(a_max=a_max, base_veg_resp=bvr)
+        log_lik = compute_log_likelihood(result)
+        writer.writerow(
+            {"iter": i, "a_max": a_max, "base_veg_resp": bvr, "log_lik": log_lik}
+        )
 ```
 
 ### Replaying any evaluation
@@ -277,7 +291,7 @@ from pysipnet import RunConfig, SIPNETModel, SIPNETRunner
 context = RunConfig.load("experiment/context/")
 log     = pd.read_csv("experiment/run_log.csv")
 
-runner = SIPNETRunner(preset=context.preset)
+runner = SIPNETRunner(flags=context.flags)
 model  = SIPNETModel(runner, base_params=context.params, base_climate=context.climate)
 
 row    = log[log["iter"] == 42].iloc[0]

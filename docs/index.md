@@ -15,8 +15,7 @@ pySIPNET provides:
 - **Isolated run execution** — each run gets a fresh working directory; runs never share state.
 - **Clean output** — SIPNET output is parsed into a labelled DataFrame.
 
-While the SIPNET model is often utilized within the [PEcAN](https://github.com/pecanproject) ecosystem, pySIPNET is **independent of PEcAn**.  
-It makes no assumptions about PEcAn conventions, file layouts, or data formats.
+SIPNET is often run within the [PEcAn](https://github.com/pecanproject) ecosystem, but pySIPNET is **independent of PEcAn**.  It makes no assumptions about PEcAn conventions, file layouts, or data formats.
 
 ## What pySIPNET is NOT
 
@@ -25,15 +24,13 @@ pySIPNET does not include an ensemble runner.  The single-run interface is desig
 ## Quick example
 
 ```python
-from pysipnet import SIPNETRunner, ModelPreset
-from pysipnet.parameters.v1 import SIPNETParametersV1, ModelFlagsV1
+from pysipnet import ClimateDrivers, ModelFlags, SIPNETParameters, SIPNETRunner
 from pysipnet.parameters import (
     InitialConditions, PhotosynthesisParams, PhenologyParams,
     RespirationParams, AllocationParams, WaterParams, LeafPhysiologyParams,
 )
-from pysipnet.climate import ClimateDrivers
 
-params = SIPNETParametersV1(
+params = SIPNETParameters(
     initial_conditions=InitialConditions(
         plant_wood=30000, lai=0.0, soil=10000,
         soil_water_frac=0.5, fine_root_frac=0.05, coarse_root_frac=0.15,
@@ -44,11 +41,11 @@ params = SIPNETParametersV1(
         d_vpd_slope=0.05, d_vpd_exp=1.0,
         half_sat_par=300.0, attenuation=0.5,
     ),
-    # ... other groups ...
+    # ... and the five remaining groups
 )
 
-climate = ClimateDrivers.from_file("data/era5_site1.clim", version="v1")
-runner  = SIPNETRunner(preset=ModelPreset.STANDARD)
+climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
+runner  = SIPNETRunner(flags=ModelFlags.standard())
 result  = runner.run(params, climate)
 
 print(result.nee().describe())

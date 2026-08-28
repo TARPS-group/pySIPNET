@@ -11,12 +11,17 @@ SIPNET binary (`make sipnet`).
 
 ## 1. Load climate data
 
+`data/era5_site1.clim` below is a stand-in for your own file — pySIPNET ships
+no climate data at that path.  For something you can run immediately, the
+repository includes one year of Niwot Ridge forcing at
+`docs/examples/data/niwot_1999_daily.clim`.
+
 ```python
 from pysipnet import ClimateDrivers
 
-climate = ClimateDrivers.from_file("data/era5_site1.clim", version="v1")
+climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
 print(climate)
-# ClimateDrivers(version='v1', timesteps=29200, range=2012-001 to 2023-365)
+# ClimateDrivers(n_columns=14, timesteps=29200, range=2012-001 to 2023-365)
 ```
 
 ## 2. Define parameters
@@ -26,13 +31,13 @@ every value at construction time — invalid values raise `ValidationError`
 immediately.
 
 ```python
-from pysipnet import SIPNETParametersV1
+from pysipnet import SIPNETParameters
 from pysipnet.parameters import (
     InitialConditions, PhotosynthesisParams, PhenologyParams,
     RespirationParams, AllocationParams, WaterParams, LeafPhysiologyParams,
 )
 
-params = SIPNETParametersV1(
+params = SIPNETParameters(
     initial_conditions=InitialConditions(
         plant_wood=30000.0, lai=0.0, soil=10000.0,
         soil_water_frac=0.5, fine_root_frac=0.05, coarse_root_frac=0.15,
@@ -46,7 +51,7 @@ params = SIPNETParametersV1(
     phenology=PhenologyParams(
         leaf_off_day=270.0, gdd_leaf_on=100.0,
         leaf_growth=50.0, frac_leaf_fall=0.95,
-        leaf_allocation=0.25, leaf_turnover_rate=1.0,
+        leaf_allocation=0.25, leaf_turnover_rate=1.0, leaf_on_realloc_frac=0.2,
     ),
     respiration=RespirationParams(
         base_veg_resp=0.02, veg_resp_q10=2.0, growth_resp_frac=0.0,
@@ -62,7 +67,7 @@ params = SIPNETParametersV1(
     ),
     water=WaterParams(
         water_remove_frac=0.1, frozen_soil_eff=0.1, wue_const=10.0,
-        soil_whc=12.0, litter_whc=5.0,
+        soil_whc=12.0,
         immed_evap_frac=0.1, fast_flow_frac=0.1,
         snow_melt=0.15, rd_const=100.0, r_soil_const1=3.0, r_soil_const2=2.0,
     ),
@@ -70,12 +75,20 @@ params = SIPNETParametersV1(
 )
 ```
 
+!!! note "These values are illustrative"
+    The numbers above are plausible placeholders chosen to show the structure,
+    not parameters calibrated for any real site.  Run them against real
+    forcing and you will get a physically meaningless answer.  For a worked
+    example with parameters matched to its site, see the
+    [MCMC calibration notebook](../examples/mcmc_calibration.ipynb), which uses
+    the Niwot Ridge data included in the repository.
+
 ## 3. Run SIPNET
 
 ```python
-from pysipnet import SIPNETRunner, ModelPreset
+from pysipnet import SIPNETRunner, ModelFlags
 
-runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+runner = SIPNETRunner(flags=ModelFlags.standard())
 result = runner.run(params, climate)
 
 print(result.provenance.success)   # True

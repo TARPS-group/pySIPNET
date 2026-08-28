@@ -2,19 +2,19 @@
 
 The top-level imports expose the v1 API directly for convenience::
 
-    from pysipnet.parameters import SIPNETParametersV1, ModelFlagsV1
+    from pysipnet.parameters import SIPNETParameters, ModelFlags
 """
 
-from pysipnet.parameters.v1 import (
+from pysipnet.parameters.model import (
     SIPNET_PARAMS_BY_GROUP,
     AllocationParams,
     InitialConditions,
     LeafPhysiologyParams,
-    ModelFlagsV1,
+    ModelFlags,
     PhenologyParams,
     PhotosynthesisParams,
     RespirationParams,
-    SIPNETParametersV1,
+    SIPNETParameters,
     WaterParams,
 )
 
@@ -22,11 +22,11 @@ __all__ = [
     "AllocationParams",
     "InitialConditions",
     "LeafPhysiologyParams",
-    "ModelFlagsV1",
+    "ModelFlags",
     "PhenologyParams",
     "PhotosynthesisParams",
     "RespirationParams",
     "SIPNET_PARAMS_BY_GROUP",
-    "SIPNETParametersV1",
+    "SIPNETParameters",
     "WaterParams",
 ]

@@ -27,8 +27,8 @@ Two complementary properties are tested:
    wrong unit, dropped field) makes the two diverge.  Agreement therefore
    certifies the writer/reader translation as well as the runner and parser.
 
-Both tests require the compiled STANDARD binary and are skipped when it is
-absent (e.g. CI without a build step).  Build it with ``make sipnet-standard``.
+Both tests require the compiled SIPNET binary and are skipped when it is
+absent (e.g. CI without a build step).  Build it with ``make sipnet``.
 """
 
 from __future__ import annotations
@@ -44,20 +44,21 @@ import pytest
 
 from pysipnet.io.clim_io import read_clim_file
 from pysipnet.io.output_reader import read_output_file
-from pysipnet.runner import ModelPreset, SIPNETRunner
+from pysipnet.parameters.model import ModelFlags
+from pysipnet.runner import SIPNETRunner
 from tests.helpers import params_from_sipnet_file
 
 REFERENCE_DIR = Path(__file__).parent / "fixtures" / "niwot_reference"
 REFERENCE_PARAM = REFERENCE_DIR / "sipnet.param"
 REFERENCE_CLIM = REFERENCE_DIR / "sipnet.clim"
 
-_STANDARD_BINARY = SIPNETRunner(preset=ModelPreset.STANDARD).binary_path
+_SIPNET_BINARY = SIPNETRunner(flags=ModelFlags.standard()).binary_path
 
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(
-        not _STANDARD_BINARY.exists(),
-        reason=f"SIPNET binary not found at {_STANDARD_BINARY}; run 'make sipnet-standard'",
+        not _SIPNET_BINARY.exists(),
+        reason=f"SIPNET binary not found at {_SIPNET_BINARY}; run 'make sipnet'",
     ),
     pytest.mark.skipif(
         not REFERENCE_PARAM.exists() or not REFERENCE_CLIM.exists(),
@@ -106,7 +107,7 @@ def _load_reference_climate():
     # property of the upstream data, not something under test here.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return read_clim_file(REFERENCE_CLIM, version="v1")
+        return read_clim_file(REFERENCE_CLIM, n_columns=14)
 
 
 class TestWrapperFidelity:
@@ -120,13 +121,13 @@ class TestWrapperFidelity:
         params = params_from_sipnet_file(REFERENCE_PARAM)
         climate = _load_reference_climate()
 
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD, keep_workdir=True)
+        runner = SIPNETRunner(flags=ModelFlags.standard(), keep_workdir=True)
         result = runner.run(params, climate, run_id="fidelity_transparent")
         assert result.provenance.success, result.provenance.stderr
         workdir = result.provenance.workdir
         try:
             direct = _run_binary_directly(
-                _STANDARD_BINARY,
+                _SIPNET_BINARY,
                 workdir / "sipnet.param",
                 workdir / "sipnet.clim",
             )
@@ -153,11 +154,11 @@ class TestWrapperFidelity:
         ground-truth direct invocation.  Agreement to SIPNET's output precision
         certifies that no parameter is mis-named, mis-scaled, or dropped.
         """
-        native = _run_binary_directly(_STANDARD_BINARY, REFERENCE_PARAM, REFERENCE_CLIM)
+        native = _run_binary_directly(_SIPNET_BINARY, REFERENCE_PARAM, REFERENCE_CLIM)
 
         params = params_from_sipnet_file(REFERENCE_PARAM)
         climate = _load_reference_climate()
-        runner = SIPNETRunner(preset=ModelPreset.STANDARD)
+        runner = SIPNETRunner(flags=ModelFlags.standard())
         result = runner.run(params, climate, run_id="fidelity_reference")
         assert result.provenance.success, result.provenance.stderr
         wrapper = result.outputs.data

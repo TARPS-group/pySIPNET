@@ -19,13 +19,20 @@ jobs:
           enable-cache: true
 
       - name: Install dev dependencies
-        run: uv sync --all-groups
+        run: uv sync --all-groups --locked
 
       - name: ruff check
         run: uv run ruff check pysipnet/ tests/
 
       - name: ruff format check
         run: uv run ruff format --check pysipnet/ tests/
+
+      # pyproject sets [tool.mypy] strict = true. Running it here is what
+      # keeps that setting meaningful: dashboard() shipped broken because it
+      # treated a wrapper as a DataFrame, which mypy flags and nothing else
+      # caught — its tests mocked the wrapper away.
+      - name: mypy
+        run: uv run mypy pysipnet/
 
   # ── Tests ─────────────────────────────────────────────────────────────────
   test:
@@ -41,26 +48,34 @@ jobs:
         with:
           submodules: recursive
 
+      # SIPNET's Makefile stamps `git describe --tags` into the binary, and
+      # that tag is the only thing identifying which source a binary came from
+      # (its numeric version lags pre-release tags). A submodule checkout does
+      # not bring tags, so without this the binary is built with an empty
+      # GIT_HASH and the pin cannot be verified.
+      - name: Fetch SIPNET tags
+        run: git -C sipnet fetch --tags --force --depth=1 origin
+
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --all-groups
+        run: uv sync --all-groups --locked
 
-      # Cache the compiled binaries keyed on the submodule commit so the
+      # Cache the compiled binary keyed on the submodule commit so the
       # expensive compile step is skipped on reruns with no SIPNET changes.
-      - name: Cache SIPNET binaries
+      - name: Cache SIPNET binary
         id: cache-sipnet
         uses: actions/cache@v4
         with:
           path: .sipnet_cache/
-          key: sipnet-${{ runner.os }}-${{ hashFiles('.git/modules/sipnet/HEAD', 'sipnet/src/**/*.c', 'sipnet/src/**/*.h', 'patches/apply_flags_patch.py', 'Makefile') }}
+          key: sipnet-${{ runner.os }}-${{ hashFiles('.git/modules/sipnet/HEAD', 'sipnet/src/**/*.c', 'sipnet/src/**/*.h', 'Makefile', '.github/workflows/ci.yml') }}
 
-      - name: Build SIPNET binaries
+      - name: Build SIPNET binary
         if: steps.cache-sipnet.outputs.cache-hit != 'true'
-        run: make sipnet-standard
+        run: make sipnet
 
       - name: Run tests
         run: uv run pytest tests/ --tb=short -q

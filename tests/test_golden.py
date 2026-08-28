@@ -16,7 +16,7 @@ first :data:`_N_TIMESTEPS` rows of its climate.  Regenerate the golden after an
 
 and review the resulting diff before committing it.
 
-Requires the compiled STANDARD binary; skipped when absent.
+Requires the compiled SIPNET binary; skipped when absent.
 """
 
 from __future__ import annotations
@@ -29,7 +29,8 @@ import pytest
 
 from pysipnet.climate import ClimateDrivers
 from pysipnet.io.clim_io import read_clim_file
-from pysipnet.runner import ModelPreset, SIPNETRunner
+from pysipnet.parameters.model import ModelFlags
+from pysipnet.runner import SIPNETRunner
 from tests.helpers import params_from_sipnet_file
 
 REFERENCE_DIR = Path(__file__).parent / "fixtures" / "niwot_reference"
@@ -39,13 +40,13 @@ GOLDEN = Path(__file__).parent / "fixtures" / "golden" / "niwot_standard.out.csv
 
 _N_TIMESTEPS = 60  # ~3–4 weeks at Niwot's sub-daily cadence; keeps the golden compact
 
-_STANDARD_BINARY = SIPNETRunner(preset=ModelPreset.STANDARD).binary_path
+_SIPNET_BINARY = SIPNETRunner(flags=ModelFlags.standard()).binary_path
 
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(
-        not _STANDARD_BINARY.exists(),
-        reason=f"SIPNET binary not found at {_STANDARD_BINARY}; run 'make sipnet-standard'",
+        not _SIPNET_BINARY.exists(),
+        reason=f"SIPNET binary not found at {_SIPNET_BINARY}; run 'make sipnet'",
     ),
     pytest.mark.skipif(
         not REFERENCE_PARAM.exists() or not REFERENCE_CLIM.exists(),
@@ -58,10 +59,10 @@ def _run_baseline() -> pd.DataFrame:
     """Run the frozen baseline input through the wrapper and return its output."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # upstream data has a few vpd ≤ 0 rows
-        full = read_clim_file(REFERENCE_CLIM, version="v1")
-    climate = ClimateDrivers.from_dataframe(full.data.head(_N_TIMESTEPS).copy(), version="v1")
+        full = read_clim_file(REFERENCE_CLIM, n_columns=14)
+    climate = ClimateDrivers.from_dataframe(full.data.head(_N_TIMESTEPS).copy(), n_columns=14)
     params = params_from_sipnet_file(REFERENCE_PARAM)
-    result = SIPNETRunner(preset=ModelPreset.STANDARD).run(params, climate, run_id="golden")
+    result = SIPNETRunner(flags=ModelFlags.standard()).run(params, climate, run_id="golden")
     assert result.provenance.success, result.provenance.stderr
     return result.outputs.data
 

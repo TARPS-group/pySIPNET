@@ -7,7 +7,7 @@
 ## Parameters
 
 ::: pysipnet.parameters.base
-::: pysipnet.parameters.v1
+::: pysipnet.parameters.model
 
 ## Climate
 
@@ -20,6 +20,18 @@
 ## Result
 
 ::: pysipnet.result
+
+## Output
+
+::: pysipnet.output
+
+## Run configuration
+
+::: pysipnet.config
+
+## Events
+
+::: pysipnet.events
 
 ## Build
 

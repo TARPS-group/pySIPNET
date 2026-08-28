@@ -67,11 +67,22 @@ python_version = "3.11"
 strict = true
 ignore_missing_imports = true
 
+# numpy's shipped stubs use `type` statements, which are 3.12 syntax. Analysing
+# them against our 3.11 target fails inside numpy rather than in our own code,
+# so don't follow imports into them. Other third-party packages check fine.
+[[tool.mypy.overrides]]
+module = ["numpy.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short"
 markers = [
     "integration: requires compiled SIPNET binary",
     "slow: takes more than a few seconds",
+    "network: reaches the internet; deselected by default, run with -m network",
 ]
+# Network tests are opt-in: the suite must pass offline and in CI without
+# depending on GitHub being reachable.
+addopts = "-v --tb=short -m 'not network'"
 
