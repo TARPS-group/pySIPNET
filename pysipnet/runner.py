@@ -329,10 +329,11 @@ class SIPNETRunner:
 
         Working directory
         -----------------
-        The working directory is ``<workdir_base>/sipnet_<run_id>/``.  It is
-        created with ``exist_ok=True``, so re-using the same ``run_id`` simply
-        overwrites the previous run's input files.  Use distinct ``run_id``
-        values if you need to compare runs.
+        The working directory is ``<workdir_base>/sipnet_<run_id>_<random>/``,
+        created by :func:`tempfile.mkdtemp`.  The random suffix means every run
+        gets its own directory even when two runs share a ``run_id``, so
+        concurrent runs cannot overwrite each other's files.  The name is not
+        predictable in advance; read it from ``provenance.workdir``.
 
         Parameters
         ----------

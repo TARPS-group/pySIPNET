@@ -174,6 +174,16 @@ manifest: it describes the ensemble axes and the parameter grids along them.
 Save the shared context and the spec together so that the full specification
 is self-contained:
 
+!!! warning "Requires an unreleased PyEns"
+    `EnsembleSpec.dump` and `EnsembleSpec.load` are not on PyEns' default
+    branch yet, so the install command in
+    [Installation](../installation.md#ensemble-module-pyens) does not provide
+    them. Until that work merges, install the branch that carries it:
+
+    ```bash
+    pip install "git+https://github.com/arob5/PyEns.git@dev/axis-id-and-serialization"
+    ```
+
 ```python
 from pyens import Axis, EnsembleSpec, EnsembleRunner
 from pyens.backends import LocalBackend
@@ -256,14 +266,18 @@ parameter values sampled, log-posterior or likelihood, acceptance flag, etc.
 ```python
 import csv
 
-log_path = open("experiment/run_log.csv", "w", newline="")
-writer = csv.DictWriter(log_path, fieldnames=["iter", "a_max", "base_veg_resp", "log_lik"])
-writer.writeheader()
+with open("experiment/run_log.csv", "w", newline="") as log_file:
+    writer = csv.DictWriter(
+        log_file, fieldnames=["iter", "a_max", "base_veg_resp", "log_lik"]
+    )
+    writer.writeheader()
 
-for i, (a_max, bvr) in enumerate(sampler):
-    result = model(a_max=a_max, base_veg_resp=bvr)
-    log_lik = compute_log_likelihood(result)
-    writer.writerow({"iter": i, "a_max": a_max, "base_veg_resp": bvr, "log_lik": log_lik})
+    for i, (a_max, bvr) in enumerate(sampler):
+        result = model(a_max=a_max, base_veg_resp=bvr)
+        log_lik = compute_log_likelihood(result)
+        writer.writerow(
+            {"iter": i, "a_max": a_max, "base_veg_resp": bvr, "log_lik": log_lik}
+        )
 ```
 
 ### Replaying any evaluation

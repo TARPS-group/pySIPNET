@@ -36,10 +36,11 @@ any executor.
 ### Working directory location and naming
 
 By default, working directories are placed in `tempfile.gettempdir()` (usually
-`/tmp` on Linux/macOS) and named `sipnet_<run_id>` where `<run_id>` is a
-random UUID hex string.
+`/tmp` on Linux/macOS).  Each is named `sipnet_<run_id>_<random>`, where
+`<run_id>` defaults to a random UUID hex string and `<random>` is a suffix
+added by `tempfile.mkdtemp`.
 
-You can control both:
+You can control the location and the `run_id` part of the name:
 
 ```python
 from pysipnet import SIPNETRunner, ModelFlags
@@ -50,13 +51,17 @@ runner = SIPNETRunner(
 )
 
 result = runner.run(params, climate, run_id="baseline_2020")
-# working directory: /scratch/my_runs/sipnet_baseline_2020/
+# working directory: /scratch/my_runs/sipnet_baseline_2020_1l2wlzvt/
 ```
 
-!!! note "run_id reuse"
-    If the directory `sipnet_<run_id>` already exists, it is reused and its
-    contents overwritten.  Use distinct `run_id` values across runs if you
-    need to preserve them all.
+!!! note "run_id does not have to be unique"
+    Every run gets a brand-new directory, because the name ends in a random
+    suffix.  Reusing a `run_id` is therefore safe: two runs sharing one never
+    write to the same place, so concurrent runs cannot overwrite each other's
+    files or read each other's output.
+
+    The trade-off is that you cannot predict the directory name in advance.
+    Read it from `result.provenance.workdir` instead of constructing it.
 
 ### Climate data: in-memory vs. file-backed
 
@@ -139,8 +144,7 @@ they are always serialised through the I/O layer regardless of this setting.
 ### Eager vs. lazy output
 
 After each run, pySIPNET packages the SIPNET output (`sipnet.out`) as a
-:class:`~pysipnet.output.SIPNETOutput` object stored in
-`result.outputs`.  There are two modes:
+`SIPNETOutput` object stored in `result.outputs`.  There are two modes:
 
 **Eager (default):** the output file is parsed immediately and held in memory.
 The working directory is then deleted.  If you also want the raw file retained
@@ -196,18 +200,16 @@ r2 = runner.run(params, climate, run_id="run_b", output_dir=Path("special"))
 r3 = runner.run(params, climate, output_dir=None)
 ```
 
-!!! warning "output_dir must be outside the working directory"
-    The working directory is deleted after each run, so `output_dir` must
-    not be the same as, or a subdirectory of, the working directory.
-    pySIPNET checks this **before** the binary runs and raises `ValueError`
-    immediately if the paths overlap:
+!!! note "output_dir is always kept out of the working directory"
+    The working directory is deleted after each run, so anything written
+    inside it is lost.  pySIPNET checks, before the binary runs, that
+    `output_dir` is not inside the run's working directory, and raises
+    `ValueError` if it is.
 
-    ```python
-    # workdir will be /tmp/sipnet_myrun/
-    # This raises ValueError before anything runs:
-    runner.run(params, climate, run_id="myrun",
-               output_dir=Path("/tmp/sipnet_myrun/outputs"))
-    ```
+    In practice you cannot trigger this: each run's directory name ends in a
+    random suffix that is not known until the run starts, so a path you supply
+    can never be inside it.  The check is there so the guarantee does not
+    depend on that.
 
 ### Column-selective loading
 
@@ -238,7 +240,7 @@ runner = SIPNETRunner(
 result = runner.run(params, climate, run_id="debug_run")
 
 print(result.provenance.workdir)
-# /tmp/sipnet_debug_run
+# /tmp/sipnet_debug_run_9fq2xk4b
 
 import os
 for f in os.listdir(result.provenance.workdir):
@@ -250,8 +252,8 @@ The preserved directory contains exactly the files SIPNET saw, so you can
 reproduce the run manually:
 
 ```bash
-cd /tmp/sipnet_debug_run
-./path/to/sipnet
+cd /tmp/sipnet_debug_run_9fq2xk4b   # the path printed above
+/path/to/.sipnet_cache/sipnet
 ```
 
 `output_dir` and `keep_workdir=True` serve different purposes and can be used
@@ -261,7 +263,7 @@ together:
 |:--|:--|:--|
 | What is kept | Only `sipnet.out`, copied to a named location | The entire working directory: param, clim, in, and out files |
 | Primary use | Ensemble post-processing; lazy loading | Debugging; reproducibility audits |
-| File naming | `sipnet_<run_id>.out` in your chosen directory | All files in `sipnet_<run_id>/` under `workdir_base` |
+| File naming | `sipnet_<run_id>.out` in your chosen directory | All files in `sipnet_<run_id>_<random>/` under `workdir_base` |
 
 ### Summary: choosing an output mode
 

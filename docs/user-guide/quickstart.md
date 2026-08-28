@@ -11,6 +11,11 @@ SIPNET binary (`make sipnet`).
 
 ## 1. Load climate data
 
+`data/era5_site1.clim` below is a stand-in for your own file — pySIPNET ships
+no climate data at that path.  For something you can run immediately, the
+repository includes one year of Niwot Ridge forcing at
+`docs/examples/data/niwot_1999_daily.clim`.
+
 ```python
 from pysipnet import ClimateDrivers
 
@@ -69,6 +74,14 @@ params = SIPNETParameters(
     leaf=LeafPhysiologyParams(leaf_c_sp_wt=32.0, c_frac_leaf=0.45),
 )
 ```
+
+!!! note "These values are illustrative"
+    The numbers above are plausible placeholders chosen to show the structure,
+    not parameters calibrated for any real site.  Run them against real
+    forcing and you will get a physically meaningless answer.  For a worked
+    example with parameters matched to its site, see the
+    [MCMC calibration notebook](../examples/mcmc_calibration.ipynb), which uses
+    the Niwot Ridge data included in the repository.
 
 ## 3. Run SIPNET
 

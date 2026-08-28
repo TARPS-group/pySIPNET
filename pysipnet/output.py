@@ -33,6 +33,9 @@ _TIME_COLS: frozenset[str] = frozenset({"year", "day", "time"})
 class SIPNETOutput:
     """Parsed SIPNET ``.out`` output, memory-backed or file-backed.
 
+    Prefer the factory methods :meth:`from_path` and :meth:`from_dataframe`;
+    they are the public construction interface.
+
     Parameters
     ----------
     data:
@@ -40,9 +43,6 @@ class SIPNETOutput:
     source_path:
         Path to a persistent ``.out`` file.  Mutually exclusive with *data*.
         The file is checked for existence at construction time.
-
-    See the factory methods :meth:`from_path` and :meth:`from_dataframe` for
-    the public construction interface.
     """
 
     def __init__(

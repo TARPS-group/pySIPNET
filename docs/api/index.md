@@ -21,6 +21,18 @@
 
 ::: pysipnet.result
 
+## Output
+
+::: pysipnet.output
+
+## Run configuration
+
+::: pysipnet.config
+
+## Events
+
+::: pysipnet.events
+
 ## Build
 
 ::: pysipnet.build

@@ -1,6 +1,6 @@
 # pySIPNET
 
-A Python interface to [SIPNET](https://github.com/PecanProject/sipnet) — the Simplified Photosynthesis and Evapotranspiration Model, a lightweight process-based model for coupled carbon, water, and greenhouse-gas dynamics at a single site.
+A Python interface to [SIPNET](https://github.com/PecanProject/sipnet) — the Simplified Photosynthesis and Evapotranspiration Model, a lightweight process-based model for coupled carbon, water, nitrogen, and greenhouse-gas dynamics at a single site.
 
 pySIPNET is independent of the [PEcAn](https://github.com/pecanproject) ecosystem and designed from the ground up for ensemble and data-assimilation workflows.
 
@@ -26,13 +26,15 @@ uv run pytest
 
 ```python
 from pysipnet import SIPNETRunner, SIPNETModel, ModelFlags, ClimateDrivers, SIPNETParameters
-from pysipnet.parameters import PhotosynthesisParams, RespirationParams  # and others
+from pysipnet.parameters import PhotosynthesisParams, RespirationParams
 
-climate = ClimateDrivers.from_file("data/era5_site1.clim")
-params  = SIPNETParameters(
-    photosynthesis=PhotosynthesisParams(a_max=112.0, psn_t_opt=24.0, ...),
-    respiration=RespirationParams(base_veg_resp=0.02, ...),
-    # ... remaining sub-models
+climate    = ClimateDrivers.from_file("site1.clim", n_columns=14)
+other_site = ClimateDrivers.from_file("site2.clim", n_columns=14)
+
+params = SIPNETParameters(
+    photosynthesis=PhotosynthesisParams(a_max=112.0, psn_t_opt=24.0),
+    respiration=RespirationParams(base_veg_resp=0.02),
+    # ... and the other five groups
 )
 
 runner = SIPNETRunner(flags=ModelFlags.standard())
@@ -49,6 +51,8 @@ print(result.outputs.data[["nee", "gpp"]].sum())
 
 - **[User guide](https://tarps-group.github.io/pySIPNET/user-guide/running-a-model/)** — running a model, inspecting results, ensemble workflows
 - **[API reference](https://tarps-group.github.io/pySIPNET/api/)** — full API docs
+- **[Tutorial notebook](examples/tutorial.ipynb)** — a guided tour of the interface
+- **[MCMC calibration notebook](docs/examples/mcmc_calibration.ipynb)** — parameter calibration on the bundled Niwot Ridge data
 
 Build the docs locally:
 

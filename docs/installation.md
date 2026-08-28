@@ -83,8 +83,8 @@ with each release:
 make sipnet-download
 ```
 
-Available for `macos-arm64` and `linux-x86_64` only; anywhere else has to
-compile, which always works. The archive's SHA-256 is pinned in
+Available for `macos-arm64` and `linux-x86_64` only; on any other platform,
+compile from source instead. The archive's SHA-256 is pinned in
 `pysipnet/version.py` and verified before anything is unpacked, and the
 installed binary is then asked for its version to confirm it is the release
 pySIPNET targets. Any mismatch aborts and leaves nothing installed.
@@ -130,7 +130,9 @@ To update the pin:
 2. Check out the new target commit: `git checkout <new-commit>`
 3. Return to the repo root and stage the change: `cd .. && git add sipnet/`
 4. Commit the update: `git commit -m "chore: update SIPNET pin to <short-hash>"`
-5. Update `pysipnet/version.py` (`SIPNET_PINNED_COMMIT`) and this page.
+5. Update `pysipnet/version.py` — `SIPNET_PINNED_COMMIT`, `SIPNET_PINNED_TAG`,
+   `SIPNET_NUMERIC_VERSION` and `SIPNET_RELEASE_ASSETS` all move together — and
+   this page.
 6. Rebuild the binary: `make clean-sipnet sipnet`
 7. Run the full test suite: `uv run pytest`
 

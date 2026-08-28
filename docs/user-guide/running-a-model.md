@@ -41,8 +41,9 @@ A SIPNET run requires two inputs: climate drivers and a parameter set.
 
 ### Climate data
 
-Climate forcing is stored in a SIPNET `.clim` file — one row per timestep,
-12 meteorological values per row.
+Climate forcing is stored in a SIPNET `.clim` file — one row per timestep.
+The current layout has 12 columns: four identifying the timestep (year, day,
+time, length) and eight meteorological values.
 
 ```python
 from pysipnet import ClimateDrivers
@@ -181,19 +182,28 @@ not stop the rest:
 ```python
 result = runner.run(params, climate, check=False)
 if not result.provenance.success:
-    print(result.provenance.stderr)
-print(result.provenance.stderr)    # SIPNET's stderr output, if any
+    print(result.provenance.stderr)   # SIPNET's own explanation
 ```
 
-### Key runner parameters
+### Key runner options
 
-| Parameter | Default | Purpose |
-|:----------|:--------|:--------|
-| `flags` | optional | Model options; defaults to `ModelFlags.standard()` |
+Set on the `SIPNETRunner`, applying to every run it performs:
+
+| Option | Default | Purpose |
+|:-------|:--------|:--------|
+| `flags` | `ModelFlags.standard()` | Model options |
 | `timeout` | 300 s | Maximum wall-clock time per run |
-| `run_id` | UUID hex | Identifier used in the working directory name |
 | `output_dir` | `None` | Copy `sipnet.out` here before workdir cleanup (lazy loading) |
 | `keep_workdir` | `False` | Suppress working directory cleanup for debugging |
+
+Passed to `run()`, applying to that call only:
+
+| Argument | Default | Purpose |
+|:---------|:--------|:--------|
+| `run_id` | UUID hex | Identifier used in the working directory name |
+| `events` | `None` | Management events for this run |
+| `output_dir` | runner's value | Overrides the runner-level setting |
+| `check` | `True` | Raise `SIPNETRunError` if SIPNET exits non-zero |
 
 ```python
 runner = SIPNETRunner(

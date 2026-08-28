@@ -63,13 +63,14 @@ first line.
 | Columns | Notes |
 |:--------|:------|
 | 12      | The current layout: `year day time length tair tsoil par precip vpd vpdSoil vPress wspd`. |
-| 14      | An older layout carrying the same 12 values, wrapped in a leading site identifier and a trailing soil wetness value. SIPNET reads both and ignores both. |
+| 14      | An older layout carrying the same 12 values, plus a leading site identifier and a trailing soil wetness value. SIPNET parses those two extra fields and then ignores them. |
 
 Anything else is a hard error, including 13 columns, which an earlier SIPNET
 accepted.
 
-pySIPNET writes 14 columns, which SIPNET accepts and logs. Both layouts can be
-read, selected with `n_columns=12` or `n_columns=14`. Note the discriminator is
+pySIPNET writes 14 columns. SIPNET accepts them, noting in its log that it took
+the older layout. Both layouts can be read, selected with `n_columns=12` or
+`n_columns=14`. Note the discriminator is
 the column count, not a version: one SIPNET version reads both.
 
 ### Parameter file
@@ -115,16 +116,19 @@ Expect to revisit:
 The public API — `SIPNETRunner.run(params, climate)` — should not need to
 change.
 
-### What is worth waiting for
+## Not yet used from this pin
 
-**v2.2.0** adds prescribed phenology: `leafon` and `leafoff` events in the
-events file, which set leaf-out and leaf-fall timing from observed dates
-instead of from a fitted parameter. Useful for calibration, since it removes a
-dimension from the parameter space. It is mutually exclusive with the
-calculated triggers, and SIPNET refuses to start if both are configured.
+Two capabilities exist in the pinned SIPNET but are not wired up in pySIPNET
+yet.
 
-At the time of writing v2.2.0 exists only as a pre-release. Its rename of
-`FILE_NAME` to `FILE_PREFIX` keeps a config-file alias, so the key pySIPNET
-writes still works. The migration cost is elsewhere: a new required parameter
-(`leafOnReallocFrac`), the `bcdeltaC`/`bcdeltaN` output columns being replaced
-by a log warning, and three new event types to model.
+**Prescribed phenology.** `leafon` and `leafoff` events in the events file set
+leaf-out and leaf-fall timing from observed dates instead of from a fitted
+parameter, which removes a dimension from the calibration problem. They are
+mutually exclusive with the calculated triggers: SIPNET refuses to start if
+both are configured. Three event types are unmodelled in total — `leafon`,
+`leafoff` and `plantdeath` — and `tests/test_events_contract.py` fails if a
+fourth appears upstream. Tracked in issue #25.
+
+**Restart checkpoints.** `RESTART_IN` and `RESTART_OUT` save and reload model
+state, which is the efficient route to sequential data assimilation. Tracked in
+issue #24.

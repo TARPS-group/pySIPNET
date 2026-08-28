@@ -67,8 +67,9 @@ class SIPNETResult:
     climate:
         The :class:`~pysipnet.climate.ClimateDrivers` used for this run.
     flags:
-        The :class:`~pysipnet.parameters.model.ModelFlags` compiled into the
-        binary used for this run.
+        The :class:`~pysipnet.parameters.model.ModelFlags` used for this run.
+        Model options are chosen at run time and written into ``sipnet.in``,
+        so these are a property of the run, not of the binary.
     provenance:
         Execution metadata: binary, run ID, working directory, return code,
         stdout/stderr.
