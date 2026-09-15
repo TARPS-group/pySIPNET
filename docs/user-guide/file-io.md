@@ -73,10 +73,17 @@ result = runner.run(params, climate, run_id="baseline_2020")
 at construction time.  The runner serialises this to disk as a new `.clim` file
 in the working directory.
 
+Columns are named as on the [Climate drivers](../reference/climate-drivers.md)
+page (`air_temperature`, `vapour_pressure_deficit`, `time_step_length`, ...).
+`from_dataframe` also accepts the short names pySIPNET used previously and
+SIPNET's own column names (`tair`, `vpdSoil`, `length`) and renames them; the
+stored columns are always the full names.
+
 ```python
 # Full data in memory — good for interactive use and data manipulation
 climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
 climate.data        # DataFrame always available
+climate.dataset     # the same on an xarray `time` axis shared with outputs
 climate.validate()  # full validation runs immediately
 ```
 
@@ -156,7 +163,8 @@ result = runner.run(params, climate)
 
 # Data is already in memory:
 df = result.outputs.data          # pandas DataFrame
-nee_series = result.nee()         # convenience accessor
+ds = result.outputs.dataset       # xarray Dataset with units and descriptions
+nee = result.outputs["nee"]       # one variable, by name or alias
 ```
 
 **Lazy (file-backed):** set `output_dir` on the runner.  Before the working
@@ -178,6 +186,10 @@ print(result.outputs.source_path)
 # Trigger load on demand:
 df = result.outputs.data
 ```
+
+The runner records the timestep lengths from the climate drivers on the
+`SIPNETOutput`, so `result.outputs.dataset` knows when each step ends even
+when the output is read from disk later.
 
 ### output_dir: runner-level and per-call
 
@@ -211,19 +223,22 @@ r3 = runner.run(params, climate, output_dir=None)
     can never be inside it.  The check is there so the guarantee does not
     depend on that.
 
-### Column-selective loading
+### Variable-selective loading
 
 For large ensemble outputs it is often wasteful to load every column.
-`SIPNETOutput.load(columns=[...])` reads only the named columns from the file,
-without caching the result:
+`SIPNETOutput.load(variables=[...])` reads only the named variables from the
+file, without caching the result. Names or aliases both work:
 
 ```python
-# Load just NEE and GPP — year/day/time are always included:
-subset = result.outputs.load(columns=["nee", "gpp"])
-# Returns a DataFrame with columns: year, day, time, nee, gpp
+# Load just NEE and GPP — year/day_of_year/hour_of_day are always included:
+subset = result.outputs.load(variables=["nee", "gpp"])
+# DataFrame with columns: year, day_of_year, hour_of_day,
+#                         net_ecosystem_exchange, gross_primary_production
+
+ds = result.outputs.load(variables=["nee"], as_xarray=True)   # Dataset instead
 ```
 
-On a memory-backed instance, `load(columns=[...])` slices the in-memory
+On a memory-backed instance, `load(variables=[...])` slices the in-memory
 DataFrame — no file I/O occurs.
 
 ### Keeping the working directory
@@ -272,5 +287,5 @@ together:
 | Interactive exploration, single run | Default (no `output_dir`) — data in memory |
 | Need the raw file for archival | `output_dir=` on runner or `keep_workdir=True` |
 | Large ensemble, full outputs needed | `output_dir=` — lazy-load member by member |
-| Large ensemble, only a few columns needed | `output_dir=` + `result.outputs.load(columns=[...])` |
+| Large ensemble, only a few columns needed | `output_dir=` + `result.outputs.load(variables=[...])` |
 | Debugging a failing run | `keep_workdir=True` — inspect all files in `provenance.workdir` |

@@ -111,7 +111,7 @@ together, refresh `SIPNET_RELEASE_ASSETS`, and rebuild with
    - **Run layer**: manages the binary, working directory, and subprocess execution
    - **Output layer**: parses SIPNET output into typed Python/pandas/xarray objects
 
-5. **Version-forward design.** Version-specific logic (file format differences, available parameters) is isolated behind version adapters so the public API stays stable when v2 support is added.
+5. **Version-forward design.** Version-specific logic (file format differences, available parameters) is isolated behind version adapters so the public API stays stable when the pinned SIPNET version moves.
 
 ### Primary Use Cases (in priority order)
 
@@ -230,6 +230,19 @@ pin, though the previous pin accepted it.
 
 No header, no comment character. Whitespace-delimited, one row per timestep.
 
+The table uses SIPNET's column names. The Python column names are the
+registry names in `CLIMATE_VARIABLES` (`pysipnet/variables.py`):
+`air_temperature` (tair), `soil_temperature` (tsoil),
+`photosynthetically_active_radiation` (par), `precipitation` (precip),
+`vapour_pressure_deficit` (vpd), `soil_vapour_pressure_deficit` (vpdSoil),
+`vapour_pressure` (vPress), `wind_speed` (wspd), and the shared time columns
+`year`, `day_of_year`, `hour_of_day`, `time_step_length`. Each spec records
+the file units and SIPNET's internal conversion below as `units` /
+`internal_units` / `internal_conversion`. `ClimateDrivers.from_dataframe`
+accepts the old short names and SIPNET's names as aliases and renames them;
+`ClimateDrivers.dataset` gives the same 1-D `time` layout as outputs. The
+docs page `reference/climate-drivers.md` is generated from the registry.
+
 | Col (12) | Col (14) | Name | File units | Internal conversion |
 |---|---|---|---|---|
 | — | 1 | loc | integer | ignored, with a log line |
@@ -306,19 +319,80 @@ by looking for that line — a first field that does not parse as a number means
 the line is a header — so all three layouts read: header-only, `Notes:`+header,
 and no header.
 
-Columns are always all present; a switched-off process writes zeros rather than
-omitting its column. New at this pin: `woodCreation`, `nppStorage`, the
-nitrogen group (`minN`, `soilOrgN`, `litterN`, `n2o`, `nLeaching`, `nFixation`,
-`nUptake`), `ch4`, and `plantStorageN`. Gone relative to v2.1.0: `bcdeltaC` and `bcdeltaN`.
+**What each column is lives in one place: `pysipnet/variables.py`.** Every
+column has a `VariableSpec` with the pySIPNET name, the SIPNET header token,
+its kind, units, constituent, description, labels, aliases, flag dependence
+and printf precision. `tests/test_variables.py` runs the binary and asserts
+its header equals the registry token-for-token, so an upstream column change
+fails loudly. The docs page `reference/output-variables.md` is generated from
+the registry at build time (`docs/gen_variable_tables.py`).
 
-SIPNET audits its own carbon and nitrogen closure, but reports the result as a
-log warning from `checkBalance()` rather than as output columns — v2.1.0 wrote
-`bcdeltaC`/`bcdeltaN` for this and no longer does.
-`tests/test_integration.py::TestMassBalance` reads the log.
+Facts read from `outputState()` / `updateTrackers()` that the registry encodes
+and that SIPNET's own docs get wrong or omit:
+
+- `year`/`day`/`time` are the **start** of the step; pools (`envi.*`) are
+  written **after** `updateState()`, so they are end-of-step values; trackers
+  are `flux × length`, i.e. totals over the step.
+- `fluxestranspiration` prints `fluxes.transpiration` **without** `× length`.
+  It is a cm day⁻¹ rate, the only rate column → `transpiration_rate`.
+- `plantWoodC` prints `getTotalWoodC()` = `plantWoodC + plantCAccountingDelta`
+  → `wood_carbon`; `nppStorage` prints `plantCAccountingDelta`, a state that
+  can be negative → `wood_storage_carbon`.
+- `rSoil` = `rRoot + rh` (root **plus** heterotrophic) → `soil_respiration`.
+  SIPNET's docs label it R_H; that is wrong.
+- `n2o` = `nVolatilization × length`, total volatilised mineral N, g N →
+  `nitrogen_volatilization`. `ch4` is g **C**.
+- `soilWetnessFrac` is the two-point mean of start and end wetness.
+- `cumNEE` (`totNee`) is never reset and is serialised in restart checkpoints.
+- N trackers are assigned only inside `if (ctx.nitrogenCycle)`, so they are
+  exactly zero otherwise.
+- Every column has a fixed `%w.pf` precision: carbon fluxes 3 decimals, pools
+  2, ET 8, N pools 4, `n2o` 6. Recorded as `output_decimals`.
+
+Column names follow the convention **lower-case words, underscores, no
+acronyms** (`net_ecosystem_exchange`, not `nee`). Short forms and the old
+pySIPNET names are aliases that `resolve_output_variable()` and
+`SIPNETOutput.load(variables=...)` accept; they are never column names. The
+time coordinates are `year`, `day_of_year`, `hour_of_day`.
+
+Units are UDUNITS strings (`"g m-2"`, `"cm d-1"`, `"1"`) validated at import by
+`pysipnet/units.py`; the substance goes in `constituent` (`"C"`, `"N"`,
+`"H2O"`), never in the string, because Pint reads `g C` as gram·coulomb without
+error.
+
+`SIPNETOutput` exposes `.data` (DataFrame), `.dataset` (xarray, one `time`
+dimension = step start, plus `time_step_end` / `time_step_length` coordinates
+from the climate's `time_step_length` column, attributes from
+`VariableSpec.xarray_attributes()`), `["nee"]` (DataArray by name or alias) and
+`.variable("nee")` (Series). xarray is a required dependency.
+
+Columns present at other versions: `woodCreation`, `nppStorage`, the
+nitrogen group, `ch4` and `plantStorageN` are new at this pin; `bcdeltaC` and
+`bcdeltaN` (v2.1.0's mass-balance closure) are gone, mapped in
+`LEGACY_OUTPUT_COLUMNS` so old files still read. SIPNET now reports closure as
+a log warning from `checkBalance()`; `tests/test_integration.py::TestMassBalance`
+reads the log.
 
 ## SIPNET Parameters — Full Grouped List
 
 Parameters are grouped as they appear in the Python data model. All initial conditions are also in the `.param` file (SIPNET makes no distinction).
+
+The lists below use **SIPNET's names**, because they describe the SIPNET
+contract. The Python field names follow the same convention as output
+variables (lower-case words, no acronyms): `aMax` is
+`photosynthesis.max_photosynthesis_rate`, `soilWHC` is
+`water.soil_water_holding_capacity`, `plantWoodInit` is
+`initial_conditions.total_wood_carbon`. Each field's `ParameterSpec`
+(`pysipnet/parameters/base.py`) records `sipnet_name`, UDUNITS `units`,
+`constituent`, labels, `aliases` (the pre-convention pySIPNET names) and, for
+initial conditions, `initializes` / `initializes_via` naming the output state
+it sets. `PARAMETER_SPECS` in `pysipnet/parameters/model.py` is the flat
+`{"group.field": spec}` view; `PYTHON_TO_SIPNET` in `param_io.py` is derived
+from it, and `tests/test_param_name_mapping.py` restates the mapping by hand.
+`resolve_parameter_name()` accepts a field name, an alias or a SIPNET name.
+Parameter groups forbid unknown keys, so a parameter set saved under an old
+name fails loudly on load. The docs page `reference/parameters.md` is
+generated from the specs.
 
 The authoritative source is the `initializeOneModelParam` block in
 `src/sipnet/sipnet.c` (`readParamData`). Its third argument is the required flag:
@@ -452,6 +526,19 @@ different parameters depending on `sipnet.in`. `ModelFlags` mirrors this in
 
 11. **A new required parameter arrived with the leaf events: `leafOnReallocFrac`.** Leaf-out has to take carbon from somewhere, and this caps how much of `plantWoodC + coarseRootC` it may draw on. SIPNET scales the transfer down if demand exceeds `(plantWoodC + coarseRootC) × leafOnReallocFrac`. Required unconditionally, so every param file needs it; upstream's Niwot fixture uses `0.2`.
 
+12. **The `SNOW` flag does not switch the snowpack off.** SIPNET's docs say
+    `SNOW = 0` treats all precipitation as liquid, but at this pin nothing in
+    `calcPrecip()`, `snowPack()` or `updateState()` reads `ctx.snow`; the only
+    uses are the requiredness of `snowMelt` and the restart-checkpoint flag
+    check. Precipitation below 0 °C falls as snow either way. SIPNET reads any
+    registered parameter it finds whether or not it is required, and pySIPNET
+    writes every non-`None` field, so with the flag off and `snowMelt` still
+    supplied the run is identical to the flag being on; only when `snowMelt`
+    is omitted does it default to zero and the snow never melt. Verified by
+    running the binary both ways on identical climate: identical snow columns. `tests/test_integration.py::TestSnowFlag` pins this so an
+    upstream fix shows up. Consequently the `snow` output column is **not**
+    zero when the flag is off, unlike `litter`, the nitrogen group and `ch4`.
+
 ## File Structure
 
 ```
@@ -464,7 +551,10 @@ pySIPNET/
 │   ├── parameters/
 │   │   ├── base.py               # ParameterSpec, param_field, domains (version-agnostic)
 │   │   └── model.py              # ModelFlags and SIPNETParameters
+│   ├── variables.py              # the output-variable registry (names, units, kinds, labels)
+│   ├── units.py                  # UDUNITS unit strings: Pint registry, validation, formatting
 │   ├── climate.py                # ClimateDrivers + validation
+│   ├── dataset.py                # shared DataFrame → xarray builder (time = step start)
 │   ├── events.py                 # management events (arity checked against SIPNET)
 │   ├── io/
 │   │   ├── param_io.py           # read/write .param
@@ -474,13 +564,16 @@ pySIPNET/
 │   ├── model.py                  # SIPNETModel — high-level callable interface
 │   ├── config.py                 # RunConfig — a saveable run specification
 │   ├── result.py                 # SIPNETResult, RunProvenance
-│   ├── output.py                 # SIPNETOutput — lazy/eager output access
+│   ├── output.py                 # SIPNETOutput — DataFrame and xarray views, lazy or eager
 │   ├── ensemble.py               # helpers for driving many runs
 │   └── viz.py                    # plotting
 ├── tests/
 │   ├── test_sipnet_in.py         # the sipnet.in contract, incl. SIPNET's config dump
 │   ├── test_param_file_contract.py  # the .param contract across flag combinations
 │   ├── test_events_contract.py   # the events.in contract, incl. arities
+│   ├── test_param_name_mapping.py   # the Python→SIPNET parameter map, stated by hand
+│   ├── test_integration.py       # end-to-end behaviour, flags, mass balance, snow flag
+│   ├── test_variables.py         # the .out header contract and the registry's own rules
 │   ├── test_download.py          # prebuilt-binary download and its verification
 │   ├── test_fidelity.py          # wrapper output == bare binary output
 │   ├── test_golden.py            # frozen numeric baseline
@@ -507,6 +600,10 @@ Worth knowing which test to look at when something breaks:
 - `test_param_file_contract.py` — SIPNET recognised every parameter name and
   found everything it required, across six flag combinations. Catches a
   renamed or dropped parameter.
+- `test_variables.py` — the binary's output header equals the variable
+  registry, token for token and in order. Catches a column added, dropped or
+  renamed upstream, which the reader would otherwise pass through with only a
+  warning.
 - `test_fidelity.py` — driving SIPNET through the wrapper gives the same
   numbers as running the bare binary by hand. Catches distortion anywhere in
   the writers, runner or parser. Version-independent, since both sides run the
@@ -517,7 +614,7 @@ Worth knowing which test to look at when something breaks:
 - `test_integration.py` — end-to-end behaviour, including that flags visibly
   change results and that SIPNET's own mass-balance errors stay near zero.
 
-The first three exist because the failure they catch is **silent**: SIPNET logs
+The first three and `test_variables.py` exist because the failure they catch is **silent**: SIPNET logs
 an ignored key or unknown parameter and carries on, so the run succeeds and the
 output looks plausible. Any new input we start writing should get the same
 treatment.
@@ -526,7 +623,7 @@ treatment.
 
 - **Python ≥ 3.11**
 - **Pydantic v2** for all data models (parameter validation, units enforcement)
-- **pandas** for climate time series and output; **xarray** as an optional output format
+- **pandas** for climate time series and output; **xarray** for the metadata-carrying `dataset` views (required dependency)
 - **NumPy** for numerical operations
 - **No comments unless the WHY is non-obvious.** Well-named identifiers are preferred.
 - **Type hints everywhere.**

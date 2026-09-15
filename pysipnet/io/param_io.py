@@ -12,9 +12,12 @@ Space/tab-delimited, two used columns::
 
 Python-to-SIPNET name mapping
 ------------------------------
-Python field names use ``snake_case``; SIPNET uses ``camelCase``.  The mapping
-is defined in :data:`PYTHON_TO_SIPNET` and is the single source of truth for
-the translation between the two naming conventions.
+Python field names follow pySIPNET's naming convention (lower-case words,
+no acronyms); SIPNET uses ``camelCase`` abbreviations. Each field's
+:class:`~pysipnet.parameters.base.ParameterSpec` records its ``sipnet_name``,
+and :data:`PYTHON_TO_SIPNET` is derived from those specs, so the parameter
+model is the single statement of the mapping. ``tests/test_param_name_mapping.py``
+states it a second time by hand so that a change is deliberate.
 
 Unit contract
 ~~~~~~~~~~~~~
@@ -29,77 +32,15 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+from pysipnet.parameters.base import get_parameter_specs
 from pysipnet.parameters.model import ModelFlags, SIPNETParameters
 
-# Maps dot-separated Python path → SIPNET param file name.
+# Maps dot-separated Python path → SIPNET param file name, from the specs.
 PYTHON_TO_SIPNET: dict[str, str] = {
-    # Initial conditions
-    "initial_conditions.plant_wood": "plantWoodInit",
-    "initial_conditions.lai": "laiInit",
-    "initial_conditions.litter": "litterInit",
-    "initial_conditions.soil": "soilInit",
-    "initial_conditions.soil_water_frac": "soilWFracInit",
-    "initial_conditions.snow": "snowInit",
-    "initial_conditions.fine_root_frac": "fineRootFrac",
-    "initial_conditions.coarse_root_frac": "coarseRootFrac",
-    # Photosynthesis
-    "photosynthesis.a_max": "aMax",
-    "photosynthesis.a_max_frac": "aMaxFrac",
-    "photosynthesis.base_fol_resp_frac": "baseFolRespFrac",
-    "photosynthesis.psn_t_min": "psnTMin",
-    "photosynthesis.psn_t_opt": "psnTOpt",
-    "photosynthesis.d_vpd_slope": "dVpdSlope",
-    "photosynthesis.d_vpd_exp": "dVpdExp",
-    "photosynthesis.half_sat_par": "halfSatPar",
-    "photosynthesis.attenuation": "attenuation",
-    # Phenology
-    "phenology.leaf_on_day": "leafOnDay",
-    "phenology.leaf_off_day": "leafOffDay",
-    "phenology.gdd_leaf_on": "gddLeafOn",
-    "phenology.soil_temp_leaf_on": "soilTempLeafOn",
-    "phenology.leaf_growth": "leafGrowth",
-    "phenology.frac_leaf_fall": "fracLeafFall",
-    "phenology.leaf_allocation": "leafAllocation",
-    "phenology.leaf_turnover_rate": "leafTurnoverRate",
-    "phenology.leaf_on_realloc_frac": "leafOnReallocFrac",
-    # Respiration
-    "respiration.base_veg_resp": "baseVegResp",
-    "respiration.veg_resp_q10": "vegRespQ10",
-    "respiration.growth_resp_frac": "growthRespFrac",
-    "respiration.frozen_soil_fol_r_eff": "frozenSoilFolREff",
-    "respiration.frozen_soil_threshold": "frozenSoilThreshold",
-    "respiration.base_fine_root_resp": "baseFineRootResp",
-    "respiration.base_coarse_root_resp": "baseCoarseRootResp",
-    "respiration.fine_root_q10": "fineRootQ10",
-    "respiration.coarse_root_q10": "coarseRootQ10",
-    "respiration.base_soil_resp": "baseSoilResp",
-    "respiration.soil_resp_q10": "soilRespQ10",
-    "respiration.soil_resp_moist_effect": "soilRespMoistEffect",
-    "respiration.litter_breakdown_rate": "litterBreakdownRate",
-    "respiration.frac_litter_respired": "fracLitterRespired",
-    # Allocation
-    "allocation.fine_root_allocation": "fineRootAllocation",
-    "allocation.wood_allocation": "woodAllocation",
-    "allocation.fine_root_turnover_rate": "fineRootTurnoverRate",
-    "allocation.coarse_root_turnover_rate": "coarseRootTurnoverRate",
-    "allocation.wood_turnover_rate": "woodTurnoverRate",
-    # Water
-    "water.water_remove_frac": "waterRemoveFrac",
-    "water.frozen_soil_eff": "frozenSoilEff",
-    "water.wue_const": "wueConst",
-    "water.soil_whc": "soilWHC",
-    "water.immed_evap_frac": "immedEvapFrac",
-    "water.fast_flow_frac": "fastFlowFrac",
-    "water.snow_melt": "snowMelt",
-    "water.rd_const": "rdConst",
-    "water.r_soil_const1": "rSoilConst1",
-    "water.r_soil_const2": "rSoilConst2",
-    "water.leaf_pool_depth": "leafPoolDepth",
-    # Leaf physiology
-    "leaf.leaf_c_sp_wt": "leafCSpWt",
-    "leaf.c_frac_leaf": "cFracLeaf",
+    path: spec.sipnet_name for path, spec in get_parameter_specs(SIPNETParameters).items()
 }
 
+# The inverse, for reading a .param file back.
 SIPNET_TO_PYTHON: dict[str, str] = {v: k for k, v in PYTHON_TO_SIPNET.items()}
 
 

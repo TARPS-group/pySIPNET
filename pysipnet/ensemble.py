@@ -86,8 +86,8 @@ def sipnet_site_fields(
         fields = sipnet_site_fields(
             sites,
             climates=[clim_hf, clim_nr],
-            soil=[8000.0, 12000.0],
-            plant_wood=[30000.0, 25000.0],
+            soil_carbon=[8000.0, 12000.0],
+            total_wood_carbon=[30000.0, 25000.0],
         )
         spec = EnsembleSpec(inputs={**fields, ...})
     """
@@ -137,8 +137,8 @@ def sipnet_member_fields(
         rng     = np.random.default_rng(42)
         fields  = sipnet_member_fields(
             members,
-            a_max=rng.uniform(80, 140, 100).tolist(),
-            base_veg_resp=rng.uniform(0.01, 0.05, 100).tolist(),
+            max_photosynthesis_rate=rng.uniform(80, 140, 100).tolist(),
+            base_wood_respiration_rate=rng.uniform(0.01, 0.05, 100).tolist(),
         )
     """
     _validate_param_names(param_samples.keys(), context="sipnet_member_fields")

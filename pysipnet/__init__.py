@@ -14,7 +14,7 @@ Quickstart::
     model   = SIPNETModel(runner, base_params=params, base_climate=climate)
 
     result = model()                    # baseline run
-    result = model(a_max=120.0)         # single parameter override
+    result = model(max_photosynthesis_rate=120.0)         # single parameter override
 
 With agronomic events::
 
@@ -61,9 +61,21 @@ from pysipnet.model import SIPNETModel
 from pysipnet.output import SIPNETOutput
 
 # Parameters (top-level groups available via pysipnet.parameters)
-from pysipnet.parameters.model import SIPNET_PARAMS_BY_GROUP, ModelFlags, SIPNETParameters
+from pysipnet.parameters.model import (
+    PARAMETER_SPECS,
+    SIPNET_PARAMS_BY_GROUP,
+    ModelFlags,
+    SIPNETParameters,
+    resolve_parameter_name,
+)
 from pysipnet.result import RunProvenance, SIPNETResult
 from pysipnet.runner import ClimateStaging, SIPNETRunError, SIPNETRunner
+from pysipnet.variables import (
+    CLIMATE_VARIABLES,
+    OUTPUT_VARIABLES,
+    resolve_climate_variable,
+    resolve_output_variable,
+)
 
 # Version
 from pysipnet.version import (
@@ -92,6 +104,13 @@ __all__ = [
     "SIPNETParameters",
     "ModelFlags",
     "SIPNET_PARAMS_BY_GROUP",
+    "PARAMETER_SPECS",
+    "resolve_parameter_name",
+    # Variable registries
+    "OUTPUT_VARIABLES",
+    "CLIMATE_VARIABLES",
+    "resolve_output_variable",
+    "resolve_climate_variable",
     # Climate
     "ClimateDrivers",
     # Events

@@ -1,7 +1,8 @@
 """The parameter-name mapping, written out independently of the code.
 
-`PYTHON_TO_SIPNET` in `pysipnet/io/param_io.py` is the only thing that decides
-which SIPNET parameter each Python field becomes. Nothing else in the test
+`PYTHON_TO_SIPNET` in `pysipnet/io/param_io.py`, derived from each field's
+`ParameterSpec.sipnet_name`, is the only thing that decides which SIPNET
+parameter each Python field becomes. Nothing else in the test
 suite can catch an error in it, because the test helper that reads the
 reference `.param` file reads *through the same table* the writer writes
 through — so a swapped or misspelled pair cancels itself out and every test
@@ -28,49 +29,49 @@ from pysipnet.io.param_io import PYTHON_TO_SIPNET
 
 EXPECTED_PARAM_NAMES: dict[str, str] = {
     # initial_conditions
-    "initial_conditions.plant_wood": "plantWoodInit",
-    "initial_conditions.lai": "laiInit",
-    "initial_conditions.litter": "litterInit",
-    "initial_conditions.soil": "soilInit",
-    "initial_conditions.soil_water_frac": "soilWFracInit",
-    "initial_conditions.snow": "snowInit",
-    "initial_conditions.fine_root_frac": "fineRootFrac",
-    "initial_conditions.coarse_root_frac": "coarseRootFrac",
+    "initial_conditions.total_wood_carbon": "plantWoodInit",
+    "initial_conditions.leaf_area_index": "laiInit",
+    "initial_conditions.litter_carbon": "litterInit",
+    "initial_conditions.soil_carbon": "soilInit",
+    "initial_conditions.soil_wetness_fraction": "soilWFracInit",
+    "initial_conditions.snow_water_equivalent": "snowInit",
+    "initial_conditions.fine_root_fraction": "fineRootFrac",
+    "initial_conditions.coarse_root_fraction": "coarseRootFrac",
     # photosynthesis
-    "photosynthesis.a_max": "aMax",
-    "photosynthesis.a_max_frac": "aMaxFrac",
-    "photosynthesis.base_fol_resp_frac": "baseFolRespFrac",
-    "photosynthesis.psn_t_min": "psnTMin",
-    "photosynthesis.psn_t_opt": "psnTOpt",
-    "photosynthesis.d_vpd_slope": "dVpdSlope",
-    "photosynthesis.d_vpd_exp": "dVpdExp",
-    "photosynthesis.half_sat_par": "halfSatPar",
-    "photosynthesis.attenuation": "attenuation",
+    "photosynthesis.max_photosynthesis_rate": "aMax",
+    "photosynthesis.daily_mean_photosynthesis_fraction": "aMaxFrac",
+    "photosynthesis.foliar_respiration_fraction": "baseFolRespFrac",
+    "photosynthesis.min_photosynthesis_temperature": "psnTMin",
+    "photosynthesis.optimum_photosynthesis_temperature": "psnTOpt",
+    "photosynthesis.vapour_pressure_deficit_slope": "dVpdSlope",
+    "photosynthesis.vapour_pressure_deficit_exponent": "dVpdExp",
+    "photosynthesis.half_saturation_light": "halfSatPar",
+    "photosynthesis.light_extinction_coefficient": "attenuation",
     # phenology
     "phenology.leaf_on_day": "leafOnDay",
     "phenology.leaf_off_day": "leafOffDay",
-    "phenology.gdd_leaf_on": "gddLeafOn",
-    "phenology.soil_temp_leaf_on": "soilTempLeafOn",
-    "phenology.leaf_growth": "leafGrowth",
-    "phenology.frac_leaf_fall": "fracLeafFall",
+    "phenology.leaf_on_growing_degree_days": "gddLeafOn",
+    "phenology.leaf_on_soil_temperature": "soilTempLeafOn",
+    "phenology.leaf_on_growth": "leafGrowth",
+    "phenology.leaf_off_fall_fraction": "fracLeafFall",
     "phenology.leaf_allocation": "leafAllocation",
     "phenology.leaf_turnover_rate": "leafTurnoverRate",
-    "phenology.leaf_on_realloc_frac": "leafOnReallocFrac",
+    "phenology.leaf_on_reallocation_fraction": "leafOnReallocFrac",
     # respiration
-    "respiration.base_veg_resp": "baseVegResp",
-    "respiration.veg_resp_q10": "vegRespQ10",
-    "respiration.growth_resp_frac": "growthRespFrac",
-    "respiration.frozen_soil_fol_r_eff": "frozenSoilFolREff",
+    "respiration.base_wood_respiration_rate": "baseVegResp",
+    "respiration.wood_respiration_q10": "vegRespQ10",
+    "respiration.growth_respiration_fraction": "growthRespFrac",
+    "respiration.frozen_soil_foliar_respiration_factor": "frozenSoilFolREff",
     "respiration.frozen_soil_threshold": "frozenSoilThreshold",
-    "respiration.base_fine_root_resp": "baseFineRootResp",
-    "respiration.base_coarse_root_resp": "baseCoarseRootResp",
-    "respiration.fine_root_q10": "fineRootQ10",
-    "respiration.coarse_root_q10": "coarseRootQ10",
-    "respiration.base_soil_resp": "baseSoilResp",
-    "respiration.soil_resp_q10": "soilRespQ10",
-    "respiration.soil_resp_moist_effect": "soilRespMoistEffect",
+    "respiration.base_fine_root_respiration_rate": "baseFineRootResp",
+    "respiration.base_coarse_root_respiration_rate": "baseCoarseRootResp",
+    "respiration.fine_root_respiration_q10": "fineRootQ10",
+    "respiration.coarse_root_respiration_q10": "coarseRootQ10",
+    "respiration.base_soil_respiration_rate": "baseSoilResp",
+    "respiration.soil_respiration_q10": "soilRespQ10",
+    "respiration.soil_respiration_moisture_exponent": "soilRespMoistEffect",
     "respiration.litter_breakdown_rate": "litterBreakdownRate",
-    "respiration.frac_litter_respired": "fracLitterRespired",
+    "respiration.litter_respired_fraction": "fracLitterRespired",
     # allocation
     "allocation.fine_root_allocation": "fineRootAllocation",
     "allocation.wood_allocation": "woodAllocation",
@@ -78,20 +79,20 @@ EXPECTED_PARAM_NAMES: dict[str, str] = {
     "allocation.coarse_root_turnover_rate": "coarseRootTurnoverRate",
     "allocation.wood_turnover_rate": "woodTurnoverRate",
     # water
-    "water.water_remove_frac": "waterRemoveFrac",
-    "water.frozen_soil_eff": "frozenSoilEff",
-    "water.wue_const": "wueConst",
-    "water.soil_whc": "soilWHC",
-    "water.immed_evap_frac": "immedEvapFrac",
-    "water.fast_flow_frac": "fastFlowFrac",
-    "water.snow_melt": "snowMelt",
-    "water.rd_const": "rdConst",
-    "water.r_soil_const1": "rSoilConst1",
-    "water.r_soil_const2": "rSoilConst2",
-    "water.leaf_pool_depth": "leafPoolDepth",
+    "water.water_removal_fraction": "waterRemoveFrac",
+    "water.frozen_soil_water_fraction": "frozenSoilEff",
+    "water.water_use_efficiency": "wueConst",
+    "water.soil_water_holding_capacity": "soilWHC",
+    "water.interception_evaporation_fraction": "immedEvapFrac",
+    "water.fast_flow_fraction": "fastFlowFrac",
+    "water.snow_melt_rate": "snowMelt",
+    "water.aerodynamic_resistance_constant": "rdConst",
+    "water.soil_resistance_intercept": "rSoilConst1",
+    "water.soil_resistance_slope": "rSoilConst2",
+    "water.leaf_water_pool_depth": "leafPoolDepth",
     # leaf
-    "leaf.leaf_c_sp_wt": "leafCSpWt",
-    "leaf.c_frac_leaf": "cFracLeaf",
+    "leaf.leaf_carbon_per_area": "leafCSpWt",
+    "leaf.leaf_carbon_fraction": "cFracLeaf",
 }
 
 

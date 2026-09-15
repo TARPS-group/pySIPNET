@@ -9,7 +9,7 @@ pySIPNET is independent of the [PEcAn](https://github.com/pecanproject) ecosyste
 - Typed, hierarchical parameter models with units and validation on every field
 - Validated climate driver container (12- and 14-column SIPNET layouts)
 - Isolated run execution — each run gets its own working directory, enabling trivial parallelism
-- Clean output as labelled DataFrames (optional xarray export)
+- Clean output as a labelled DataFrame or a self-describing xarray Dataset, every variable named for what it is and carrying its units and time reference
 - `SIPNETModel` — a single callable compatible with PyEns, Dask, Parsl, Ray, and any framework that treats the model as `(**inputs) → output`
 
 ## Quick start
@@ -32,8 +32,8 @@ climate    = ClimateDrivers.from_file("site1.clim", n_columns=14)
 other_site = ClimateDrivers.from_file("site2.clim", n_columns=14)
 
 params = SIPNETParameters(
-    photosynthesis=PhotosynthesisParams(a_max=112.0, psn_t_opt=24.0),
-    respiration=RespirationParams(base_veg_resp=0.02),
+    photosynthesis=PhotosynthesisParams(max_photosynthesis_rate=112.0, optimum_photosynthesis_temperature=24.0),
+    respiration=RespirationParams(base_wood_respiration_rate=0.02),
     # ... and the other five groups
 )
 
@@ -41,10 +41,10 @@ runner = SIPNETRunner(flags=ModelFlags.standard())
 model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
 result = model()                    # baseline run
-result = model(a_max=140.0)         # override a single parameter
+result = model(max_photosynthesis_rate=140.0)         # override a single parameter
 result = model(climate=other_site)  # swap climate drivers
 
-print(result.outputs.data[["nee", "gpp"]].sum())
+print(result.outputs.data[["net_ecosystem_exchange", "gross_primary_production"]].sum())
 ```
 
 ## Documentation

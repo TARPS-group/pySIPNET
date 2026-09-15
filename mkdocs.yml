@@ -29,6 +29,9 @@ theme:
 
 plugins:
   - search
+  - gen-files:
+      scripts:
+        - docs/gen_variable_tables.py
   - mkdocstrings:
       handlers:
         python:
@@ -62,6 +65,10 @@ nav:
       - Common Workflows: user-guide/workflows.md
   - Examples:
       - MCMC Calibration: examples/mcmc_calibration.ipynb
+  - Reference:
+      - Output variables: reference/output-variables.md
+      - Parameters: reference/parameters.md
+      - Climate drivers: reference/climate-drivers.md
   - API Reference:
       - Overview: api/index.md
 

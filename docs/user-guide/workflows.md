@@ -32,13 +32,13 @@ result = model()
 
 # Work with results — all in memory
 df = result.outputs.data
-print(result.nee().sum())        # annual NEE
-print(result.gpp().mean())       # mean GPP per timestep
+print(result.outputs.variable("nee").sum())    # annual NEE
+print(result.outputs.variable("gpp").mean())   # mean GPP per timestep
 
 # Quick parameter sensitivity
-for a_max in [80.0, 100.0, 120.0, 140.0]:
-    r = model(a_max=a_max)
-    print(f"a_max={a_max}: NEE={r.nee().sum():.2f} g C m⁻²")
+for max_photosynthesis_rate in [80.0, 100.0, 120.0, 140.0]:
+    r = model(max_photosynthesis_rate=max_photosynthesis_rate)
+    print(f"max_photosynthesis_rate={max_photosynthesis_rate}: NEE={r.outputs.variable('nee').sum():.2f} g C m⁻²")
 ```
 
 The `SIPNETModel` wrapper (see [Running a Model](running-a-model.md)) is
@@ -77,7 +77,7 @@ for path in site_files:
     results[Path(path).stem] = result.outputs.data
 
 # All outputs now in a dict of DataFrames — climate files never loaded into Python
-annual_nee = {site: df["nee"].sum() for site, df in results.items()}
+annual_nee = {site: df["net_ecosystem_exchange"].sum() for site, df in results.items()}
 ```
 
 Use `ClimateStaging.SYMLINK` instead of `COPY` if the climate files are large
@@ -120,7 +120,7 @@ print(results[0].outputs.source_path)
 import pandas as pd
 
 nee_all = pd.concat(
-    [r.outputs.data["nee"] for r in results],
+    [r.outputs.variable("nee") for r in results],
     axis=1,
     keys=[r.provenance.run_id for r in results],
 )
@@ -151,16 +151,17 @@ results = [
     for i, params_i in enumerate(param_samples)
 ]
 
-# Read only NEE and GPP from each output file — year/day/time always included
+# Read only NEE and GPP from each output file — the time coordinates are always included
 frames = [
-    r.outputs.load(columns=["nee", "gpp"]).assign(run_id=r.provenance.run_id)
+    r.outputs.load(variables=["nee", "gpp"]).assign(run_id=r.provenance.run_id)
     for r in results
 ]
 combined = pd.concat(frames, ignore_index=True)
-# combined has columns: year, day, time, nee, gpp, run_id
+# combined has columns: year, day_of_year, hour_of_day,
+#   net_ecosystem_exchange, gross_primary_production, run_id
 ```
 
-`load(columns=[...])` reads only the requested columns from disk each time it
+`load(variables=[...])` reads only the requested variables from disk each time it
 is called — it does not cache the result.  This keeps peak memory at one
 member's worth of data rather than the full ensemble.
 
@@ -259,5 +260,5 @@ and a SHA-256 hash of the climate file alongside the output.  See
 | Pre-existing files, single run | `from_path` | Eager (default) | `COPY` or `SYMLINK` |
 | Ensemble, moderate size | `from_path` | Lazy (`output_dir=`) | `COPY` |
 | Ensemble, large files, Linux/macOS | `from_path` | Lazy (`output_dir=`) | `SYMLINK` |
-| Need only select output columns | `from_path` | Lazy + `load(columns=)` | `SYMLINK` |
+| Need only select output variables | `from_path` | Lazy + `load(variables=)` | `SYMLINK` |
 | Full archival / reproducible pipeline | `from_path` | Lazy (`output_dir=`) + `keep_workdir=True` | `SYMLINK` |

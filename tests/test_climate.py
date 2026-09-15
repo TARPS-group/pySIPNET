@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
-from pysipnet.climate import CLIM_COLUMNS, ClimateDrivers
+from pysipnet.climate import CLIMATE_COLUMNS, ClimateDrivers
 from pysipnet.parameters.model import ModelFlags
 from pysipnet.runner import ClimateStaging, SIPNETRunner
 
@@ -21,20 +22,20 @@ def _make_df(
     return pd.DataFrame(
         {
             "year": year,
-            "day": range(start_doy, start_doy + n_days),
-            "time": 0.0,
-            "length": 1.0,
+            "day_of_year": range(start_doy, start_doy + n_days),
+            "hour_of_day": 0.0,
+            "time_step_length": 1.0,
             # Every column a distinct, non-round value. With repeated or round
             # numbers a round trip proves only the shape: swapping two columns
             # in the writer, or truncating precision, would still compare equal.
-            "tair": 15.3125,
-            "tsoil": 10.0625,
-            "par": 21.8437,
-            "precip": 2.1875,
-            "vpd": 803.40625,
-            "vpd_soil": 401.703125,
-            "vpress": 1203.28125,
-            "wspd": 2.546875,
+            "air_temperature": 15.3125,
+            "soil_temperature": 10.0625,
+            "photosynthetically_active_radiation": 21.8437,
+            "precipitation": 2.1875,
+            "vapour_pressure_deficit": 803.40625,
+            "soil_vapour_pressure_deficit": 401.703125,
+            "vapour_pressure": 1203.28125,
+            "wind_speed": 2.546875,
         }
     )
 
@@ -48,7 +49,7 @@ class TestFromDataframe:
     def test_happy_path(self):
         cd = ClimateDrivers.from_dataframe(_make_df())
         assert cd.n_timesteps == 5
-        assert list(cd.data.columns) == CLIM_COLUMNS
+        assert list(cd.data.columns) == CLIMATE_COLUMNS
 
     def test_extra_columns_ignored(self):
         df = _make_df()
@@ -57,12 +58,12 @@ class TestFromDataframe:
         assert "extra" not in cd.data.columns
 
     def test_column_order_normalised(self):
-        df = _make_df()[list(reversed(CLIM_COLUMNS))]
+        df = _make_df()[list(reversed(CLIMATE_COLUMNS))]
         cd = ClimateDrivers.from_dataframe(df)
-        assert list(cd.data.columns) == CLIM_COLUMNS
+        assert list(cd.data.columns) == CLIMATE_COLUMNS
 
     def test_missing_column_raises(self):
-        df = _make_df().drop(columns=["par"])
+        df = _make_df().drop(columns=["photosynthetically_active_radiation"])
         with pytest.raises(ValueError, match="missing required columns"):
             ClimateDrivers.from_dataframe(df)
 
@@ -74,8 +75,8 @@ class TestFromDataframe:
     def test_data_is_a_copy(self):
         df = _make_df()
         cd = ClimateDrivers.from_dataframe(df)
-        df["tair"] = 999.0
-        assert (cd.data["tair"] != 999.0).all()
+        df["air_temperature"] = 999.0
+        assert (cd.data["air_temperature"] != 999.0).all()
 
 
 # ---------------------------------------------------------------------------
@@ -86,25 +87,25 @@ class TestFromDataframe:
 class TestValidation:
     def test_null_values_raise(self):
         df = _make_df()
-        df.loc[2, "tair"] = float("nan")
+        df.loc[2, "air_temperature"] = float("nan")
         with pytest.raises(ValueError, match="Missing values"):
             ClimateDrivers.from_dataframe(df)
 
     def test_zero_length_raises(self):
         df = _make_df()
-        df.loc[0, "length"] = 0.0
-        with pytest.raises(ValueError, match="length"):
+        df.loc[0, "time_step_length"] = 0.0
+        with pytest.raises(ValueError, match="time_step_length"):
             ClimateDrivers.from_dataframe(df)
 
     def test_negative_length_raises(self):
         df = _make_df()
-        df.loc[0, "length"] = -1.0
-        with pytest.raises(ValueError, match="length"):
+        df.loc[0, "time_step_length"] = -1.0
+        with pytest.raises(ValueError, match="time_step_length"):
             ClimateDrivers.from_dataframe(df)
 
     def test_non_monotonic_doy_raises(self):
         df = _make_df(n_days=5)
-        df.loc[1, "day"] = 99  # goes backward
+        df.loc[1, "day_of_year"] = 99  # goes backward
         with pytest.raises(ValueError, match="chronological"):
             ClimateDrivers.from_dataframe(df)
 
@@ -116,20 +117,20 @@ class TestValidation:
 
     def test_zero_vpd_warns(self):
         df = _make_df()
-        df.loc[0, "vpd"] = 0.0
-        with pytest.warns(UserWarning, match="vpd"):
+        df.loc[0, "vapour_pressure_deficit"] = 0.0
+        with pytest.warns(UserWarning, match="vapour_pressure_deficit"):
             ClimateDrivers.from_dataframe(df)
 
     def test_negative_vpd_warns(self):
         df = _make_df()
-        df.loc[0, "vpd"] = -50.0
-        with pytest.warns(UserWarning, match="vpd"):
+        df.loc[0, "vapour_pressure_deficit"] = -50.0
+        with pytest.warns(UserWarning, match="vapour_pressure_deficit"):
             ClimateDrivers.from_dataframe(df)
 
     def test_zero_wspd_warns(self):
         df = _make_df()
-        df.loc[0, "wspd"] = 0.0
-        with pytest.warns(UserWarning, match="wspd"):
+        df.loc[0, "wind_speed"] = 0.0
+        with pytest.warns(UserWarning, match="wind_speed"):
             ClimateDrivers.from_dataframe(df)
 
     def test_positive_vpd_and_wspd_no_warning(self, recwarn):
@@ -138,7 +139,8 @@ class TestValidation:
         vpd_wspd = [
             w
             for w in recwarn.list
-            if "vpd" in str(w.message).lower() or "wspd" in str(w.message).lower()
+            if "vapour_pressure_deficit" in str(w.message).lower()
+            or "wind_speed" in str(w.message).lower()
         ]
         assert len(vpd_wspd) == 0
 
@@ -439,3 +441,58 @@ class TestClimateStaging:
     def test_default_staging_is_copy(self):
         runner = SIPNETRunner(flags=ModelFlags.standard())
         assert runner.climate_staging == ClimateStaging.COPY
+
+
+# ---------------------------------------------------------------------------
+# Registry names, aliases and the xarray view
+# ---------------------------------------------------------------------------
+
+
+class TestClimateRegistry:
+    def test_columns_are_the_registry_names(self):
+        from pysipnet.variables import CLIMATE_COLUMN_NAMES
+
+        assert CLIMATE_COLUMNS == list(CLIMATE_COLUMN_NAMES)
+        assert "air_temperature" in CLIMATE_COLUMNS and "tair" not in CLIMATE_COLUMNS
+
+    def test_from_dataframe_accepts_aliases_and_renames_them(self):
+        """A DataFrame using the previous short names or SIPNET's names still loads."""
+        df = _make_df().rename(
+            columns={
+                "day_of_year": "day",
+                "hour_of_day": "time",
+                "time_step_length": "length",
+                "air_temperature": "tair",
+                "soil_temperature": "tsoil",
+                "photosynthetically_active_radiation": "par",
+                "precipitation": "precip",
+                "vapour_pressure_deficit": "vpd",
+                "soil_vapour_pressure_deficit": "vpdSoil",
+                "vapour_pressure": "vPress",
+                "wind_speed": "wspd",
+            }
+        )
+        cd = ClimateDrivers.from_dataframe(df)
+        assert list(cd.data.columns) == CLIMATE_COLUMNS
+        pd.testing.assert_frame_equal(cd.data, ClimateDrivers.from_dataframe(_make_df()).data)
+
+    def test_missing_column_error_names_the_registry_name(self):
+        with pytest.raises(ValueError, match="air_temperature"):
+            ClimateDrivers.from_dataframe(_make_df().drop(columns=["air_temperature"]))
+
+    def test_dataset_shares_the_output_time_axis(self):
+        cd = ClimateDrivers.from_dataframe(_make_df(n_days=3, start_doy=100, year=2020))
+        ds = cd.dataset
+        assert dict(ds.sizes) == {"time": 3}
+        assert ds["time"].values[0] == np.datetime64("2020-04-09T00:00")
+        assert ds["time_step_end"].values[0] == ds["time"].values[1]
+        assert ds["air_temperature"].attrs["units"] == "degC"
+        assert ds["precipitation"].attrs["time_reference"] == "total over the timestep"
+        assert ds["precipitation"].attrs["sipnet_internal_units"] == "cm"
+        assert "time_step_length" in ds.coords and "time_step_length" not in ds.data_vars
+
+    def test_alias_and_canonical_column_together_is_an_error(self):
+        df = _make_df()
+        df["tair"] = df["air_temperature"] + 1.0
+        with pytest.raises(ValueError, match="canonical name"):
+            ClimateDrivers.from_dataframe(df)

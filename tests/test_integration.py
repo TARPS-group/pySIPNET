@@ -41,17 +41,17 @@ def _make_climate(n_days: int = 30, year: int = 2010, start_doy: int = 150):
         rows.append(
             {
                 "year": year,
-                "day": start_doy + i,
-                "time": 0.0,
-                "length": 1.0,
-                "tair": 18.0 + 5.0 * np.sin(np.pi * i / n_days),
-                "tsoil": 12.0 + 3.0 * np.sin(np.pi * i / n_days),
-                "par": 15.0,
-                "precip": 2.0,
-                "vpd": 1200.0,
-                "vpd_soil": 600.0,
-                "vpress": 1500.0,
-                "wspd": 2.0,
+                "day_of_year": start_doy + i,
+                "hour_of_day": 0.0,
+                "time_step_length": 1.0,
+                "air_temperature": 18.0 + 5.0 * np.sin(np.pi * i / n_days),
+                "soil_temperature": 12.0 + 3.0 * np.sin(np.pi * i / n_days),
+                "photosynthetically_active_radiation": 15.0,
+                "precipitation": 2.0,
+                "vapour_pressure_deficit": 1200.0,
+                "soil_vapour_pressure_deficit": 600.0,
+                "vapour_pressure": 1500.0,
+                "wind_speed": 2.0,
             }
         )
     df = pd.DataFrame(rows)
@@ -89,7 +89,12 @@ class TestEndToEnd:
         result = runner.run(minimal_params, climate)
 
         assert result.provenance.success
-        for col in ("nee", "gpp", "npp", "evapotranspiration"):
+        for col in (
+            "net_ecosystem_exchange",
+            "gross_primary_production",
+            "net_primary_production",
+            "evapotranspiration",
+        ):
             assert col in result.outputs.data.columns, f"Missing column: {col}"
 
     def test_no_nans_in_output(self, minimal_params):
@@ -100,15 +105,18 @@ class TestEndToEnd:
         assert result.provenance.success
         assert not result.outputs.data.isnull().any().any(), "NaN values found in output"
 
-    def test_convenience_accessors(self, minimal_params):
+    def test_variable_lookup_by_alias(self, minimal_params):
+        """``outputs["nee"]`` and the full name are the same array, with metadata."""
         runner = SIPNETRunner(flags=ModelFlags.standard())
-        climate = _make_climate()
-        result = runner.run(minimal_params, climate)
+        result = runner.run(minimal_params, _make_climate())
 
-        assert result.provenance.success
-        assert len(result.nee()) == 30
-        assert len(result.gpp()) == 30
-        assert len(result.et()) == 30
+        by_alias = result.outputs["nee"]
+        by_name = result.outputs["net_ecosystem_exchange"]
+        assert by_alias.name == "net_ecosystem_exchange"
+        assert by_alias.attrs["units"] == "g m-2"
+        assert by_alias.attrs["constituent"] == "C"
+        np.testing.assert_array_equal(by_alias.values, by_name.values)
+        assert len(result.outputs.variable("gpp")) == 30
 
     def test_gpp_non_negative(self, minimal_params):
         runner = SIPNETRunner(flags=ModelFlags.standard())
@@ -116,7 +124,25 @@ class TestEndToEnd:
         result = runner.run(minimal_params, climate)
 
         assert result.provenance.success
-        assert (result.gpp() >= 0).all(), "GPP should be non-negative"
+        assert (result.outputs.variable("gpp") >= 0).all(), "GPP should be non-negative"
+
+    def test_dataset_has_one_time_dimension_with_step_bounds(self, minimal_params):
+        """The xarray view is 1-D in time, dense, and knows when each step ends."""
+        runner = SIPNETRunner(flags=ModelFlags.standard())
+        climate = _make_climate()
+        result = runner.run(minimal_params, climate)
+
+        ds = result.outputs.dataset
+        assert dict(ds.sizes) == {"time": 30}
+        assert not ds["net_ecosystem_exchange"].isnull().any()
+        assert ds["time"].attrs["long_name"] == "Start of timestep"
+        expected_end = (
+            ds["time"].values
+            + pd.to_timedelta(climate.data["time_step_length"].to_numpy(), unit="D").to_numpy()
+        )
+        np.testing.assert_array_equal(ds["time_step_end"].values, expected_end)
+        assert ds["wood_carbon"].attrs["time_reference"] == "value at the end of the timestep"
+        assert ds["net_ecosystem_exchange"].attrs["time_reference"] == "total over the timestep"
 
     def test_carbon_balance_identity(self, minimal_params):
         """NEE ≈ Rtot − GPP at each timestep.
@@ -130,9 +156,9 @@ class TestEndToEnd:
 
         assert result.provenance.success
         ts = result.outputs.data
-        computed_nee = ts["rtot"] - ts["gpp"]
+        computed_nee = ts["ecosystem_respiration"] - ts["gross_primary_production"]
         np.testing.assert_allclose(
-            ts["nee"].values,
+            ts["net_ecosystem_exchange"].values,
             computed_nee.values,
             atol=0.01,
             err_msg="NEE != Rtot - GPP (beyond output-precision tolerance)",
@@ -269,26 +295,41 @@ class TestOutputIO:
             runner.run(minimal_params, _make_climate(), run_id="../../escape")
 
     def test_column_selection_returns_subset(self, minimal_params, tmp_path):
-        """load(columns=...) returns only the requested columns plus time coords."""
+        """load(variables=...) returns only the requested variables plus time coords."""
         runner = SIPNETRunner(
             flags=ModelFlags.standard(),
             output_dir=tmp_path / "outputs",
         )
         result = runner.run(minimal_params, _make_climate())
 
-        subset = result.outputs.load(columns=["nee", "gpp"])
-        assert set(subset.columns) == {"year", "day", "time", "nee", "gpp"}
+        subset = result.outputs.load(variables=["nee", "gpp"])
+        assert set(subset.columns) == {
+            "year",
+            "day_of_year",
+            "hour_of_day",
+            "net_ecosystem_exchange",
+            "gross_primary_production",
+        }
         assert len(subset) == 30
 
     def test_column_selection_memory_backed(self, minimal_params):
-        """load(columns=...) works on memory-backed instances too."""
+        """load(variables=...) works on memory-backed instances too."""
         runner = SIPNETRunner(flags=ModelFlags.standard())
         result = runner.run(minimal_params, _make_climate())
 
-        subset = result.outputs.load(columns=["nee"])
-        assert "nee" in subset.columns
+        subset = result.outputs.load(variables=["nee"])
+        assert "net_ecosystem_exchange" in subset.columns
         assert "year" in subset.columns
-        assert "plant_wood_c" not in subset.columns
+        assert "wood_carbon" not in subset.columns
+
+    def test_variable_selection_as_xarray(self, minimal_params, tmp_path):
+        """load(as_xarray=True) reads only the requested variables into a Dataset."""
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        result = runner.run(minimal_params, _make_climate())
+
+        ds = result.outputs.load(variables=["nee"], as_xarray=True)
+        assert set(ds.data_vars) == {"net_ecosystem_exchange"}
+        assert "time_step_end" in ds.coords
 
     def test_n_timesteps(self, minimal_params, tmp_path):
         """n_timesteps is correct for both memory-backed and file-backed outputs."""
@@ -324,7 +365,7 @@ class TestLitterPool:
         """Parameters with the two values the litter pool requires."""
         data = minimal_params.model_dump()
         data["respiration"]["litter_breakdown_rate"] = 0.5
-        data["respiration"]["frac_litter_respired"] = 0.5
+        data["respiration"]["litter_respired_fraction"] = 0.5
         return type(minimal_params).model_validate(data)
 
     def test_run_succeeds(self, litter_params):
@@ -334,7 +375,7 @@ class TestLitterPool:
     def test_soil_respiration_is_not_zero(self, litter_params):
         """The specific regression: rSoil must be computed, not left at zero."""
         result = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, _make_climate())
-        r_soil = result.outputs.data["r_soil"]
+        r_soil = result.outputs.data["soil_respiration"]
         assert (r_soil > 0).any(), (
             "soil respiration is zero for every timestep with the litter pool on, "
             "which is the pre-v2.1.0 defect this test exists to catch"
@@ -343,12 +384,12 @@ class TestLitterPool:
     def test_litter_pool_holds_carbon(self, litter_params):
         """With the pool on, litter carbon should be tracked rather than left at zero."""
         result = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, _make_climate())
-        assert (result.outputs.data["litter_c"] > 0).any()
+        assert (result.outputs.data["litter_carbon"] > 0).any()
 
     def test_litter_pool_stays_empty_when_switched_off(self, minimal_params):
         """The complement: SIPNET writes the column but leaves it at zero."""
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())
-        assert (result.outputs.data["litter_c"] == 0).all()
+        assert (result.outputs.data["litter_carbon"] == 0).all()
 
     def test_enabling_the_litter_pool_changes_the_answer(self, litter_params):
         """A flag that reaches SIPNET must visibly affect the model.
@@ -360,8 +401,8 @@ class TestLitterPool:
         with_pool = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, climate)
         without = SIPNETRunner(flags=ModelFlags.standard()).run(litter_params, climate)
         assert not np.allclose(
-            with_pool.outputs.data["nee"].to_numpy(),
-            without.outputs.data["nee"].to_numpy(),
+            with_pool.outputs.variable("nee").to_numpy(),
+            without.outputs.variable("nee").to_numpy(),
         ), "turning the litter pool on made no difference to NEE"
 
 
@@ -465,8 +506,8 @@ class TestRunnerAppliesEvents:
         with_events = runner.run(minimal_params, climate, events=tillage)
         without = runner.run(minimal_params, climate)
         assert not np.allclose(
-            with_events.outputs.data["nee"].to_numpy(),
-            without.outputs.data["nee"].to_numpy(),
+            with_events.outputs.variable("nee").to_numpy(),
+            without.outputs.variable("nee").to_numpy(),
         ), "applying a tillage event made no difference to NEE"
 
     def test_no_events_means_events_are_switched_off(self, minimal_params):
@@ -482,7 +523,7 @@ class TestFailedRunsRaise:
     """A failed run must not come back looking like a successful empty one.
 
     Returning an empty DataFrame deferred the failure to whatever the caller
-    did next — usually ``result.nee()``, which raises KeyError a long way from
+    did next — usually a column lookup, which raises KeyError a long way from
     the cause, while SIPNET's own explanation sat unread on the provenance
     object. In an ensemble the empties were collected silently.
     """
@@ -523,3 +564,85 @@ class TestFailedRunsRaise:
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())
         assert result.provenance.success
         assert not result.outputs.data.empty
+
+
+# ---------------------------------------------------------------------------
+# Snow flag
+# ---------------------------------------------------------------------------
+
+
+class TestSnowFlag:
+    """At the pinned SIPNET the snow flag does not switch the snowpack off.
+
+    SIPNET's documentation says ``SNOW = 0`` treats all precipitation as
+    liquid. The source disagrees: nothing in the flux code reads ``ctx.snow``,
+    so snow falls and accumulates either way and the flag only decides whether
+    ``snowMelt`` is required. The registry describes the column accordingly.
+    If this test starts failing, upstream has fixed it, and the descriptions
+    of ``ModelFlags.snow`` and ``snow_water_equivalent`` need revisiting.
+    """
+
+    @staticmethod
+    def _freezing_climate(n_days: int = 10):
+        from pysipnet.climate import ClimateDrivers
+
+        rows = [
+            {
+                "year": 2010,
+                "day_of_year": 10 + i,
+                "hour_of_day": 0.0,
+                "time_step_length": 1.0,
+                "air_temperature": -5.0,
+                "soil_temperature": -2.0,
+                "photosynthetically_active_radiation": 5.0,
+                "precipitation": 10.0,
+                "vapour_pressure_deficit": 300.0,
+                "soil_vapour_pressure_deficit": 200.0,
+                "vapour_pressure": 300.0,
+                "wind_speed": 2.0,
+            }
+            for i in range(n_days)
+        ]
+        return ClimateDrivers.from_dataframe(pd.DataFrame(rows))
+
+    def test_file_backed_climate_is_not_read_to_build_the_result(self, minimal_params, tmp_path):
+        """The step lengths for the Dataset are fetched lazily, so from_path stays lazy."""
+        from pysipnet.climate import ClimateDrivers
+
+        path = tmp_path / "site.clim"
+        self._freezing_climate().to_file(path)
+        climate = ClimateDrivers.from_path(path)
+        result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, climate)
+        assert result.provenance.success
+        assert climate._data is None, "building the result must not read the climate file"
+        assert "time_step_end" in result.outputs.dataset.coords
+        assert climate._data is not None, "the Dataset needs the step lengths"
+
+    def test_snow_melts_identically_with_the_flag_off_when_the_rate_is_supplied(
+        self, minimal_params
+    ):
+        """With snow_melt_rate written to the file, the flag changes nothing at all."""
+        climate = self._freezing_climate(n_days=10)
+        df = climate.data.copy()
+        df.loc[5:, "air_temperature"] = 10.0  # five freezing days, then a thaw
+        from pysipnet.climate import ClimateDrivers
+
+        thaw = ClimateDrivers.from_dataframe(df)
+        on = SIPNETRunner(flags=ModelFlags(snow=True)).run(minimal_params, thaw)
+        off = SIPNETRunner(flags=ModelFlags(snow=False)).run(minimal_params, thaw)
+        swe = off.outputs.variable("snow_water_equivalent")
+        assert swe.max() > swe.iloc[-1], "the thaw should melt some snow with the flag off"
+        np.testing.assert_array_equal(
+            on.outputs.variable("snow_water_equivalent").to_numpy(), swe.to_numpy()
+        )
+
+    def test_snowpack_accumulates_with_the_flag_off(self, minimal_params):
+        climate = self._freezing_climate()
+        on = SIPNETRunner(flags=ModelFlags(snow=True)).run(minimal_params, climate)
+        off = SIPNETRunner(flags=ModelFlags(snow=False)).run(minimal_params, climate)
+
+        swe_off = off.outputs.variable("snow_water_equivalent")
+        assert swe_off.iloc[-1] > swe_off.iloc[0] > 0, "snow should accumulate below 0 °C"
+        np.testing.assert_array_equal(
+            on.outputs.variable("snow_water_equivalent").to_numpy(), swe_off.to_numpy()
+        )

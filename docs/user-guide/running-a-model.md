@@ -26,7 +26,7 @@ runner = SIPNETRunner(flags=ModelFlags.standard())
 model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
 result        = model()                # baseline run
-result_tuned  = model(a_max=120.0)     # single parameter override
+result_tuned  = model(max_photosynthesis_rate=120.0)     # single parameter override
 result_site_b = model(climate=other)   # different climate drivers
 ```
 
@@ -42,8 +42,11 @@ A SIPNET run requires two inputs: climate drivers and a parameter set.
 ### Climate data
 
 Climate forcing is stored in a SIPNET `.clim` file — one row per timestep.
-The current layout has 12 columns: four identifying the timestep (year, day,
-time, length) and eight meteorological values.
+The current layout has 12 columns: four identifying the timestep (SIPNET's
+`year day time length`, which become `year`, `day_of_year`, `hour_of_day`,
+`time_step_length` in Python) and eight meteorological values. Every column's
+name, units and the conversion SIPNET applies on read are on the
+[Climate drivers](../reference/climate-drivers.md) page.
 
 ```python
 from pysipnet import ClimateDrivers
@@ -78,46 +81,46 @@ from pysipnet.parameters import (
 
 params = SIPNETParameters(
     initial_conditions=InitialConditions(
-        plant_wood=30000.0,    # g C m⁻² — initial aboveground + root C
-        lai=0.0,               # m² m⁻² — leaf area index at t=0
-        soil=10000.0,          # g C m⁻² — initial soil C pool
-        soil_water_frac=0.5,   # fraction of water holding capacity
-        fine_root_frac=0.05,
-        coarse_root_frac=0.15,
+        total_wood_carbon=30000.0,    # g C m⁻² — initial aboveground + root C
+        leaf_area_index=0.0,               # m² m⁻² — leaf area index at t=0
+        soil_carbon=10000.0,          # g C m⁻² — initial soil C pool
+        soil_wetness_fraction=0.5,   # fraction of water holding capacity
+        fine_root_fraction=0.05,
+        coarse_root_fraction=0.15,
     ),
     photosynthesis=PhotosynthesisParams(
-        a_max=112.0,           # nmol CO₂ g⁻¹ leaf s⁻¹
-        a_max_frac=0.76,
-        base_fol_resp_frac=0.1,
-        psn_t_min=2.0,         # °C
-        psn_t_opt=24.0,        # °C
-        d_vpd_slope=0.05,
-        d_vpd_exp=1.0,
-        half_sat_par=300.0,    # mol photons m⁻² day⁻¹
-        attenuation=0.5,
+        max_photosynthesis_rate=112.0,           # nmol CO₂ g⁻¹ leaf s⁻¹
+        daily_mean_photosynthesis_fraction=0.76,
+        foliar_respiration_fraction=0.1,
+        min_photosynthesis_temperature=2.0,         # °C
+        optimum_photosynthesis_temperature=24.0,        # °C
+        vapour_pressure_deficit_slope=0.05,
+        vapour_pressure_deficit_exponent=1.0,
+        half_saturation_light=300.0,    # mol photons m⁻² day⁻¹
+        light_extinction_coefficient=0.5,
     ),
     phenology=PhenologyParams(
         leaf_off_day=270.0,
-        gdd_leaf_on=100.0,     # °C·day — required when the gdd flag is on
-        leaf_growth=50.0,      # g C m⁻²
-        frac_leaf_fall=0.95,
+        leaf_on_growing_degree_days=100.0,     # °C·day — required when the gdd flag is on
+        leaf_on_growth=50.0,      # g C m⁻²
+        leaf_off_fall_fraction=0.95,
         leaf_allocation=0.25,
         leaf_turnover_rate=1.0,  # year⁻¹
-        leaf_on_realloc_frac=0.2,  # cap on wood C drawn at leaf-out
+        leaf_on_reallocation_fraction=0.2,  # cap on wood C drawn at leaf-out
     ),
     respiration=RespirationParams(
-        base_veg_resp=0.02,        # year⁻¹ (SIPNET divides by 365 internally)
-        veg_resp_q10=2.0,
-        growth_resp_frac=0.0,
-        frozen_soil_fol_r_eff=0.5,
+        base_wood_respiration_rate=0.02,        # year⁻¹ (SIPNET divides by 365 internally)
+        wood_respiration_q10=2.0,
+        growth_respiration_fraction=0.0,
+        frozen_soil_foliar_respiration_factor=0.5,
         frozen_soil_threshold=-1.0,
-        base_fine_root_resp=0.5,   # year⁻¹
-        base_coarse_root_resp=0.1,
-        fine_root_q10=2.0,
-        coarse_root_q10=2.0,
-        base_soil_resp=0.06,       # year⁻¹
-        soil_resp_q10=2.0,
-        soil_resp_moist_effect=1.5,
+        base_fine_root_respiration_rate=0.5,   # year⁻¹
+        base_coarse_root_respiration_rate=0.1,
+        fine_root_respiration_q10=2.0,
+        coarse_root_respiration_q10=2.0,
+        base_soil_respiration_rate=0.06,       # year⁻¹
+        soil_respiration_q10=2.0,
+        soil_respiration_moisture_exponent=1.5,
     ),
     allocation=AllocationParams(
         fine_root_allocation=0.35,
@@ -127,20 +130,20 @@ params = SIPNETParameters(
         wood_turnover_rate=0.02,
     ),
     water=WaterParams(
-        water_remove_frac=0.1,
-        frozen_soil_eff=0.1,
-        wue_const=10.0,
-        soil_whc=12.0,     # cm — soil water holding capacity
-        immed_evap_frac=0.1,
-        fast_flow_frac=0.1,
-        snow_melt=0.15,    # cm °C⁻¹ day⁻¹ — required when the snow flag is on
-        rd_const=100.0,
-        r_soil_const1=3.0,
-        r_soil_const2=2.0,
+        water_removal_fraction=0.1,
+        frozen_soil_water_fraction=0.1,
+        water_use_efficiency=10.0,
+        soil_water_holding_capacity=12.0,     # cm — soil water holding capacity
+        interception_evaporation_fraction=0.1,
+        fast_flow_fraction=0.1,
+        snow_melt_rate=0.15,    # cm °C⁻¹ day⁻¹ — required when the snow flag is on
+        aerodynamic_resistance_constant=100.0,
+        soil_resistance_intercept=3.0,
+        soil_resistance_slope=2.0,
     ),
     leaf=LeafPhysiologyParams(
-        leaf_c_sp_wt=32.0,   # g C m⁻² leaf
-        c_frac_leaf=0.45,
+        leaf_carbon_per_area=32.0,   # g C m⁻² leaf
+        leaf_carbon_fraction=0.45,
     ),
 )
 ```
@@ -148,7 +151,7 @@ params = SIPNETParameters(
 #### Flag-dependent parameters
 
 `ModelFlags.standard()` turns on snow, degree-day leaf-out, and moisture-sensitive soil respiration.  This
-means `water.snow_melt` and `phenology.gdd_leaf_on` are required.  Call
+means `water.snow_melt_rate` and `phenology.leaf_on_growing_degree_days` are required.  Call
 `validate_for_flags` to catch mismatches before running:
 
 ```python
@@ -228,7 +231,7 @@ For I/O options — keeping files on disk, lazy output loading, climate staging
 | `ModelFlags.forest()` | as above, plus a separate litter carbon pool |
 
 Use `ModelFlags.forest()` for sites with a distinct litter carbon layer.  It additionally
-requires `respiration.litter_breakdown_rate` and `respiration.frac_litter_respired`.
+requires `respiration.litter_breakdown_rate` and `respiration.litter_respired_fraction`.
 
 ---
 
@@ -251,24 +254,28 @@ Call `model()` with no arguments to run the baseline:
 
 ```python
 result = model()
-print(result.outputs.data[["nee", "gpp"]].sum())
+print(result.outputs.data[["net_ecosystem_exchange", "gross_primary_production"]].sum())
 ```
 
 ### Parameter overrides
 
-Pass any SIPNET parameter name as a keyword argument to override its value
-for that run.  All other parameters stay at their baseline values.  The
+Pass any parameter field name as a keyword argument to override its value
+for that run. Field names follow the same convention as output columns
+(`max_photosynthesis_rate`, not `a_max`); the full list is on the
+[Parameters](../reference/parameters.md) page. An old or SIPNET-style name raises
+`ValueError` naming the current field, and `pysipnet.resolve_parameter_name("aMax")`
+returns it directly.  All other parameters stay at their baseline values.  The
 override is applied, Pydantic-validated, and discarded — `model.base_params`
 is never mutated.
 
 ```python
-result_high_psn = model(a_max=140.0)
-result_warm     = model(psn_t_opt=28.0)
-result_combined = model(a_max=140.0, psn_t_opt=28.0)
+result_high_psn = model(max_photosynthesis_rate=140.0)
+result_warm     = model(optimum_photosynthesis_temperature=28.0)
+result_combined = model(max_photosynthesis_rate=140.0, optimum_photosynthesis_temperature=28.0)
 ```
 
 Unrecognised parameter names raise `ValueError` immediately.  Invalid values
-(e.g., a negative `a_max`) raise `ValidationError` before the binary is called.
+(e.g., a negative `max_photosynthesis_rate`) raise `ValidationError` before the binary is called.
 
 ### Climate and event overrides
 
@@ -278,7 +285,7 @@ supply a management event sequence:
 ```python
 result_site_b      = model(climate=other_climate)
 result_with_events = model(events=event_sequence)
-result_full        = model(a_max=120.0, climate=other_climate, events=event_sequence)
+result_full        = model(max_photosynthesis_rate=120.0, climate=other_climate, events=event_sequence)
 ```
 
 ### Sensitivity exploration
@@ -289,9 +296,9 @@ result_full        = model(a_max=120.0, climate=other_climate, events=event_sequ
 import pandas as pd
 
 rows = []
-for a_max in [80.0, 100.0, 112.0, 130.0, 150.0]:
-    r = model(a_max=a_max)
-    rows.append({"a_max": a_max, "annual_gpp": r.gpp().sum()})
+for max_photosynthesis_rate in [80.0, 100.0, 112.0, 130.0, 150.0]:
+    r = model(max_photosynthesis_rate=max_photosynthesis_rate)
+    rows.append({"max_photosynthesis_rate": max_photosynthesis_rate, "annual_gpp": r.outputs.variable("gpp").sum()})
 
 pd.DataFrame(rows)
 ```
@@ -302,72 +309,85 @@ pd.DataFrame(rows)
 
 Both `SIPNETModel` and `SIPNETRunner.run()` return a `SIPNETResult`.
 
-### The outputs DataFrame
+### Output variables
 
-`result.outputs` is a `SIPNETOutput` object.  Access the full DataFrame via
-`.data`:
+`result.outputs` is a `SIPNETOutput`. Its columns are named for what they are,
+not for what SIPNET calls them: `net_ecosystem_exchange` rather than `nee`,
+`soil_respiration` rather than `rSoil`. The full list, with units, meaning and
+the SIPNET column each one comes from, is on the
+[Output variables](../reference/output-variables.md) page; the same information
+is available in code from `pysipnet.variables`.
 
 ```python
-print(result.outputs.data.columns.tolist())
-# 35 columns:
-#  'year', 'day', 'time', 'plant_wood_c',
-#  'plant_leaf_c', 'wood_creation', 'soil_c', 'coarse_root_c',
-#  'fine_root_c', 'litter_c', 'soil_water', 'soil_wetness_frac',
-#  'snow', 'npp', 'nee', 'cum_nee',
-#  'gpp', 'r_aboveground', 'r_soil', 'r_root',
-#  'ra', 'rh', 'rtot', 'evapotranspiration',
-#  'transpiration', 'mineral_n', 'soil_organic_n', 'litter_n',
-#  'plant_storage_n', 'n2o', 'n_leaching', 'n_fixation',
-#  'n_uptake', 'ch4', 'npp_storage'
+from pysipnet.variables import resolve_output_variable
+
+spec = resolve_output_variable("nee")      # aliases resolve to the full spec
+spec.name           # 'net_ecosystem_exchange'
+spec.units          # 'g m-2'  (UDUNITS syntax; the substance is kept separate, see below)
+spec.constituent    # 'C'
+spec.formatted_units()  # 'g C m⁻²'
+spec.axis_label()   # 'Net ecosystem exchange (g C m⁻²)'
+spec.time_reference # 'total over the timestep'
 ```
+
+Unit strings use UDUNITS syntax (`"g m-2"`, `"cm d-1"`, `"1"` for dimensionless) with
+the substance in a separate `constituent` field, because a `C` inside a unit string
+would be read as coulombs by units libraries. `formatted_units()` and `axis_label()`
+put it back for display. See [Design](../design.md) for the convention.
 
 Every column is always present. A process that is switched off writes zeros
 rather than omitting its column, so the nitrogen and methane columns are there
-but empty unless those processes are on. SIPNET checks its own carbon and
-nitrogen closure but reports the result as a log warning rather than an
-output column, so a failed check appears in `result.provenance.stderr`.
+but zero unless those processes are on (`requires_flag` on the spec says which).
+SIPNET checks its own carbon and nitrogen closure but reports the result as a
+log warning rather than an output column, so a failed check appears in
+`result.provenance.stderr`.
 
-Key variables:
+!!! note "Start of step versus end of step"
+    SIPNET labels each row with the **start** of its timestep. Pools
+    (`wood_carbon`, `soil_water`, ...) are the values at the **end** of that
+    step, and fluxes (`net_ecosystem_exchange`, `evapotranspiration`, ...) are
+    totals **over** it. One column, `transpiration_rate`, is a per-day rate
+    rather than a total. The `kind` and `time_reference` fields of each
+    variable spell this out, and the xarray view below carries them as
+    attributes.
 
-| Column | Units | Description |
-|:-------|:------|:------------|
-| `nee` | g C m⁻² per timestep | Net ecosystem exchange (positive = to atmosphere) |
-| `gpp` | g C m⁻² per timestep | Gross primary production |
-| `npp` | g C m⁻² per timestep | Net primary production |
-| `ra` | g C m⁻² per timestep | Total autotrophic respiration |
-| `rh` | g C m⁻² per timestep | Heterotrophic respiration |
-| `evapotranspiration` | cm per timestep | Evapotranspiration |
-| `plant_wood_c` | g C m⁻² | Aboveground wood C; roots are separate columns |
-| `soil_c` | g C m⁻² | Soil C pool |
-
-### Convenience accessors
+### Three views of the same output
 
 ```python
-result.nee()   # pd.Series — net ecosystem exchange
-result.gpp()   # pd.Series — gross primary production
-result.et()    # pd.Series — evapotranspiration
+df = result.outputs.data                    # pandas DataFrame, one row per timestep
+ds = result.outputs.dataset                 # xarray Dataset, one `time` dimension
+nee = result.outputs["nee"]                 # one variable as a DataArray, by name or alias
+nee_series = result.outputs.variable("nee") # ... or as a pandas Series
+```
+
+The Dataset is the representation to use when metadata matters or when
+results will be combined across runs:
+
+```python
+ds["net_ecosystem_exchange"].attrs
+# {'units': 'g m-2', 'long_name': 'Net ecosystem exchange',
+#  'time_reference': 'total over the timestep', 'cell_methods': 'time: sum',
+#  'constituent': 'C', 'sign_convention': 'positive is a flux from the ecosystem to the atmosphere', ...}
+
+ds["time"]              # datetime64, start of each timestep
+ds["time_step_end"]     # datetime64, end of each timestep
+ds["time_step_length"]  # timedelta64
+
+ds.to_netcdf("run.nc")  # self-describing on disk
 ```
 
 ### Annual summaries
 
+Fluxes sum; pools average. The registry records the right rule for each
+variable as `spec.aggregation`:
+
 ```python
 annual = (
     result.outputs.data
-    .groupby("year")[["nee", "gpp", "evapotranspiration"]]
+    .groupby("year")[["net_ecosystem_exchange", "gross_primary_production", "evapotranspiration"]]
     .sum()
 )
 ```
-
-### xarray output
-
-With the `xarray` extra installed, convert to a Dataset with `year`, `day`,
-and `time` as coordinates:
-
-```python
-ds = result.to_xarray()
-```
-
----
 
 ## Querying parameter metadata
 
@@ -382,8 +402,8 @@ from pysipnet import SIPNET_PARAMS_BY_GROUP
 
 # What parameters are in the photosynthesis group?
 SIPNET_PARAMS_BY_GROUP["photosynthesis"]
-# ['a_max', 'a_max_frac', 'base_fol_resp_frac', 'psn_t_min', 'psn_t_opt',
-#  'd_vpd_slope', 'd_vpd_exp', 'half_sat_par', 'attenuation']
+# ['max_photosynthesis_rate', 'daily_mean_photosynthesis_fraction', 'foliar_respiration_fraction', 'min_photosynthesis_temperature', 'optimum_photosynthesis_temperature',
+#  'vapour_pressure_deficit_slope', 'vapour_pressure_deficit_exponent', 'half_saturation_light', 'light_extinction_coefficient']
 
 # All groups
 list(SIPNET_PARAMS_BY_GROUP.keys())
@@ -397,14 +417,16 @@ sum(len(ps) for ps in SIPNET_PARAMS_BY_GROUP.values())  # 58
 ### get_parameter_specs
 
 For calibration and DA workflows, `get_parameter_specs` returns the full
-`ParameterSpec` for each parameter — including unit, mathematical domain, and
-whether the value is a per-year rate:
+`ParameterSpec` for each parameter — including units, mathematical domain, and
+whether the value is a per-year rate. The same dict is precomputed as
+`pysipnet.PARAMETER_SPECS`, and the [Parameters](../reference/parameters.md) page is
+generated from it:
 
 ```python
 from pysipnet.parameters.base import get_parameter_specs, ParameterDomain
 
 specs = get_parameter_specs(SIPNETParameters)
-# {"photosynthesis.a_max": ParameterSpec(unit="nmol / (g * s)", domain=POSITIVE, ...), ...}
+# {"photosynthesis.max_photosynthesis_rate": ParameterSpec(sipnet_name="aMax", units="nmol g-1 s-1", constituent="CO2", domain=POSITIVE, ...), ...}
 
 # Parameters requiring a log bijector for unconstrained optimisation
 log_params = {k for k, s in specs.items() if s.domain == ParameterDomain.POSITIVE}

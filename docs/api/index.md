@@ -25,6 +25,11 @@
 
 ::: pysipnet.output
 
+## Variables and units
+
+::: pysipnet.variables
+::: pysipnet.units
+
 ## Run configuration
 
 ::: pysipnet.config

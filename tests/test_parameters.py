@@ -21,7 +21,7 @@ class TestParameterSpec:
         specs = get_parameter_specs(SIPNETParameters)
         assert len(specs) > 0
         for path, spec in specs.items():
-            assert spec.unit, f"{path}: unit string is empty"
+            assert spec.units, f"{path}: units string is empty"
             assert spec.domain in ParameterDomain, f"{path}: invalid domain"
             assert spec.description, f"{path}: description is empty"
 
@@ -29,10 +29,10 @@ class TestParameterSpec:
         specs = get_parameter_specs(SIPNETParameters)
         per_year = {k for k, s in specs.items() if s.per_year}
         expected = {
-            "respiration.base_veg_resp",
-            "respiration.base_fine_root_resp",
-            "respiration.base_coarse_root_resp",
-            "respiration.base_soil_resp",
+            "respiration.base_wood_respiration_rate",
+            "respiration.base_fine_root_respiration_rate",
+            "respiration.base_coarse_root_respiration_rate",
+            "respiration.base_soil_respiration_rate",
             "respiration.litter_breakdown_rate",
             "allocation.fine_root_turnover_rate",
             "allocation.coarse_root_turnover_rate",
@@ -44,15 +44,15 @@ class TestParameterSpec:
     def test_positive_params_reject_zero(self):
         with pytest.raises(ValidationError):
             PhotosynthesisParams(
-                a_max=0.0,  # must be > 0
-                a_max_frac=0.76,
-                base_fol_resp_frac=0.1,
-                psn_t_min=2.0,
-                psn_t_opt=24.0,
-                d_vpd_slope=0.05,
-                d_vpd_exp=1.0,
-                half_sat_par=300.0,
-                attenuation=0.5,
+                max_photosynthesis_rate=0.0,  # must be > 0
+                daily_mean_photosynthesis_fraction=0.76,
+                foliar_respiration_fraction=0.1,
+                min_photosynthesis_temperature=2.0,
+                optimum_photosynthesis_temperature=24.0,
+                vapour_pressure_deficit_slope=0.05,
+                vapour_pressure_deficit_exponent=1.0,
+                half_saturation_light=300.0,
+                light_extinction_coefficient=0.5,
             )
 
     def test_unit_interval_rejects_out_of_range(self):
@@ -374,7 +374,7 @@ class TestModelFlagsSerialisation:
 
 class TestSIPNETParameters:
     def test_construction(self, minimal_params):
-        assert minimal_params.photosynthesis.a_max == 112.0
+        assert minimal_params.photosynthesis.max_photosynthesis_rate == 112.0
 
     def test_allocation_triangle_constraint(self, minimal_params):
         data = minimal_params.model_dump()
@@ -386,14 +386,17 @@ class TestSIPNETParameters:
     def test_serialisation_roundtrip(self, minimal_params):
         dumped = minimal_params.model_dump()
         restored = SIPNETParameters.model_validate(dumped)
-        assert restored.photosynthesis.a_max == minimal_params.photosynthesis.a_max
-        assert restored.water.snow_melt == minimal_params.water.snow_melt
+        assert (
+            restored.photosynthesis.max_photosynthesis_rate
+            == minimal_params.photosynthesis.max_photosynthesis_rate
+        )
+        assert restored.water.snow_melt_rate == minimal_params.water.snow_melt_rate
 
     def test_validate_for_flags_snow_missing(self, minimal_params):
         data = minimal_params.model_dump()
-        data["water"]["snow_melt"] = None
+        data["water"]["snow_melt_rate"] = None
         params = SIPNETParameters.model_validate(data)
-        with pytest.raises(ValueError, match="snow_melt"):
+        with pytest.raises(ValueError, match="snow_melt_rate"):
             params.validate_for_flags(ModelFlags.standard())
 
     def test_validate_for_flags_litter_missing(self, minimal_params):
@@ -425,12 +428,12 @@ class TestValidateForFlags:
     @pytest.mark.parametrize(
         ("flags", "group", "field"),
         [
-            (ModelFlags(snow=True), "water", "snow_melt"),
-            (ModelFlags(leaf_water=True), "water", "leaf_pool_depth"),
+            (ModelFlags(snow=True), "water", "snow_melt_rate"),
+            (ModelFlags(leaf_water=True), "water", "leaf_water_pool_depth"),
             (ModelFlags(litter_pool=True), "respiration", "litter_breakdown_rate"),
-            (ModelFlags(litter_pool=True), "respiration", "frac_litter_respired"),
-            (ModelFlags(gdd=True), "phenology", "gdd_leaf_on"),
-            (ModelFlags(gdd=False, soil_phenol=True), "phenology", "soil_temp_leaf_on"),
+            (ModelFlags(litter_pool=True), "respiration", "litter_respired_fraction"),
+            (ModelFlags(gdd=True), "phenology", "leaf_on_growing_degree_days"),
+            (ModelFlags(gdd=False, soil_phenol=True), "phenology", "leaf_on_soil_temperature"),
         ],
         ids=lambda v: v if isinstance(v, str) else "",
     )
@@ -448,20 +451,101 @@ class TestValidateForFlags:
 
     def test_a_parameter_is_not_demanded_when_its_flag_is_off(self, minimal_params):
         """The complement: an off flag must not make its parameter required."""
-        stripped = self._without(minimal_params, "water", "leaf_pool_depth")
+        stripped = self._without(minimal_params, "water", "leaf_water_pool_depth")
         stripped.validate_for_flags(ModelFlags(leaf_water=False))
 
     def test_all_missing_parameters_are_reported_together(self, minimal_params):
         """One round trip should surface every problem, not the first."""
         data = minimal_params.model_dump()
         data["respiration"]["litter_breakdown_rate"] = None
-        data["respiration"]["frac_litter_respired"] = None
+        data["respiration"]["litter_respired_fraction"] = None
         stripped = type(minimal_params).model_validate(data)
         with pytest.raises(ValueError) as exc:
             stripped.validate_for_flags(ModelFlags(litter_pool=True))
         message = str(exc.value)
         assert "litter_breakdown_rate" in message
-        assert "frac_litter_respired" in message
+        assert "litter_respired_fraction" in message
 
     def test_a_complete_parameter_set_passes(self, minimal_params):
         minimal_params.validate_for_flags(ModelFlags.standard())
+
+
+# ---------------------------------------------------------------------------
+# ParameterSpec conventions
+# ---------------------------------------------------------------------------
+
+
+class TestParameterSpecConventions:
+    """Every parameter follows the same naming and units rules as output variables."""
+
+    def test_field_names_follow_convention(self):
+        from pysipnet.parameters.model import PARAMETER_SPECS
+        from pysipnet.variables import NAME_PATTERN
+        from tests.test_variables import FORBIDDEN_NAME_TOKENS
+
+        for path in PARAMETER_SPECS:
+            field = path.split(".", 1)[1]
+            assert NAME_PATTERN.match(field), path
+            assert not (set(field.split("_")) & FORBIDDEN_NAME_TOKENS), path
+
+    def test_every_spec_is_complete(self):
+        from pysipnet.parameters.model import PARAMETER_SPECS
+
+        for path, spec in PARAMETER_SPECS.items():
+            assert spec.sipnet_name, path
+            assert spec.description.strip(), path
+            assert spec.long_label.strip(), path
+            assert spec.axis_label(), path
+            if spec.constituent:
+                assert spec.units != "1", f"{path}: dimensionless quantities have no constituent"
+
+    def test_initial_conditions_name_real_output_states(self):
+        from pysipnet.parameters.model import PARAMETER_SPECS
+        from pysipnet.variables import OUTPUT_VARIABLES_BY_NAME, VariableKind
+
+        initial = {p: s for p, s in PARAMETER_SPECS.items() if p.startswith("initial_conditions.")}
+        assert initial, "no initial conditions found"
+        for path, spec in initial.items():
+            assert spec.initializes, f"{path} does not say which state it initialises"
+            for name in spec.initializes:
+                assert OUTPUT_VARIABLES_BY_NAME[name].kind is VariableKind.STATE, (path, name)
+        others = {p: s for p, s in PARAMETER_SPECS.items() if p not in initial}
+        assert all(not s.initializes for s in others.values())
+
+    def test_aliases_resolve_and_are_unique(self):
+        from pysipnet.parameters.model import PARAMETER_SPECS, resolve_parameter_name
+
+        for path, spec in PARAMETER_SPECS.items():
+            field = path.split(".", 1)[1]
+            assert resolve_parameter_name(field) == field
+            assert resolve_parameter_name(spec.sipnet_name) == field
+            for alias in spec.aliases:
+                assert resolve_parameter_name(alias) == field
+        with pytest.raises(KeyError, match="not a SIPNET parameter"):
+            resolve_parameter_name("aMaxx")
+
+    def test_previous_names_still_resolve(self):
+        from pysipnet.parameters.model import resolve_parameter_name
+
+        assert resolve_parameter_name("a_max") == "max_photosynthesis_rate"
+        assert resolve_parameter_name("soil_whc") == "soil_water_holding_capacity"
+        assert resolve_parameter_name("plant_wood") == "total_wood_carbon"
+        assert resolve_parameter_name("snow_melt") == "snow_melt_rate"
+
+    def test_old_field_names_are_rejected_loudly(self, minimal_params):
+        """A saved parameter set under the previous names must not load silently."""
+        import pydantic
+
+        data = minimal_params.model_dump()
+        data["photosynthesis"]["a_max"] = data["photosynthesis"].pop("max_photosynthesis_rate")
+        with pytest.raises(pydantic.ValidationError, match="a_max"):
+            type(minimal_params).model_validate(data)
+
+    def test_model_override_hint_names_the_renamed_field(self, minimal_params):
+        from unittest.mock import MagicMock
+
+        from pysipnet.model import SIPNETModel
+
+        model = SIPNETModel(MagicMock(), base_params=minimal_params, base_climate=MagicMock())
+        with pytest.raises(ValueError, match="max_photosynthesis_rate"):
+            model(a_max=100.0)

@@ -8,9 +8,9 @@ and exposes a single ``__call__`` interface::
     model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
     result           = model()                          # baseline run
-    result_tuned     = model(a_max=120.0)               # single override
+    result_tuned     = model(max_photosynthesis_rate=120.0)               # single override
     result_site_b    = model(climate=other_climate)     # different drivers
-    result_both      = model(a_max=120.0, climate=other_climate)
+    result_both      = model(max_photosynthesis_rate=120.0, climate=other_climate)
 
 Any SIPNET parameter name (see
 :data:`~pysipnet.parameters.SIPNET_PARAMS_BY_GROUP`) can be passed as a keyword
@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from pysipnet.parameters.model import SIPNET_PARAMS_BY_GROUP
+from pysipnet.parameters.model import _PARAMETER_ALIASES, SIPNET_PARAMS_BY_GROUP
 
 if TYPE_CHECKING:
     from pysipnet.climate import ClimateDrivers
@@ -107,14 +107,14 @@ class SIPNETModel:
         runner = SIPNETRunner(flags=ModelFlags.standard())
         model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
-        result        = model()                         # baseline run
-        result_tuned  = model(a_max=140.0)              # single parameter override
-        result_site_b = model(climate=other_climate)    # swap climate drivers
-        result_both   = model(a_max=140.0, climate=other_climate)
+        result        = model()                                  # baseline run
+        result_tuned  = model(max_photosynthesis_rate=140.0)     # one parameter override
+        result_site_b = model(climate=other_climate)             # swap climate drivers
+        result_both   = model(max_photosynthesis_rate=140.0, climate=other_climate)
 
     Any SIPNET parameter name is accepted as a keyword argument.
     Unrecognised names raise :class:`ValueError` immediately.  Invalid
-    parameter values (e.g., a negative ``a_max``) raise
+    parameter values (e.g., a negative ``max_photosynthesis_rate``) raise
     :class:`pydantic.ValidationError` before the binary is invoked.
 
     Because :class:`SIPNETModel` is a plain callable, it is directly compatible
@@ -145,7 +145,7 @@ class SIPNETModel:
 
     Examples
     --------
-    Explore the sensitivity of annual NEE to ``a_max``:
+    Explore the sensitivity of annual NEE to ``max_photosynthesis_rate``:
 
     .. code-block:: python
 
@@ -153,7 +153,7 @@ class SIPNETModel:
         model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
         nee_by_a_max = {
-            v: model(a_max=v).nee().sum()
+            v: model(max_photosynthesis_rate=v).outputs["nee"].sum().item()
             for v in [80.0, 100.0, 120.0, 140.0]
         }
     """
@@ -209,8 +209,10 @@ class SIPNETModel:
         """
         unknown = {k for k in param_overrides if k not in _PARAM_TO_GROUP}
         if unknown:
+            renamed = {k: _PARAMETER_ALIASES[k] for k in unknown if k in _PARAMETER_ALIASES}
+            hint = f" These are old or SIPNET names; use {renamed}." if renamed else ""
             raise ValueError(
-                f"SIPNETModel: unrecognised parameter name(s): {sorted(unknown)}. "
+                f"SIPNETModel: unrecognised parameter name(s): {sorted(unknown)}.{hint} "
                 "Use a name from pysipnet.parameters.SIPNET_PARAMS_BY_GROUP, "
                 "or climate= / events= for non-parameter inputs."
             )

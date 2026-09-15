@@ -6,49 +6,51 @@ the 14-column and 12-column layouts, both of which the pinned SIPNET reads.
 
 Column conventions
 ------------------
-Python-side column names use ``snake_case`` and match the table below.  The
-I/O layer maps these to the positional format SIPNET expects.
+Python-side column names are the registry names in
+:data:`pysipnet.variables.CLIMATE_VARIABLES`, which also carry units,
+descriptions and the conversions SIPNET applies on read. The I/O layer maps
+them to the positional layout SIPNET expects. The old short names (``tair``,
+``vpd``, ...) and SIPNET's own column names are accepted as aliases by
+:meth:`ClimateDrivers.from_dataframe`, which renames them; stored columns are
+always the registry names.
 
-14-column climate file (the layout the writer emits, space-delimited, no header):
++----+-------------------------------------+---------+----------------------------------+
+| Col| Name                                | Unit    | Notes                            |
++====+=====================================+=========+==================================+
+|  1 | year                                | —       | Integer year, start of step      |
++----+-------------------------------------+---------+----------------------------------+
+|  2 | day_of_year                         | —       | 1 = Jan 1, start of step         |
++----+-------------------------------------+---------+----------------------------------+
+|  3 | hour_of_day                         | h       | After midnight, start of step    |
++----+-------------------------------------+---------+----------------------------------+
+|  4 | time_step_length                    | d       | Timestep duration                |
++----+-------------------------------------+---------+----------------------------------+
+|  5 | air_temperature                     | °C      | Mean over the step               |
++----+-------------------------------------+---------+----------------------------------+
+|  6 | soil_temperature                    | °C      | Mean over the step               |
++----+-------------------------------------+---------+----------------------------------+
+|  7 | photosynthetically_active_radiation | mol m⁻² | Total over the step (Einstein)   |
++----+-------------------------------------+---------+----------------------------------+
+|  8 | precipitation                       | mm      | Total over the step              |
++----+-------------------------------------+---------+----------------------------------+
+|  9 | vapour_pressure_deficit             | Pa      | Mean over the step; must be > 0  |
++----+-------------------------------------+---------+----------------------------------+
+| 10 | soil_vapour_pressure_deficit        | Pa      | Mean over the step               |
++----+-------------------------------------+---------+----------------------------------+
+| 11 | vapour_pressure                     | Pa      | Mean over the step               |
++----+-------------------------------------+---------+----------------------------------+
+| 12 | wind_speed                          | m s⁻¹   | Mean over the step; must be > 0  |
++----+-------------------------------------+---------+----------------------------------+
 
-+-----+----------------+---------+-------------------------------------------+
-| Col | Name           | Unit    | Notes                                     |
-+=====+================+=========+===========================================+
-|  1  | loc            | —       | Integer location index; ignored by SIPNET |
-+-----+----------------+---------+-------------------------------------------+
-|  2  | year           | —       | Integer year                              |
-+-----+----------------+---------+-------------------------------------------+
-|  3  | day            | —       | Integer day-of-year (1 = Jan 1)           |
-+-----+----------------+---------+-------------------------------------------+
-|  4  | time           | hours   | Fractional hours at start of timestep     |
-+-----+----------------+---------+-------------------------------------------+
-|  5  | length         | days    | Timestep duration in days                 |
-+-----+----------------+---------+-------------------------------------------+
-|  6  | tair           | °C      | Mean air temperature                      |
-+-----+----------------+---------+-------------------------------------------+
-|  7  | tsoil          | °C      | Mean soil temperature                     |
-+-----+----------------+---------+-------------------------------------------+
-|  8  | par            | mol m⁻² | PAR integrated over the full timestep (1 Einstein = 1 mol) |
-+-----+----------------+---------+-------------------------------------------+
-|  9  | precip         | mm      | Total precipitation over the timestep     |
-+-----+----------------+---------+-------------------------------------------+
-| 10  | vpd            | Pa      | Vapour pressure deficit (must be > 0)     |
-+-----+----------------+---------+-------------------------------------------+
-| 11  | vpd_soil       | Pa      | Soil–air VPD                              |
-+-----+----------------+---------+-------------------------------------------+
-| 12  | vpress         | Pa      | Vapour pressure in canopy airspace        |
-+-----+----------------+---------+-------------------------------------------+
-| 13  | wspd           | m s⁻¹  | Mean wind speed (must be > 0)             |
-+-----+----------------+---------+-------------------------------------------+
-| 14  | soil_wetness   | —       | Ignored by SIPNET (legacy column)         |
-+-----+----------------+---------+-------------------------------------------+
+Column numbers are for the 12-column file layout; the 14-column layout wraps
+the same values in a leading site identifier and a trailing soil wetness
+value, both of which SIPNET ignores and neither of which is stored here.
 
 PAR units note
 ~~~~~~~~~~~~~~
-The ``par`` column holds the **total** PAR integrated over the timestep
-interval, in Einstein m⁻² ground.  When converting from an instantaneous
-flux (µmol m⁻² s⁻¹), multiply by ``length × 86400 / 1e6`` to obtain
-the per-timestep total in Einstein m⁻².
+``photosynthetically_active_radiation`` holds the **total** over the timestep
+in mol photons m⁻² ground. When converting from an instantaneous flux
+(µmol m⁻² s⁻¹), multiply by ``time_step_length × 86400 / 1e6``.
 
 VPD and wind speed
 ~~~~~~~~~~~~~~~~~~
@@ -62,27 +64,23 @@ behaviour while making the issue visible to the user.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import pandas as pd
 
-# Canonical column names for the Python representation.
-# The loc and soil_wetness columns from v1 are not included here —
+from pysipnet.variables import (
+    CLIMATE_COLUMN_NAMES,
+    CLIMATE_VARIABLES_BY_NAME,
+    resolve_climate_variable,
+)
+
+if TYPE_CHECKING:
+    import xarray as xr
+
+# Canonical column names for the Python representation, from the registry.
+# The loc and soil_wetness columns of the 14-column layout are not included:
 # they are written/read by the IO layer as padding, not stored in the DataFrame.
-CLIM_COLUMNS: list[str] = [
-    "year",
-    "day",
-    "time",
-    "length",
-    "tair",
-    "tsoil",
-    "par",
-    "precip",
-    "vpd",
-    "vpd_soil",
-    "vpress",
-    "wspd",
-]
+CLIMATE_COLUMNS: list[str] = list(CLIMATE_COLUMN_NAMES)
 
 
 class ClimateDrivers:
@@ -101,7 +99,7 @@ class ClimateDrivers:
     Parameters
     ----------
     data:
-        One row per model timestep with columns matching :data:`CLIM_COLUMNS`.
+        One row per model timestep with columns matching :data:`CLIMATE_COLUMNS`.
         Mutually exclusive with *source_path*.
     source_path:
         Path to an existing ``.clim`` file.  Mutually exclusive with *data*.
@@ -145,7 +143,7 @@ class ClimateDrivers:
             Path to the ``.clim`` file.
         n_columns:
             Which layout to expect.  ``14`` expects 14 columns (site index
-            in col 1, soil-wetness in col 14); ``"v2"`` expects 12 columns.
+            in col 1, soil-wetness in col 14); ``12`` expects 12 columns.
         """
         from pysipnet.io.clim_io import read_clim_file
 
@@ -160,8 +158,10 @@ class ClimateDrivers:
     ) -> ClimateDrivers:
         """Construct from a pre-built DataFrame.
 
-        The DataFrame must contain columns matching :data:`CLIM_COLUMNS`.
-        Extra columns are ignored.
+        The DataFrame must contain every column in :data:`CLIMATE_COLUMNS`,
+        under its registry name or an alias (``tair`` for ``air_temperature``,
+        ``vpd`` for ``vapour_pressure_deficit``, ...). Aliased columns are
+        renamed; extra columns are ignored.
 
         Parameters
         ----------
@@ -172,10 +172,11 @@ class ClimateDrivers:
         loc:
             Location index (v1 only).
         """
-        missing = set(CLIM_COLUMNS) - set(df.columns)
+        df = _rename_aliases(df)
+        missing = set(CLIMATE_COLUMNS) - set(df.columns)
         if missing:
             raise ValueError(f"DataFrame is missing required columns: {sorted(missing)}")
-        obj = cls(data=df[CLIM_COLUMNS].copy(), n_columns=n_columns, loc=loc)
+        obj = cls(data=df[CLIMATE_COLUMNS].copy(), n_columns=n_columns, loc=loc)
         obj.validate()
         return obj
 
@@ -232,6 +233,23 @@ class ClimateDrivers:
             self._data = read_clim_file(self.source_path, n_columns=self.n_columns).data
         return self._data
 
+    @property
+    def dataset(self) -> xr.Dataset:
+        """The drivers as an :class:`xarray.Dataset` on the same ``time`` axis as outputs.
+
+        ``time`` is the start of each step; ``time_step_end`` and
+        ``time_step_length`` are coordinates; every variable carries its units,
+        description and time reference from :data:`pysipnet.variables.CLIMATE_VARIABLES`.
+        """
+        from pysipnet.dataset import dataframe_to_dataset
+
+        return dataframe_to_dataset(
+            self.data,
+            attributes_for=_attributes_for,
+            time_step_length=self.data["time_step_length"].to_numpy(),
+            source="SIPNET climate drivers, via pySIPNET",
+        )
+
     # ── Validation ─────────────────────────────────────────────────────────────
 
     def validate(self) -> None:
@@ -260,35 +278,36 @@ class ClimateDrivers:
             )
 
     def _check_positive_length(self) -> None:
-        if (self.data["length"] <= 0).any():
-            raise ValueError("All 'length' values must be > 0 (timestep duration in days).")
+        if (self.data["time_step_length"] <= 0).any():
+            raise ValueError(
+                "All 'time_step_length' values must be > 0 (timestep duration in days)."
+            )
 
     def _check_monotonic_time(self) -> None:
         # Construct a monotone scalar: days from an arbitrary epoch
-        doy = self.data["year"] * 366 + self.data["day"] + self.data["time"] / 24.0
+        d = self.data
+        doy = d["year"] * 366 + d["day_of_year"] + d["hour_of_day"] / 24.0
         if not doy.is_monotonic_increasing:
             raise ValueError(
                 "Climate timesteps are not in chronological order. "
-                "Rows must be sorted by (year, day, time)."
+                "Rows must be sorted by (year, day_of_year, hour_of_day)."
             )
 
     def _check_vpd_wind(self) -> None:
-        if (self.data["vpd"] <= 0).any():
-            n = (self.data["vpd"] <= 0).sum()
-            import warnings
+        import warnings
 
+        vpd = self.data["vapour_pressure_deficit"]
+        if (vpd <= 0).any():
             warnings.warn(
-                f"{n} timestep(s) have vpd ≤ 0 Pa. "
+                f"{(vpd <= 0).sum()} timestep(s) have vapour_pressure_deficit ≤ 0 Pa. "
                 "SIPNET clamps these to a tiny positive value to avoid division by zero, "
                 "but this may indicate a data issue.",
                 stacklevel=3,
             )
-        if (self.data["wspd"] <= 0).any():
-            n = (self.data["wspd"] <= 0).sum()
-            import warnings
-
+        wind = self.data["wind_speed"]
+        if (wind <= 0).any():
             warnings.warn(
-                f"{n} timestep(s) have wspd ≤ 0 m s⁻¹. "
+                f"{(wind <= 0).sum()} timestep(s) have wind_speed ≤ 0 m s⁻¹. "
                 "SIPNET clamps these internally, but this may indicate bad data.",
                 stacklevel=3,
             )
@@ -328,16 +347,16 @@ class ClimateDrivers:
             first = self._data.iloc[0]
             last = self._data.iloc[-1]
             return (
-                (int(first["year"]), int(first["day"])),
-                (int(last["year"]), int(last["day"])),
+                (int(first["year"]), int(first["day_of_year"])),
+                (int(last["year"]), int(last["day_of_year"])),
             )
         if self._date_range is not None:
             return self._date_range
         first = self.data.iloc[0]
         last = self.data.iloc[-1]
         return (
-            (int(first["year"]), int(first["day"])),
-            (int(last["year"]), int(last["day"])),
+            (int(first["year"]), int(first["day_of_year"])),
+            (int(last["year"]), int(last["day_of_year"])),
         )
 
     def __repr__(self) -> str:
@@ -347,3 +366,28 @@ class ClimateDrivers:
             f"timesteps={self.n_timesteps}, "
             f"range={y0}-{d0:03d} to {y1}-{d1:03d})"
         )
+
+
+def _rename_aliases(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename columns given under an alias or SIPNET name to the registry name."""
+    renames: dict[str, str] = {}
+    for column in df.columns:
+        if column in CLIMATE_VARIABLES_BY_NAME:
+            continue
+        try:
+            target = resolve_climate_variable(str(column)).name
+        except KeyError:
+            continue  # an extra column; from_dataframe drops it
+        if target in df.columns or target in renames.values():
+            raise ValueError(
+                f"Climate DataFrame has column {column!r} and its canonical name {target!r} "
+                "(or another alias of it). Keep one of them; there is no way to know which "
+                "holds the intended values."
+            )
+        renames[column] = target
+    return df.rename(columns=renames) if renames else df
+
+
+def _attributes_for(name: str) -> dict[str, Any]:
+    spec = CLIMATE_VARIABLES_BY_NAME.get(name)
+    return {} if spec is None else spec.xarray_attributes()

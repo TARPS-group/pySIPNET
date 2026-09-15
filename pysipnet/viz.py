@@ -17,6 +17,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from pysipnet.parameters.model import PARAMETER_SPECS
+from pysipnet.variables import CLIMATE_VARIABLES_BY_NAME, OUTPUT_VARIABLES_BY_NAME
+
 if TYPE_CHECKING:
     import plotly.graph_objects as go
 
@@ -24,30 +27,39 @@ if TYPE_CHECKING:
 
 # ── Panel definitions ──────────────────────────────────────────────────────────
 
-_CLIM_PANELS: list[tuple[str, str, int, int]] = [
-    ("tair", "Air Temperature (°C)", 3, 1),
-    ("par", "PAR (mol m⁻²)", 3, 2),
-    ("precip", "Precipitation (mm)", 4, 1),
-    ("vpd", "VPD (Pa)", 4, 2),
+# Climate panels: (registry name, subplot row, subplot column). Labels come
+# from the climate registry so they carry the right units.
+_CLIM_PANELS: list[tuple[str, int, int]] = [
+    ("air_temperature", 3, 1),
+    ("photosynthetically_active_radiation", 3, 2),
+    ("precipitation", 4, 1),
+    ("vapour_pressure_deficit", 4, 2),
 ]
 
-_FLUX_COLS: dict[str, str] = {
-    "nee": "NEE",
-    "gpp": "GPP",
-    "evapotranspiration": "ET",
-    "ra": "Rₐ",
-    "rh": "Rₕ",
-}
+# Output variables shown in the two output panels, by registry name. Labels
+# and units come from the registry so the dashboard cannot disagree with it.
+_FLUX_VARIABLES: tuple[str, ...] = (
+    "net_ecosystem_exchange",
+    "gross_primary_production",
+    "evapotranspiration",
+    "autotrophic_respiration",
+    "heterotrophic_respiration",
+)
 
-_POOL_COLS: dict[str, str] = {
-    "plant_wood_c": "Wood C (stem)",  # aboveground wood; roots tracked separately
-    "plant_leaf_c": "Leaf C",
-    "coarse_root_c": "Coarse Root C",
-    "fine_root_c": "Fine Root C",
-    "soil_c": "Soil C",
-    "litter_c": "Litter C",
-    "soil_water": "Soil Water",
-}
+_POOL_VARIABLES: tuple[str, ...] = (
+    "wood_carbon",
+    "leaf_carbon",
+    "coarse_root_carbon",
+    "fine_root_carbon",
+    "soil_carbon",
+    "litter_carbon",
+    "soil_water",
+)
+
+
+def _labels(names: tuple[str, ...]) -> dict[str, str]:
+    return {name: OUTPUT_VARIABLES_BY_NAME[name].label for name in names}
+
 
 _TH_BG = "#e8eef4"  # table header background
 _ROW_A = "#f9fafb"  # odd-group row fill
@@ -144,10 +156,11 @@ def _param_table(result: SIPNETResult) -> go.Table:
             label = group_name.replace("_", " ").title()
             first = True
             for pname, pval in group_dict.items():
+                spec = PARAMETER_SPECS.get(f"{group_name}.{pname}")
                 if pval is None:
                     continue
                 group_col.append(f"<b>{label}</b>" if first else "")
-                param_col.append(pname.replace("_", " "))
+                param_col.append(spec.long_label if spec is not None else pname.replace("_", " "))
                 value_col.append(f"{pval:.4g}" if isinstance(pval, float) else str(pval))
                 row_colors.append(fill)
                 first = False
@@ -236,12 +249,13 @@ def dashboard(
 
     clim = result.climate.data
 
-    x_ts = ts["year"] + (ts["day"] - 1) / 365
-    x_clim = clim["year"] + (clim["day"] - 1) / 365
+    x_ts = ts["year"] + (ts["day_of_year"] - 1) / 365
+    x_clim = clim["year"] + (clim["day_of_year"] - 1) / 365
 
-    flux_cols = dict(_FLUX_COLS)
-    if show_cum_nee and "cum_nee" in ts.columns:
-        flux_cols["cum_nee"] = "Cumulative NEE"
+    flux_cols = _labels(_FLUX_VARIABLES)
+    if show_cum_nee and "cumulative_net_ecosystem_exchange" in ts.columns:
+        flux_cols.update(_labels(("cumulative_net_ecosystem_exchange",)))
+    pool_cols = _labels(_POOL_VARIABLES)
 
     # ── Compute section-boundary paper coordinates ─────────────────────────────
     #
@@ -277,11 +291,8 @@ def dashboard(
             # Table rows: blank (section headers added as annotations below)
             "",
             "",
-            # Climate panels
-            "Air Temperature (°C)",
-            "PAR (mol m⁻²)",
-            "Precipitation (mm)",
-            "VPD (Pa)",
+            # Climate panels, labelled from the registry
+            *[CLIMATE_VARIABLES_BY_NAME[name].axis_label() for name, _, _ in _CLIM_PANELS],
             # Output panels
             "Fluxes  (g C m⁻² per timestep · ET in cm)",
             "Carbon & Water Pools  (g C m⁻² · soil water in cm)",
@@ -295,9 +306,10 @@ def dashboard(
 
     # ── Climate inputs ────────────────────────────────────────────────────────
 
-    for col, label, row, col_idx in _CLIM_PANELS:
+    for col, row, col_idx in _CLIM_PANELS:
         if col not in clim.columns:
             continue
+        label = CLIMATE_VARIABLES_BY_NAME[col].label
         fig.add_trace(
             go.Scatter(x=x_clim, y=clim[col], mode="lines", name=label, showlegend=False),
             row=row,
@@ -320,7 +332,7 @@ def dashboard(
     # ── Pools (legend3) ───────────────────────────────────────────────────────
 
     pool_trace_indices: dict[str, int] = {}
-    for col, label in _POOL_COLS.items():
+    for col, label in pool_cols.items():
         if col not in ts.columns:
             continue
         pool_trace_indices[label] = len(fig.data)

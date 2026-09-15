@@ -48,7 +48,7 @@ and return a file-backed :class:`~pysipnet.output.SIPNETOutput` instead::
     )
     results = [runner.run(params_i, climate, run_id=f"m{i}") for i in range(1000)]
     # No DataFrames in memory yet.
-    nee = pd.concat([r.outputs.load(columns=["nee"]) for r in results])
+    nee = pd.concat([r.outputs.load(variables=["nee"]) for r in results])
 
 Each run writes ``sipnet_<run_id>.out`` inside ``output_dir``.
 """
@@ -440,10 +440,10 @@ class SIPNETRunner:
             out_src = workdir / "sipnet.out"
             if check and not (provenance.returncode == 0 and out_src.exists()):
                 # Returning an empty frame here would defer the failure to
-                # whatever the caller does next — typically result.nee(), which
-                # raises KeyError a long way from the cause, with SIPNET's own
-                # explanation stranded on the provenance object. In an ensemble
-                # the empties are collected silently.
+                # whatever the caller does next — typically a column lookup,
+                # which raises KeyError a long way from the cause, with SIPNET's
+                # own explanation stranded on the provenance object. In an
+                # ensemble the empties are collected silently.
                 reason = (
                     f"SIPNET exited with code {provenance.returncode}"
                     if provenance.returncode != 0
@@ -459,7 +459,7 @@ class SIPNETRunner:
                     stderr=proc.stderr,
                     workdir=workdir,
                 )
-            outputs = self._build_output(provenance, out_src, effective_output_dir, run_id)
+            outputs = self._build_output(provenance, out_src, effective_output_dir, run_id, climate)
 
         finally:
             if not self.keep_workdir:
@@ -480,10 +480,18 @@ class SIPNETRunner:
         out_src: Path,
         effective_output_dir: Path | None,
         run_id: str,
+        climate: ClimateDrivers,
     ) -> SIPNETOutput:
-        """Copy or parse the output file and return an appropriate SIPNETOutput."""
+        """Copy or parse the output file and return an appropriate SIPNETOutput.
+
+        The timestep lengths come from the climate drivers; SIPNET does not
+        write them, and without them the output cannot say when each step ends.
+        They are handed over as a callable so a file-backed climate is not read
+        just to build a result nobody has asked for the Dataset of.
+        """
         import shutil
 
+        import numpy as np
         import pandas as pd
 
         from pysipnet.io.output_reader import read_output_file
@@ -492,9 +500,12 @@ class SIPNETRunner:
         if not (provenance.returncode == 0 and out_src.exists()):
             return SIPNETOutput.from_dataframe(pd.DataFrame())
 
+        def step_length() -> np.ndarray:
+            return climate.data["time_step_length"].to_numpy()
+
         if effective_output_dir is not None:
             dest = effective_output_dir / f"sipnet_{run_id}.out"
             shutil.copy2(out_src, dest)
-            return SIPNETOutput.from_path(dest)
+            return SIPNETOutput.from_path(dest, time_step_length=step_length)
 
-        return SIPNETOutput.from_dataframe(read_output_file(out_src))
+        return SIPNETOutput.from_dataframe(read_output_file(out_src), time_step_length=step_length)

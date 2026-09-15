@@ -26,17 +26,17 @@ def in_memory_climate() -> ClimateDrivers:
         pd.DataFrame(
             {
                 "year": [2020] * _CLIM_ROWS,
-                "day": list(range(1, _CLIM_ROWS + 1)),
-                "time": [0.0] * _CLIM_ROWS,
-                "length": [1.0] * _CLIM_ROWS,
-                "tair": [15.0] * _CLIM_ROWS,
-                "tsoil": [12.0] * _CLIM_ROWS,
-                "par": [8.0] * _CLIM_ROWS,
-                "precip": [2.0] * _CLIM_ROWS,
-                "vpd": [100.0] * _CLIM_ROWS,
-                "vpd_soil": [80.0] * _CLIM_ROWS,
-                "vpress": [900.0] * _CLIM_ROWS,
-                "wspd": [2.0] * _CLIM_ROWS,
+                "day_of_year": list(range(1, _CLIM_ROWS + 1)),
+                "hour_of_day": [0.0] * _CLIM_ROWS,
+                "time_step_length": [1.0] * _CLIM_ROWS,
+                "air_temperature": [15.0] * _CLIM_ROWS,
+                "soil_temperature": [12.0] * _CLIM_ROWS,
+                "photosynthetically_active_radiation": [8.0] * _CLIM_ROWS,
+                "precipitation": [2.0] * _CLIM_ROWS,
+                "vapour_pressure_deficit": [100.0] * _CLIM_ROWS,
+                "soil_vapour_pressure_deficit": [80.0] * _CLIM_ROWS,
+                "vapour_pressure": [900.0] * _CLIM_ROWS,
+                "wind_speed": [2.0] * _CLIM_ROWS,
             }
         )
     )
