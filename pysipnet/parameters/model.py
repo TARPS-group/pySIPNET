@@ -416,6 +416,18 @@ class InitialConditions(ParameterGroup):
     (SIPNET makes no file-format distinction between the two). Each field's
     ``initializes`` records the output state variable it sets, and
     ``initializes_via`` how, when the relation is not the identity.
+
+    Every field here is read exactly once, in SIPNET's ``setupModel()``
+    before the first timestep. The root fractions, for example, only split
+    ``total_wood_carbon`` at the start; root growth afterwards is governed by
+    the allocation and turnover parameters. None of these values influences a
+    later timestep.
+
+    Restart caveat: when SIPNET resumes from a checkpoint (``RESTART_IN`` in
+    ``sipnet.in``), ``restartLoadCheckpoint()`` runs after ``setupModel()``
+    and overwrites every pool, so these fields have no effect at all on a
+    restarted run. pySIPNET does not use restarts yet; this is recorded for
+    when it does.
     """
 
     total_wood_carbon: float = param_field(
