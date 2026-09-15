@@ -370,9 +370,9 @@ EXPECTED_CLIMATE_NAMES: dict[str, str] = {
     "tsoil": "soil_temperature",
     "par": "photosynthetically_active_radiation",
     "precip": "precipitation",
-    "vpd": "vapour_pressure_deficit",
-    "vpdSoil": "soil_vapour_pressure_deficit",
-    "vPress": "vapour_pressure",
+    "vpd": "vapor_pressure_deficit",
+    "vpdSoil": "soil_vapor_pressure_deficit",
+    "vPress": "vapor_pressure",
     "wspd": "wind_speed",
 }
 
@@ -425,11 +425,24 @@ def test_previous_climate_names_still_resolve():
 
     for old, new in {
         "tair": "air_temperature",
-        "vpd_soil": "soil_vapour_pressure_deficit",
-        "vPress": "vapour_pressure",
+        "vpd_soil": "soil_vapor_pressure_deficit",
+        "vPress": "vapor_pressure",
         "length": "time_step_length",
         "day": "day_of_year",
     }.items():
         assert resolve_climate_variable(old).name == new
     with pytest.raises(KeyError, match="not a SIPNET climate driver"):
         resolve_climate_variable("rain")
+
+
+def test_british_spellings_resolve_as_aliases():
+    """Names use American spelling; the British forms shipped briefly and still resolve."""
+    from pysipnet.parameters.model import resolve_parameter_name
+    from pysipnet.variables import resolve_climate_variable
+
+    assert resolve_climate_variable("vapour_pressure_deficit").name == "vapor_pressure_deficit"
+    assert resolve_climate_variable("soil_vapour_pressure_deficit").name == (
+        "soil_vapor_pressure_deficit"
+    )
+    assert resolve_climate_variable("vapour_pressure").name == "vapor_pressure"
+    assert resolve_parameter_name("vapour_pressure_deficit_slope") == "vapor_pressure_deficit_slope"

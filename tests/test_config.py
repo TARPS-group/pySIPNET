@@ -33,9 +33,9 @@ def in_memory_climate() -> ClimateDrivers:
                 "soil_temperature": [12.0] * _CLIM_ROWS,
                 "photosynthetically_active_radiation": [8.0] * _CLIM_ROWS,
                 "precipitation": [2.0] * _CLIM_ROWS,
-                "vapour_pressure_deficit": [100.0] * _CLIM_ROWS,
-                "soil_vapour_pressure_deficit": [80.0] * _CLIM_ROWS,
-                "vapour_pressure": [900.0] * _CLIM_ROWS,
+                "vapor_pressure_deficit": [100.0] * _CLIM_ROWS,
+                "soil_vapor_pressure_deficit": [80.0] * _CLIM_ROWS,
+                "vapor_pressure": [900.0] * _CLIM_ROWS,
                 "wind_speed": [2.0] * _CLIM_ROWS,
             }
         )

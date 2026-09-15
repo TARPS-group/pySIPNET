@@ -12,7 +12,7 @@ not need regenerating. The upstream file is sub-daily; the 1999 rows were
 aggregated to one record per day:
 
 - `photosynthetically_active_radiation`, `precipitation` — **summed** over each day (totals over the timestep)
-- `air_temperature`, `soil_temperature`, `vapour_pressure_deficit`, `soil_vapour_pressure_deficit`, `vapour_pressure`, `wind_speed` — **daily mean**
+- `air_temperature`, `soil_temperature`, `vapor_pressure_deficit`, `soil_vapor_pressure_deficit`, `vapor_pressure`, `wind_speed` — **daily mean**
 - `hour_of_day = 0`, `time_step_length = 1.0` (one-day timestep)
 
 The result is a 14-column `.clim` file with 365 daily rows.  (The column count

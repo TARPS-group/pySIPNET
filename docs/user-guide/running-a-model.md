@@ -94,8 +94,8 @@ params = SIPNETParameters(
         foliar_respiration_fraction=0.1,
         min_photosynthesis_temperature=2.0,         # °C
         optimum_photosynthesis_temperature=24.0,        # °C
-        vapour_pressure_deficit_slope=0.05,
-        vapour_pressure_deficit_exponent=1.0,
+        vapor_pressure_deficit_slope=0.05,
+        vapor_pressure_deficit_exponent=1.0,
         half_saturation_light=300.0,    # mol photons m⁻² day⁻¹
         light_extinction_coefficient=0.5,
     ),
@@ -403,7 +403,7 @@ from pysipnet import SIPNET_PARAMS_BY_GROUP
 # What parameters are in the photosynthesis group?
 SIPNET_PARAMS_BY_GROUP["photosynthesis"]
 # ['max_photosynthesis_rate', 'daily_mean_photosynthesis_fraction', 'foliar_respiration_fraction', 'min_photosynthesis_temperature', 'optimum_photosynthesis_temperature',
-#  'vapour_pressure_deficit_slope', 'vapour_pressure_deficit_exponent', 'half_saturation_light', 'light_extinction_coefficient']
+#  'vapor_pressure_deficit_slope', 'vapor_pressure_deficit_exponent', 'half_saturation_light', 'light_extinction_coefficient']
 
 # All groups
 list(SIPNET_PARAMS_BY_GROUP.keys())

@@ -539,7 +539,7 @@ class InitialConditions(ParameterGroup):
 class PhotosynthesisParams(ParameterGroup):
     """Parameters governing gross primary production.
 
-    Vapour pressure deficit (VPD) effect: ``1 − slope × vpd^exponent``
+    Vapor pressure deficit (VPD) effect: ``1 − slope × vpd^exponent``
     multiplies photosynthesis, so a larger slope means stronger suppression.
 
     The maximum photosynthesis temperature is derived internally as
@@ -591,22 +591,22 @@ class PhotosynthesisParams(ParameterGroup):
         long_label="Optimum photosynthesis temperature",
         aliases=("psn_t_opt",),
     )
-    vapour_pressure_deficit_slope: float = param_field(
+    vapor_pressure_deficit_slope: float = param_field(
         sipnet_name="dVpdSlope",
         units="kPa-1",
         domain=_D.POSITIVE,
-        description="Slope of the vapour pressure deficit reduction of photosynthesis: "
+        description="Slope of the vapor pressure deficit reduction of photosynthesis: "
         "the multiplier is 1 − slope × vpd^exponent.",
-        long_label="Vapour pressure deficit slope",
-        aliases=("d_vpd_slope",),
+        long_label="Vapor pressure deficit slope",
+        aliases=("d_vpd_slope", "vapour_pressure_deficit_slope"),
     )
-    vapour_pressure_deficit_exponent: float = param_field(
+    vapor_pressure_deficit_exponent: float = param_field(
         sipnet_name="dVpdExp",
         units="1",
         domain=_D.POSITIVE,
-        description="Exponent of the vapour pressure deficit reduction of photosynthesis.",
-        long_label="Vapour pressure deficit exponent",
-        aliases=("d_vpd_exp",),
+        description="Exponent of the vapor pressure deficit reduction of photosynthesis.",
+        long_label="Vapor pressure deficit exponent",
+        aliases=("d_vpd_exp", "vapour_pressure_deficit_exponent"),
     )
     half_saturation_light: float = param_field(
         sipnet_name="halfSatPar",
@@ -968,7 +968,7 @@ class WaterParams(ParameterGroup):
         domain=_D.POSITIVE,
         description="Water use efficiency constant linking transpiration to gross primary "
         "production: water use efficiency in mg CO2 per g water is this value divided by "
-        "the vapour pressure deficit in kPa.",
+        "the vapor pressure deficit in kPa.",
         long_label="Water use efficiency",
         short_label="WUE",
         aliases=("wue_const",),

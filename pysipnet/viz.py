@@ -33,7 +33,7 @@ _CLIM_PANELS: list[tuple[str, int, int]] = [
     ("air_temperature", 3, 1),
     ("photosynthetically_active_radiation", 3, 2),
     ("precipitation", 4, 1),
-    ("vapour_pressure_deficit", 4, 2),
+    ("vapor_pressure_deficit", 4, 2),
 ]
 
 # Output variables shown in the two output panels, by registry name. Labels

@@ -48,9 +48,9 @@ def _make_climate(n_days: int = 30, year: int = 2010, start_doy: int = 150):
                 "soil_temperature": 12.0 + 3.0 * np.sin(np.pi * i / n_days),
                 "photosynthetically_active_radiation": 15.0,
                 "precipitation": 2.0,
-                "vapour_pressure_deficit": 1200.0,
-                "soil_vapour_pressure_deficit": 600.0,
-                "vapour_pressure": 1500.0,
+                "vapor_pressure_deficit": 1200.0,
+                "soil_vapor_pressure_deficit": 600.0,
+                "vapor_pressure": 1500.0,
                 "wind_speed": 2.0,
             }
         )
@@ -596,9 +596,9 @@ class TestSnowFlag:
                 "soil_temperature": -2.0,
                 "photosynthetically_active_radiation": 5.0,
                 "precipitation": 10.0,
-                "vapour_pressure_deficit": 300.0,
-                "soil_vapour_pressure_deficit": 200.0,
-                "vapour_pressure": 300.0,
+                "vapor_pressure_deficit": 300.0,
+                "soil_vapor_pressure_deficit": 200.0,
+                "vapor_pressure": 300.0,
                 "wind_speed": 2.0,
             }
             for i in range(n_days)

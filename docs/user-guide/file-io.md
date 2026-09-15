@@ -74,7 +74,7 @@ at construction time.  The runner serialises this to disk as a new `.clim` file
 in the working directory.
 
 Columns are named as on the [Climate drivers](../reference/climate-drivers.md)
-page (`air_temperature`, `vapour_pressure_deficit`, `time_step_length`, ...).
+page (`air_temperature`, `vapor_pressure_deficit`, `time_step_length`, ...).
 `from_dataframe` also accepts the short names pySIPNET used previously and
 SIPNET's own column names (`tair`, `vpdSoil`, `length`) and renames them; the
 stored columns are always the full names.

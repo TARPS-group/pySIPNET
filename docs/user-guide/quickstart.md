@@ -45,7 +45,7 @@ params = SIPNETParameters(
     photosynthesis=PhotosynthesisParams(
         max_photosynthesis_rate=112.0, daily_mean_photosynthesis_fraction=0.76, foliar_respiration_fraction=0.1,
         min_photosynthesis_temperature=2.0, optimum_photosynthesis_temperature=24.0,
-        vapour_pressure_deficit_slope=0.05, vapour_pressure_deficit_exponent=1.0,
+        vapor_pressure_deficit_slope=0.05, vapor_pressure_deficit_exponent=1.0,
         half_saturation_light=300.0, light_extinction_coefficient=0.5,
     ),
     phenology=PhenologyParams(

@@ -234,8 +234,8 @@ The table uses SIPNET's column names. The Python column names are the
 registry names in `CLIMATE_VARIABLES` (`pysipnet/variables.py`):
 `air_temperature` (tair), `soil_temperature` (tsoil),
 `photosynthetically_active_radiation` (par), `precipitation` (precip),
-`vapour_pressure_deficit` (vpd), `soil_vapour_pressure_deficit` (vpdSoil),
-`vapour_pressure` (vPress), `wind_speed` (wspd), and the shared time columns
+`vapor_pressure_deficit` (vpd), `soil_vapor_pressure_deficit` (vpdSoil),
+`vapor_pressure` (vPress), `wind_speed` (wspd), and the shared time columns
 `year`, `day_of_year`, `hour_of_day`, `time_step_length`. Each spec records
 the file units and SIPNET's internal conversion below as `units` /
 `internal_units` / `internal_conversion`. `ClimateDrivers.from_dataframe`
