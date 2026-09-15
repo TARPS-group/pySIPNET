@@ -40,7 +40,7 @@ directly.
 A tag is not immutable. If upstream re-tags `v2.2.0-alpha.1`,
 `tests/test_build.py` fails, because it asserts the submodule sits at
 `SIPNET_PINNED_COMMIT` — a commit, which cannot move. That is the intended
-behaviour: loud, not silent.
+behavior: loud, not silent.
 
 ### The trap: the numeric version lags the tag
 
@@ -50,7 +50,7 @@ behaviour: loud, not silent.
     SIPNET version 2.1.0 (v2.2.0-alpha.1)
 
 The numeric version therefore **cannot identify the pin** — a v2.1.0 binary
-reports the same number. The parenthesised part is `git describe --tags`,
+reports the same number. The parenthesized part is `git describe --tags`,
 injected by SIPNET's Makefile as `GIT_HASH`, and that is what
 `sipnet_build_tag()` extracts and `test_build.py` checks. `SIPNET_NUMERIC_VERSION`
 is recorded for reporting only. Do not be tempted to check it instead; a test
@@ -146,14 +146,14 @@ stdin input:
 There is **no phenology, LAI, NDVI or observation-data input**. See gotcha 8.
 
 Restart checkpoints (`RESTART_IN` / `RESTART_OUT`) are new at this pin and
-serialise `envi`, `trackers`, `phenologyTrackers` and `event_trackers` for
+serialize `envi`, `trackers`, `phenologyTrackers` and `event_trackers` for
 segmented runs. pySIPNET does not use them yet; they are the obvious route to
 efficient sequential data assimilation.
 
 ### `sipnet.in` (run configuration)
 
 Parsed into a global `Context` (`sipnet/src/common/context.c`). Separators are
-` \t=:`, comment character `!`. Keys are normalised by `nameToKey` —
+` \t=:`, comment character `!`. Keys are normalized by `nameToKey` —
 non-alphanumerics stripped, lowercased — so `FILE_NAME`, `file-name` and
 `fileName` are the same key. Unknown keys produce a log line and are
 **ignored**, which is why `tests/test_sipnet_in.py` reads SIPNET's output back
@@ -205,7 +205,7 @@ warning and are otherwise accepted. Comment character `!`. Order-independent.
 Name lookup is case-insensitive (`strcasecmp` in `locateParam`).
 
 Hard errors: a value of `*` (the old spatially-varying marker), and any
-parameter given twice. An **unrecognised name is only a warning**, which is why
+parameter given twice. An **unrecognized name is only a warning**, which is why
 `tests/test_param_file_contract.py` runs the binary and fails on any
 `"Unknown param"` line — a renamed parameter would otherwise silently stop
 having any effect.
@@ -234,8 +234,8 @@ The table uses SIPNET's column names. The Python column names are the
 registry names in `CLIMATE_VARIABLES` (`pysipnet/variables.py`):
 `air_temperature` (tair), `soil_temperature` (tsoil),
 `photosynthetically_active_radiation` (par), `precipitation` (precip),
-`vapour_pressure_deficit` (vpd), `soil_vapour_pressure_deficit` (vpdSoil),
-`vapour_pressure` (vPress), `wind_speed` (wspd), and the shared time columns
+`vapor_pressure_deficit` (vpd), `soil_vapor_pressure_deficit` (vpdSoil),
+`vapor_pressure` (vPress), `wind_speed` (wspd), and the shared time columns
 `year`, `day_of_year`, `hour_of_day`, `time_step_length`. Each spec records
 the file units and SIPNET's internal conversion below as `units` /
 `internal_units` / `internal_conversion`. `ClimateDrivers.from_dataframe`
@@ -340,10 +340,10 @@ and that SIPNET's own docs get wrong or omit:
   can be negative → `wood_storage_carbon`.
 - `rSoil` = `rRoot + rh` (root **plus** heterotrophic) → `soil_respiration`.
   SIPNET's docs label it R_H; that is wrong.
-- `n2o` = `nVolatilization × length`, total volatilised mineral N, g N →
+- `n2o` = `nVolatilization × length`, total volatilized mineral N, g N →
   `nitrogen_volatilization`. `ch4` is g **C**.
 - `soilWetnessFrac` is the two-point mean of start and end wetness.
-- `cumNEE` (`totNee`) is never reset and is serialised in restart checkpoints.
+- `cumNEE` (`totNee`) is never reset and is serialized in restart checkpoints.
 - N trackers are assigned only inside `if (ctx.nitrogenCycle)`, so they are
   exactly zero otherwise.
 - Every column has a fixed `%w.pf` precision: carbon fluxes 3 decimals, pools
@@ -505,7 +505,7 @@ different parameters depending on `sipnet.in`. `ModelFlags` mirrors this in
 
 3. **SIPNET expects files in the current working directory.** The runner writes all inputs to a fresh temp dir per run and executes the binary there. The generated `sipnet.in` sets `FILE_NAME = sipnet`, so SIPNET reads `sipnet.param` and `sipnet.clim` and writes `sipnet.out`.
 
-4. **Model options are runtime, and they change which parameters are required.** All ten (`GDD`, `SNOW`, `WATER_HRESP`, `GROWTH_RESP`, `LEAF_WATER`, `LITTER_POOL`, `SOIL_PHENOL`, `NITROGEN_CYCLE`, `ANAEROBIC`, `FLOODING`) are set in `sipnet.in`. One binary, `make sipnet`, no `-D` flags, no source patch. Because they change the required parameter set, the flags are part of the run specification, not a build detail — which is why `ModelFlags` is serialised into `RunConfig` and `RunProvenance`. SIPNET rejects four combinations (`validateContext()`); `ModelFlags` rejects them first.
+4. **Model options are runtime, and they change which parameters are required.** All ten (`GDD`, `SNOW`, `WATER_HRESP`, `GROWTH_RESP`, `LEAF_WATER`, `LITTER_POOL`, `SOIL_PHENOL`, `NITROGEN_CYCLE`, `ANAEROBIC`, `FLOODING`) are set in `sipnet.in`. One binary, `make sipnet`, no `-D` flags, no source patch. Because they change the required parameter set, the flags are part of the run specification, not a build detail — which is why `ModelFlags` is serialized into `RunConfig` and `RunProvenance`. SIPNET rejects four combinations (`validateContext()`); `ModelFlags` rejects them first.
 
 5. **No missing climate values.** Climate validation must be strict: every row must be complete, timesteps must be monotonically increasing, and the start/end dates must bracket the intended simulation period.
 
@@ -520,7 +520,7 @@ different parameters depending on `sipnet.in`. `ModelFlags` mirrors this in
 
     Upstream of our pin this changes: see gotcha 9.
 
-9. **Prescribed phenology is available at this pin, and pySIPNET does not use it yet.** Via `events.in`, not a new file type. SIPNET accepts `leafon` and `leafoff` events with **zero** parameters, so a line is just `year day leafon`. They are real input keywords (`eventStringToType` in `events.c`). Two properties matter before wiring them up: they are **mutually exclusive with every calculated mechanism** — `checkForCalculatedLeafEvents()` exits with `EXIT_CODE_BAD_PARAMETER_VALUE` if `ctx.gdd || ctx.soilPhenol || params.leafOnDay > 0 || params.leafOffDay > 0` — and they prescribe **timing only**: the flux is the same `params.leafGrowth / climLen` the calculated trigger would apply, so `leafGrowth` and `fracLeafFall` remain fitted parameters either way. PEcAn already emits them (`write.events.SIPNET.R`) and, when it sees them, zeroes `leafOnDay`/`leafOffDay`/`gddLeafOn` and ignores its `leaf_phenology` CSV. Note upstream's own docs still list event types as only `plant`/`harv`/`till`/`fert`/`irrig` — read `eventStringToType`, not the table. Tracked in issue #25; `tests/test_events_contract.py` pins the set of unmodelled types so a fourth cannot appear unnoticed.
+9. **Prescribed phenology is available at this pin, and pySIPNET does not use it yet.** Via `events.in`, not a new file type. SIPNET accepts `leafon` and `leafoff` events with **zero** parameters, so a line is just `year day leafon`. They are real input keywords (`eventStringToType` in `events.c`). Two properties matter before wiring them up: they are **mutually exclusive with every calculated mechanism** — `checkForCalculatedLeafEvents()` exits with `EXIT_CODE_BAD_PARAMETER_VALUE` if `ctx.gdd || ctx.soilPhenol || params.leafOnDay > 0 || params.leafOffDay > 0` — and they prescribe **timing only**: the flux is the same `params.leafGrowth / climLen` the calculated trigger would apply, so `leafGrowth` and `fracLeafFall` remain fitted parameters either way. PEcAn already emits them (`write.events.SIPNET.R`) and, when it sees them, zeroes `leafOnDay`/`leafOffDay`/`gddLeafOn` and ignores its `leaf_phenology` CSV. Note upstream's own docs still list event types as only `plant`/`harv`/`till`/`fert`/`irrig` — read `eventStringToType`, not the table. Tracked in issue #25; `tests/test_events_contract.py` pins the set of unmodeled types so a fourth cannot appear unnoticed.
 
 10. **`leafOnDay = 0` now means "disabled", and at our previous pin it did not.** `pastLeafGrowth` and `pastLeafFall` are gated on `params.leafOnDay > 0` / `params.leafOffDay > 0`, so zero switches the trigger off — which is how PEcAn disables internal scheduling when it supplies leaf events instead. This gating arrived with the prescribed-phenology work and is **absent from `v2.1.0`**, where `pastLeafFall` compared unconditionally and `leafOffDay = 0` fired leaf fall on the first timestep of every year. Mentioned because the previous pin behaved the other way, and a parameter set carried over from it will now behave differently.
 
@@ -572,7 +572,7 @@ pySIPNET/
 │   ├── test_param_file_contract.py  # the .param contract across flag combinations
 │   ├── test_events_contract.py   # the events.in contract, incl. arities
 │   ├── test_param_name_mapping.py   # the Python→SIPNET parameter map, stated by hand
-│   ├── test_integration.py       # end-to-end behaviour, flags, mass balance, snow flag
+│   ├── test_integration.py       # end-to-end behavior, flags, mass balance, snow flag
 │   ├── test_variables.py         # the .out header contract and the registry's own rules
 │   ├── test_download.py          # prebuilt-binary download and its verification
 │   ├── test_fidelity.py          # wrapper output == bare binary output
@@ -597,7 +597,7 @@ Worth knowing which test to look at when something breaks:
   binary or a half-finished version bump.
 - `test_sipnet_in.py` — SIPNET understood every config key we wrote, proven by
   reading its own resolved-config dump. Catches a key silently ignored.
-- `test_param_file_contract.py` — SIPNET recognised every parameter name and
+- `test_param_file_contract.py` — SIPNET recognized every parameter name and
   found everything it required, across six flag combinations. Catches a
   renamed or dropped parameter.
 - `test_variables.py` — the binary's output header equals the variable
@@ -611,7 +611,7 @@ Worth knowing which test to look at when something breaks:
 - `test_golden.py` — the numbers themselves match a checked-in baseline.
   Catches an unintended model change that the wrapper and binary would still
   agree about. Regenerate deliberately with `python -m tests.test_golden`.
-- `test_integration.py` — end-to-end behaviour, including that flags visibly
+- `test_integration.py` — end-to-end behavior, including that flags visibly
   change results and that SIPNET's own mass-balance errors stay near zero.
 
 The first three and `test_variables.py` exist because the failure they catch is **silent**: SIPNET logs

@@ -33,11 +33,11 @@ always the registry names.
 +----+-------------------------------------+---------+----------------------------------+
 |  8 | precipitation                       | mm      | Total over the step              |
 +----+-------------------------------------+---------+----------------------------------+
-|  9 | vapour_pressure_deficit             | Pa      | Mean over the step; must be > 0  |
+|  9 | vapor_pressure_deficit             | Pa      | Mean over the step; must be > 0  |
 +----+-------------------------------------+---------+----------------------------------+
-| 10 | soil_vapour_pressure_deficit        | Pa      | Mean over the step               |
+| 10 | soil_vapor_pressure_deficit        | Pa      | Mean over the step               |
 +----+-------------------------------------+---------+----------------------------------+
-| 11 | vapour_pressure                     | Pa      | Mean over the step               |
+| 11 | vapor_pressure                     | Pa      | Mean over the step               |
 +----+-------------------------------------+---------+----------------------------------+
 | 12 | wind_speed                          | m s⁻¹   | Mean over the step; must be > 0  |
 +----+-------------------------------------+---------+----------------------------------+
@@ -58,7 +58,7 @@ SIPNET clamps VPD and wind speed up to a tiny positive value when they fall
 below it — note the test is "below", so small negatives are silently clamped
 too, not just zeros, to avoid division by zero.  :meth:`ClimateDrivers.validate` flags
 non-positive values as warnings rather than errors, matching SIPNET's
-behaviour while making the issue visible to the user.
+behavior while making the issue visible to the user.
 """
 
 from __future__ import annotations
@@ -160,7 +160,7 @@ class ClimateDrivers:
 
         The DataFrame must contain every column in :data:`CLIMATE_COLUMNS`,
         under its registry name or an alias (``tair`` for ``air_temperature``,
-        ``vpd`` for ``vapour_pressure_deficit``, ...). Aliased columns are
+        ``vpd`` for ``vapor_pressure_deficit``, ...). Aliased columns are
         renamed; extra columns are ignored.
 
         Parameters
@@ -296,10 +296,10 @@ class ClimateDrivers:
     def _check_vpd_wind(self) -> None:
         import warnings
 
-        vpd = self.data["vapour_pressure_deficit"]
+        vpd = self.data["vapor_pressure_deficit"]
         if (vpd <= 0).any():
             warnings.warn(
-                f"{(vpd <= 0).sum()} timestep(s) have vapour_pressure_deficit ≤ 0 Pa. "
+                f"{(vpd <= 0).sum()} timestep(s) have vapor_pressure_deficit ≤ 0 Pa. "
                 "SIPNET clamps these to a tiny positive value to avoid division by zero, "
                 "but this may indicate a data issue.",
                 stacklevel=3,
@@ -312,7 +312,7 @@ class ClimateDrivers:
                 stacklevel=3,
             )
 
-    # ── Serialisation ──────────────────────────────────────────────────────────
+    # ── Serialization ──────────────────────────────────────────────────────────
 
     def to_file(self, path: str | Path) -> None:
         """Write the climate data to a SIPNET-format ``.clim`` file."""

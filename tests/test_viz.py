@@ -45,9 +45,9 @@ def _make_result(include_litter: bool = False):
         "soil_temperature": 10.0,
         "photosynthetically_active_radiation": 8.0,
         "precipitation": 2.0,
-        "vapour_pressure_deficit": 800.0,
-        "soil_vapour_pressure_deficit": 400.0,
-        "vapour_pressure": 1200.0,
+        "vapor_pressure_deficit": 800.0,
+        "soil_vapor_pressure_deficit": 400.0,
+        "vapor_pressure": 1200.0,
         "wind_speed": 2.5,
     }
 
@@ -157,9 +157,9 @@ class TestDashboard:
                     "soil_temperature": [10.0],
                     "photosynthetically_active_radiation": [8.0],
                     "precipitation": [2.0],
-                    "vapour_pressure_deficit": [800.0],
-                    "soil_vapour_pressure_deficit": [400.0],
-                    "vapour_pressure": [1200.0],
+                    "vapor_pressure_deficit": [800.0],
+                    "soil_vapor_pressure_deficit": [400.0],
+                    "vapor_pressure": [1200.0],
                     "wind_speed": [2.5],
                 }
             )

@@ -212,7 +212,7 @@ class ModelFlags(BaseModel):
     parameter is supplied anyway (pySIPNET writes every parameter that is not
     ``None``) it is used exactly as with the flag on; if it is omitted SIPNET
     leaves it at zero and snow that falls never melts. Leave this on unless you
-    want exactly that. ``tests/test_integration.py`` pins this behaviour so an
+    want exactly that. ``tests/test_integration.py`` pins this behavior so an
     upstream fix is noticed.
     """
 
@@ -256,7 +256,7 @@ class ModelFlags(BaseModel):
     Requires ``litter_pool`` and ``anaerobic``.
 
     **Not usable yet**: setting this raises, because the nitrogen parameters
-    SIPNET would require are not modelled. See :data:`UNSUPPORTED_FLAGS`.
+    SIPNET would require are not modeled. See :data:`UNSUPPORTED_FLAGS`.
     """
 
     anaerobic: bool = False
@@ -265,7 +265,7 @@ class ModelFlags(BaseModel):
     Requires ``water_hresp``.
 
     **Not usable yet**: setting this raises, because the methane and anaerobic
-    parameters SIPNET would require are not modelled. See
+    parameters SIPNET would require are not modeled. See
     :data:`UNSUPPORTED_FLAGS`.
     """
 
@@ -275,14 +275,14 @@ class ModelFlags(BaseModel):
     Requires ``litter_pool``.
 
     **Not usable yet**: setting this raises, because ``soilCSaturation`` is not
-    modelled. See :data:`UNSUPPORTED_FLAGS`.
+    modeled. See :data:`UNSUPPORTED_FLAGS`.
     """
 
     flooding: bool = False
     """Allow soil moisture to rise above the soil's water holding capacity.
 
     **Not usable yet**: setting this raises, because ``waterDrainFrac`` is not
-    modelled. See :data:`UNSUPPORTED_FLAGS`.
+    modeled. See :data:`UNSUPPORTED_FLAGS`.
     """
 
     # ── Provenance ──
@@ -292,8 +292,8 @@ class ModelFlags(BaseModel):
     Purely descriptive: it is never written to ``sipnet.in`` and never affects
     the model. :meth:`standard` and :meth:`forest` set it for you.
 
-    Note that it does take part in equality, so a labelled configuration is
-    not equal to an identical unlabelled one. Compare
+    Note that it does take part in equality, so a labeled configuration is
+    not equal to an identical unlabeled one. Compare
     :meth:`to_config_keys` output when you want to compare only the flags.
     """
 
@@ -539,7 +539,7 @@ class InitialConditions(ParameterGroup):
 class PhotosynthesisParams(ParameterGroup):
     """Parameters governing gross primary production.
 
-    Vapour pressure deficit (VPD) effect: ``1 − slope × vpd^exponent``
+    Vapor pressure deficit (VPD) effect: ``1 − slope × vpd^exponent``
     multiplies photosynthesis, so a larger slope means stronger suppression.
 
     The maximum photosynthesis temperature is derived internally as
@@ -591,22 +591,22 @@ class PhotosynthesisParams(ParameterGroup):
         long_label="Optimum photosynthesis temperature",
         aliases=("psn_t_opt",),
     )
-    vapour_pressure_deficit_slope: float = param_field(
+    vapor_pressure_deficit_slope: float = param_field(
         sipnet_name="dVpdSlope",
         units="kPa-1",
         domain=_D.POSITIVE,
-        description="Slope of the vapour pressure deficit reduction of photosynthesis: "
+        description="Slope of the vapor pressure deficit reduction of photosynthesis: "
         "the multiplier is 1 − slope × vpd^exponent.",
-        long_label="Vapour pressure deficit slope",
-        aliases=("d_vpd_slope",),
+        long_label="Vapor pressure deficit slope",
+        aliases=("d_vpd_slope", "vapour_pressure_deficit_slope"),
     )
-    vapour_pressure_deficit_exponent: float = param_field(
+    vapor_pressure_deficit_exponent: float = param_field(
         sipnet_name="dVpdExp",
         units="1",
         domain=_D.POSITIVE,
-        description="Exponent of the vapour pressure deficit reduction of photosynthesis.",
-        long_label="Vapour pressure deficit exponent",
-        aliases=("d_vpd_exp",),
+        description="Exponent of the vapor pressure deficit reduction of photosynthesis.",
+        long_label="Vapor pressure deficit exponent",
+        aliases=("d_vpd_exp", "vapour_pressure_deficit_exponent"),
     )
     half_saturation_light: float = param_field(
         sipnet_name="halfSatPar",
@@ -614,7 +614,7 @@ class PhotosynthesisParams(ParameterGroup):
         constituent="photons",
         domain=_D.POSITIVE,
         description="Photosynthetically active radiation at which photosynthesis is half its "
-        "maximum, as moles of photons per square metre of ground per day "
+        "maximum, as moles of photons per square meter of ground per day "
         "(1 Einstein = 1 mol photons).",
         long_label="Half-saturation light",
         aliases=("half_sat_par",),
@@ -968,7 +968,7 @@ class WaterParams(ParameterGroup):
         domain=_D.POSITIVE,
         description="Water use efficiency constant linking transpiration to gross primary "
         "production: water use efficiency in mg CO2 per g water is this value divided by "
-        "the vapour pressure deficit in kPa.",
+        "the vapor pressure deficit in kPa.",
         long_label="Water use efficiency",
         short_label="WUE",
         aliases=("wue_const",),
@@ -1087,7 +1087,7 @@ class SIPNETParameters(BaseModel):
     otherwise noted.  The companion :class:`ModelFlags` decides which optional
     processes are on, and therefore which parameters SIPNET requires.
 
-    Serialisation / deserialisation::
+    Serialization / deserialization::
 
         params_dict = params.model_dump()
         params      = SIPNETParameters.model_validate(params_dict)

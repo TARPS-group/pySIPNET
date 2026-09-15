@@ -71,7 +71,7 @@ def init_submodule() -> None:
     """Populate the ``sipnet/`` submodule if it is empty.
 
     A fresh ``git clone`` of pySIPNET leaves submodule directories empty until
-    they are explicitly initialised. Missing ``sipnet/Makefile`` is the signal
+    they are explicitly initialized. Missing ``sipnet/Makefile`` is the signal
     that this has not happened yet.
     """
     if not (_SIPNET_DIR / "Makefile").exists():
@@ -166,7 +166,7 @@ def sipnet_build_tag(version_string: str | None = None) -> str:
         SIPNET version 2.1.0 (v2.2.0-alpha.1)
                               ^^^^^^^^^^^^^^
 
-    That parenthesised part is the only thing in the output that identifies
+    That parenthesized part is the only thing in the output that identifies
     which source a binary came from. The numeric version cannot do the job: it
     comes from ``version.h``, which lags behind pre-release tags — at
     ``v2.2.0-alpha.1`` it still reads ``2.1.0``. Checking the numeric version
@@ -241,7 +241,7 @@ def _check_filename(filename: str) -> str:
 def platform_key() -> str:
     """Return the key identifying this machine in :data:`SIPNET_RELEASE_ASSETS`.
 
-    Normalises what :mod:`platform` reports, since the same architecture goes
+    Normalizes what :mod:`platform` reports, since the same architecture goes
     by more than one name: ``arm64`` and ``aarch64`` are the same thing, as are
     ``x86_64`` and ``AMD64``.
 
@@ -517,8 +517,8 @@ def download_sipnet(*, force: bool = False, timeout: float = 120.0) -> Path:
                 _check_archive_members(tar)
                 # Python's own "data" filter rejects the same things
                 # _check_archive_members does, and a few more besides. Use it
-                # where available as a second line of defence; it also settles
-                # the extraction behaviour, which otherwise differs by version
+                # where available as a second line of defense; it also settles
+                # the extraction behavior, which otherwise differs by version
                 # and warns on 3.12 and 3.13. Absent only on Python 3.11.0-3.11.3,
                 # where the explicit check above still applies.
                 if hasattr(tarfile, "data_filter"):

@@ -23,7 +23,7 @@ Ensemble workflows
 ------------------
 Because :class:`SIPNETModel` is a plain Python callable that accepts
 ``**kwargs`` and returns a :class:`~pysipnet.result.SIPNETResult`, it is
-directly compatible with any ensemble or optimisation framework that expects
+directly compatible with any ensemble or optimization framework that expects
 a ``(**inputs) -> output`` function.  For PyEns, no adapter layer is needed::
 
     from pyens import EnsembleRunner
@@ -65,7 +65,7 @@ def _apply_overrides(
 ) -> SIPNETParameters:
     """Return a new parameter set with the given values overridden.
 
-    Serialises *base* to a plain dict, applies the overrides at the
+    Serializes *base* to a plain dict, applies the overrides at the
     appropriate group level, then reconstructs via ``model_validate`` so that
     every Pydantic validator — including cross-group constraints such as the
     allocation triangle — is re-run on the modified values.
@@ -113,7 +113,7 @@ class SIPNETModel:
         result_both   = model(max_photosynthesis_rate=140.0, climate=other_climate)
 
     Any SIPNET parameter name is accepted as a keyword argument.
-    Unrecognised names raise :class:`ValueError` immediately.  Invalid
+    Unrecognized names raise :class:`ValueError` immediately.  Invalid
     parameter values (e.g., a negative ``max_photosynthesis_rate``) raise
     :class:`pydantic.ValidationError` before the binary is invoked.
 
@@ -191,7 +191,7 @@ class SIPNETModel:
             Parameter values to override for this run.  Each key must be a
             valid SIPNET parameter name (see
             :data:`~pysipnet.parameters.SIPNET_PARAMS_BY_GROUP`).
-            Unrecognised keys raise :class:`ValueError` immediately.
+            Unrecognized keys raise :class:`ValueError` immediately.
 
         Returns
         -------
@@ -201,7 +201,7 @@ class SIPNETModel:
         Raises
         ------
         ValueError
-            If *param_overrides* contains unrecognised parameter names, or if
+            If *param_overrides* contains unrecognized parameter names, or if
             no climate is available for this run.
         pydantic.ValidationError
             If applying the overrides produces an invalid parameter set (e.g.,
@@ -212,7 +212,7 @@ class SIPNETModel:
             renamed = {k: _PARAMETER_ALIASES[k] for k in unknown if k in _PARAMETER_ALIASES}
             hint = f" These are old or SIPNET names; use {renamed}." if renamed else ""
             raise ValueError(
-                f"SIPNETModel: unrecognised parameter name(s): {sorted(unknown)}.{hint} "
+                f"SIPNETModel: unrecognized parameter name(s): {sorted(unknown)}.{hint} "
                 "Use a name from pysipnet.parameters.SIPNET_PARAMS_BY_GROUP, "
                 "or climate= / events= for non-parameter inputs."
             )

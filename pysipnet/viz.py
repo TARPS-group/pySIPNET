@@ -33,7 +33,7 @@ _CLIM_PANELS: list[tuple[str, int, int]] = [
     ("air_temperature", 3, 1),
     ("photosynthetically_active_radiation", 3, 2),
     ("precipitation", 4, 1),
-    ("vapour_pressure_deficit", 4, 2),
+    ("vapor_pressure_deficit", 4, 2),
 ]
 
 # Output variables shown in the two output panels, by registry name. Labels
@@ -291,7 +291,7 @@ def dashboard(
             # Table rows: blank (section headers added as annotations below)
             "",
             "",
-            # Climate panels, labelled from the registry
+            # Climate panels, labeled from the registry
             *[CLIMATE_VARIABLES_BY_NAME[name].axis_label() for name, _, _ in _CLIM_PANELS],
             # Output panels
             "Fluxes  (g C m⁻² per timestep · ET in cm)",
@@ -433,8 +433,8 @@ def dashboard(
 
     # ── Layout, legends, dropdown ─────────────────────────────────────────────
 
-    # Flux legend: anchor to centre of row 5 (fluxes).
-    # Pool legend: anchor to centre of row 6 (pools).
+    # Flux legend: anchor to center of row 5 (fluxes).
+    # Pool legend: anchor to center of row 6 (pools).
     flux_legend_y = (tops[4] + bottoms[4]) / 2
     pool_legend_y = (tops[5] + bottoms[5]) / 2
 

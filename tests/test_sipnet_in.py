@@ -3,7 +3,7 @@
 This file is the whole of pySIPNET's control over how SIPNET behaves, so it is
 worth testing on its own. Two things can go wrong and neither is loud:
 
-- We write a key SIPNET does not recognise. SIPNET logs a message and carries
+- We write a key SIPNET does not recognize. SIPNET logs a message and carries
   on with its own default, so the run succeeds while silently ignoring what we
   asked for.
 - We leave a key out. SIPNET falls back to a built-in default that may not
@@ -103,7 +103,7 @@ class TestRenderedContent:
 class TestSipnetAcceptsOurConfig:
     """Hand the generated file to SIPNET and check it understood every key.
 
-    SIPNET reports an unrecognised config key as "ignoring input file
+    SIPNET reports an unrecognized config key as "ignoring input file
     parameter <KEY>". Because that is only a log line, a typo or a renamed key
     would otherwise pass every test we have while quietly changing the model
     configuration. These tests read that log output and fail on it.
@@ -130,7 +130,7 @@ class TestSipnetAcceptsOurConfig:
         ignored = [
             line for line in combined.splitlines() if "ignoring input file parameter" in line
         ]
-        assert not ignored, "SIPNET did not recognise these keys:\n" + "\n".join(ignored)
+        assert not ignored, "SIPNET did not recognize these keys:\n" + "\n".join(ignored)
 
     def test_run_succeeds(self, tmp_path, reference_fixture_dir):
         proc = self._run(tmp_path, ModelFlags.standard(), reference_fixture_dir)

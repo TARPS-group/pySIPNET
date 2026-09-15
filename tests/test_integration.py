@@ -48,9 +48,9 @@ def _make_climate(n_days: int = 30, year: int = 2010, start_doy: int = 150):
                 "soil_temperature": 12.0 + 3.0 * np.sin(np.pi * i / n_days),
                 "photosynthetically_active_radiation": 15.0,
                 "precipitation": 2.0,
-                "vapour_pressure_deficit": 1200.0,
-                "soil_vapour_pressure_deficit": 600.0,
-                "vapour_pressure": 1500.0,
+                "vapor_pressure_deficit": 1200.0,
+                "soil_vapor_pressure_deficit": 600.0,
+                "vapor_pressure": 1500.0,
                 "wind_speed": 2.0,
             }
         )
@@ -283,7 +283,7 @@ class TestOutputIO:
         assert second.provenance.workdir.exists()
 
     def test_the_run_id_still_labels_the_directory(self, minimal_params, tmp_path):
-        """Unpredictable, but still recognisable while debugging."""
+        """Unpredictable, but still recognizable while debugging."""
         runner = SIPNETRunner(flags=ModelFlags.standard(), workdir_base=tmp_path, keep_workdir=True)
         result = runner.run(minimal_params, _make_climate(), run_id="member42")
         assert result.provenance.workdir.name.startswith("sipnet_member42_")
@@ -596,9 +596,9 @@ class TestSnowFlag:
                 "soil_temperature": -2.0,
                 "photosynthetically_active_radiation": 5.0,
                 "precipitation": 10.0,
-                "vapour_pressure_deficit": 300.0,
-                "soil_vapour_pressure_deficit": 200.0,
-                "vapour_pressure": 300.0,
+                "vapor_pressure_deficit": 300.0,
+                "soil_vapor_pressure_deficit": 200.0,
+                "vapor_pressure": 300.0,
                 "wind_speed": 2.0,
             }
             for i in range(n_days)

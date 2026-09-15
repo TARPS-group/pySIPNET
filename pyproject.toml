@@ -67,7 +67,7 @@ python_version = "3.11"
 strict = true
 ignore_missing_imports = true
 
-# numpy's shipped stubs use `type` statements, which are 3.12 syntax. Analysing
+# numpy's shipped stubs use `type` statements, which are 3.12 syntax. Analyzing
 # them against our 3.11 target fails inside numpy rather than in our own code,
 # so don't follow imports into them. Other third-party packages check fine.
 [[tool.mypy.overrides]]

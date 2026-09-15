@@ -6,7 +6,7 @@ to a fresh temporary directory, SIPNET is executed there, and the outputs are
 returned as a :class:`~pysipnet.result.SIPNETResult`.
 
 This design has a key property: **runs are stateless and share no resources**,
-making it trivial to parallelise them with any executor (``concurrent.futures``,
+making it trivial to parallelize them with any executor (``concurrent.futures``,
 Dask, Parsl, Ray, etc.)::
 
     from concurrent.futures import ProcessPoolExecutor
@@ -83,7 +83,7 @@ class ClimateStaging(StrEnum):
     """How the runner stages the climate file into each run's working directory.
 
     +----------+--------------------------------------------------------------+
-    | Value    | Behaviour                                                    |
+    | Value    | Behavior                                                    |
     +==========+==============================================================+
     | COPY     | Copies the source file with :func:`shutil.copy2`.  Safe on  |
     |          | all platforms and across filesystem boundaries.  Default.    |
@@ -394,7 +394,7 @@ class SIPNETRunner:
         # the same directory under a shared temp dir, and because the run
         # succeeds by reading whatever sipnet.out it finds, the result is wrong
         # numbers rather than an error. mkdtemp guarantees a fresh directory,
-        # keeping the id in the prefix so it is still recognisable while
+        # keeping the id in the prefix so it is still recognizable while
         # debugging.
         self.workdir_base.mkdir(parents=True, exist_ok=True)
         workdir = Path(tempfile.mkdtemp(prefix=f"sipnet_{run_id}_", dir=self.workdir_base))

@@ -96,7 +96,7 @@ class TestSipnetRecognisesEveryParameter:
         proc = _run_sipnet(tmp_path, params_for(flags), flags, reference_clim_path)
         combined = proc.stdout + proc.stderr
         unknown = [ln for ln in combined.splitlines() if "Unknown param" in ln]
-        assert not unknown, "SIPNET did not recognise some parameters:\n" + "\n".join(unknown)
+        assert not unknown, "SIPNET did not recognize some parameters:\n" + "\n".join(unknown)
 
     @pytest.mark.parametrize("flags", FLAG_CASES)
     def test_no_required_parameter_is_missing(

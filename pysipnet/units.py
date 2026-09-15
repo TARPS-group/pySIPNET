@@ -7,17 +7,17 @@ Climate and Forecast (CF) metadata conventions, xarray tooling and most
 ecosystem-model output: symbols separated by spaces, exponents written as
 plain signed integers.  Examples::
 
-    "g m-2"          grams per square metre
-    "g m-2 d-1"      grams per square metre per day
-    "cm d-1"         centimetres per day
+    "g m-2"          grams per square meter
+    "g m-2 d-1"      grams per square meter per day
+    "cm d-1"         centimeters per day
     "1"              dimensionless
     "degC"           degrees Celsius
     "K d"            kelvin-days (growing degree-days)
-    "m2 m-2"         square metres per square metre (leaf area index)
+    "m2 m-2"         square meters per square meter (leaf area index)
     "nmol g-1 s-1"   nanomoles per gram per second
 
 **The substance never goes in the unit string.**  Pint parses ``"g C m-2"``
-as gram·coulomb per square metre and ``"g N m-2"`` as gram·newton·metre
+as gram·coulomb per square meter and ``"g N m-2"`` as gram·newton·meter
 without complaint, so a carbon or nitrogen qualifier inside the string is a
 silent error rather than a caught one.  The qualifier lives in a separate
 ``constituent`` field (``"C"``, ``"N"``, ``"H2O"``) on the variable or
@@ -130,7 +130,7 @@ def format_units(units: str, *, constituent: str = "", style: UnitStyle = "unico
         match = re.fullmatch(r"([A-Za-z]+)(-?\d+)?", token)
         if match is None:
             # Something Pint accepts but this simple formatter does not (e.g. a
-            # parenthesised expression).  Fall back to the raw token.
+            # parenthesized expression).  Fall back to the raw token.
             rendered.append(token)
             continue
         symbol, exponent = match.group(1), match.group(2)

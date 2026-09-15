@@ -30,7 +30,7 @@ another. Checking it would produce a test that passes against the wrong binary.
 
 Note also that a tag, unlike a commit, can be moved by whoever owns it. If
 upstream re-tags this pre-release the commit assertion fails, which is the
-behaviour we want.
+behavior we want.
 
 ## What this pin gives you
 
@@ -78,7 +78,7 @@ the column count, not a version: one SIPNET version reads both.
 Two columns, `name  value`, with `!` for comments. Files may carry extra
 columns from older tooling; SIPNET warns and ignores them.
 
-An unrecognised parameter name is only a warning, so a renamed parameter would
+An unrecognized parameter name is only a warning, so a renamed parameter would
 silently stop having any effect. `tests/test_param_file_contract.py` guards
 against that by running the binary and failing on any unknown-parameter line.
 
@@ -131,7 +131,7 @@ yet.
 leaf-out and leaf-fall timing from observed dates instead of from a fitted
 parameter, which removes a dimension from the calibration problem. They are
 mutually exclusive with the calculated triggers: SIPNET refuses to start if
-both are configured. Three event types are unmodelled in total — `leafon`,
+both are configured. Three event types are unmodeled in total — `leafon`,
 `leafoff` and `plantdeath` — and `tests/test_events_contract.py` fails if a
 fourth appears upstream. Tracked in issue #25.
 

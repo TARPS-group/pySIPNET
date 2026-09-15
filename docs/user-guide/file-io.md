@@ -26,7 +26,7 @@ follows the same file lifecycle:
 6. **Clean up** — the working directory is deleted unless `keep_workdir=True`.
 
 This design is intentional: each run is self-contained and stateless.  Two
-runs never share a working directory, so they can be parallelised safely with
+runs never share a working directory, so they can be parallelized safely with
 any executor.
 
 ---
@@ -70,11 +70,11 @@ result = runner.run(params, climate, run_id="baseline_2020")
 #### In-memory
 
 `from_dataframe` and `from_file` load all climate data into a pandas DataFrame
-at construction time.  The runner serialises this to disk as a new `.clim` file
+at construction time.  The runner serializes this to disk as a new `.clim` file
 in the working directory.
 
 Columns are named as on the [Climate drivers](../reference/climate-drivers.md)
-page (`air_temperature`, `vapour_pressure_deficit`, `time_step_length`, ...).
+page (`air_temperature`, `vapor_pressure_deficit`, `time_step_length`, ...).
 `from_dataframe` also accepts the short names pySIPNET used previously and
 SIPNET's own column names (`tair`, `vpdSoil`, `length`) and renames them; the
 stored columns are always the full names.
@@ -127,7 +127,7 @@ runner = SIPNETRunner(
 )
 ```
 
-| Mode | Behaviour | When to use |
+| Mode | Behavior | When to use |
 |:-----|:----------|:------------|
 | `COPY` (default) | `shutil.copy2` — physical copy | All platforms; when source files may move during a run |
 | `SYMLINK` | Symbolic link to the resolved absolute path | Linux/macOS; large files; source files are stable for the run duration |
@@ -137,7 +137,7 @@ or across filesystem boundaries), the runner falls back to `COPY` and emits a
 `UserWarning`.
 
 `climate_staging` has no effect on in-memory `ClimateDrivers` instances —
-they are always serialised through the I/O layer regardless of this setting.
+they are always serialized through the I/O layer regardless of this setting.
 
 | `ClimateDrivers` type | `COPY` | `SYMLINK` |
 |:----------------------|:-------|:----------|

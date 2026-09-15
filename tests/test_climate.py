@@ -32,9 +32,9 @@ def _make_df(
             "soil_temperature": 10.0625,
             "photosynthetically_active_radiation": 21.8437,
             "precipitation": 2.1875,
-            "vapour_pressure_deficit": 803.40625,
-            "soil_vapour_pressure_deficit": 401.703125,
-            "vapour_pressure": 1203.28125,
+            "vapor_pressure_deficit": 803.40625,
+            "soil_vapor_pressure_deficit": 401.703125,
+            "vapor_pressure": 1203.28125,
             "wind_speed": 2.546875,
         }
     )
@@ -117,14 +117,14 @@ class TestValidation:
 
     def test_zero_vpd_warns(self):
         df = _make_df()
-        df.loc[0, "vapour_pressure_deficit"] = 0.0
-        with pytest.warns(UserWarning, match="vapour_pressure_deficit"):
+        df.loc[0, "vapor_pressure_deficit"] = 0.0
+        with pytest.warns(UserWarning, match="vapor_pressure_deficit"):
             ClimateDrivers.from_dataframe(df)
 
     def test_negative_vpd_warns(self):
         df = _make_df()
-        df.loc[0, "vapour_pressure_deficit"] = -50.0
-        with pytest.warns(UserWarning, match="vapour_pressure_deficit"):
+        df.loc[0, "vapor_pressure_deficit"] = -50.0
+        with pytest.warns(UserWarning, match="vapor_pressure_deficit"):
             ClimateDrivers.from_dataframe(df)
 
     def test_zero_wspd_warns(self):
@@ -139,7 +139,7 @@ class TestValidation:
         vpd_wspd = [
             w
             for w in recwarn.list
-            if "vapour_pressure_deficit" in str(w.message).lower()
+            if "vapor_pressure_deficit" in str(w.message).lower()
             or "wind_speed" in str(w.message).lower()
         ]
         assert len(vpd_wspd) == 0
@@ -466,9 +466,9 @@ class TestClimateRegistry:
                 "soil_temperature": "tsoil",
                 "photosynthetically_active_radiation": "par",
                 "precipitation": "precip",
-                "vapour_pressure_deficit": "vpd",
-                "soil_vapour_pressure_deficit": "vpdSoil",
-                "vapour_pressure": "vPress",
+                "vapor_pressure_deficit": "vpd",
+                "soil_vapor_pressure_deficit": "vpdSoil",
+                "vapor_pressure": "vPress",
                 "wind_speed": "wspd",
             }
         )

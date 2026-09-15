@@ -29,7 +29,7 @@ rate. Ensure values are consistent with the timestep length.
 
 Column 10 (``vpd``) and column 13 (``wspd``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-SIPNET requires ``vapour_pressure_deficit`` > 0 and ``wind_speed`` > 0. Values ≤ 0 are
+SIPNET requires ``vapor_pressure_deficit`` > 0 and ``wind_speed`` > 0. Values ≤ 0 are
 silently clamped by SIPNET internally.  :class:`~pysipnet.climate.ClimateDrivers` warns but does
 not error on non-positive values, matching SIPNET's own tolerance.
 
@@ -93,7 +93,7 @@ def write_clim_file(climate: ClimateDrivers, path: Path) -> None:
     Parameters
     ----------
     climate:
-        :class:`~pysipnet.climate.ClimateDrivers` to serialise.
+        :class:`~pysipnet.climate.ClimateDrivers` to serialize.
     path:
         Output path (typically ``<workdir>/sipnet.clim``).
     """
@@ -210,9 +210,9 @@ def _write_14_column(climate: ClimateDrivers, path: Path) -> None:
             f"{row['soil_temperature']:.6g}",
             f"{row['photosynthetically_active_radiation']:.10g}",
             f"{row['precipitation']:.6g}",
-            f"{row['vapour_pressure_deficit']:.6g}",
-            f"{row['soil_vapour_pressure_deficit']:.6g}",
-            f"{row['vapour_pressure']:.6g}",
+            f"{row['vapor_pressure_deficit']:.6g}",
+            f"{row['soil_vapor_pressure_deficit']:.6g}",
+            f"{row['vapor_pressure']:.6g}",
             f"{row['wind_speed']:.6g}",
             f"{_SOIL_WETNESS_FILL:.2f}",
         ]
@@ -233,9 +233,9 @@ def _write_12_column(climate: ClimateDrivers, path: Path) -> None:
             f"{row['soil_temperature']:.6g}",
             f"{row['photosynthetically_active_radiation']:.10g}",
             f"{row['precipitation']:.6g}",
-            f"{row['vapour_pressure_deficit']:.6g}",
-            f"{row['soil_vapour_pressure_deficit']:.6g}",
-            f"{row['vapour_pressure']:.6g}",
+            f"{row['vapor_pressure_deficit']:.6g}",
+            f"{row['soil_vapor_pressure_deficit']:.6g}",
+            f"{row['vapor_pressure']:.6g}",
             f"{row['wind_speed']:.6g}",
         ]
         rows.append(" ".join(parts))

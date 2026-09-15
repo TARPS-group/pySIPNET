@@ -72,7 +72,7 @@ CLIM_COLS_14: int = 14
 # reviewable part of this file rather than whatever the network returned.
 #
 # When bumping the pin, refresh these together with SIPNET_PINNED_COMMIT: a
-# stale digest fails the download loudly, which is the intended behaviour.
+# stale digest fails the download loudly, which is the intended behavior.
 
 SIPNET_RELEASE_REPO: str = "PecanProject/sipnet"
 SIPNET_RELEASE_TAG: str = SIPNET_PINNED_TAG

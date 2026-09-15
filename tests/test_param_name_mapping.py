@@ -43,8 +43,8 @@ EXPECTED_PARAM_NAMES: dict[str, str] = {
     "photosynthesis.foliar_respiration_fraction": "baseFolRespFrac",
     "photosynthesis.min_photosynthesis_temperature": "psnTMin",
     "photosynthesis.optimum_photosynthesis_temperature": "psnTOpt",
-    "photosynthesis.vapour_pressure_deficit_slope": "dVpdSlope",
-    "photosynthesis.vapour_pressure_deficit_exponent": "dVpdExp",
+    "photosynthesis.vapor_pressure_deficit_slope": "dVpdSlope",
+    "photosynthesis.vapor_pressure_deficit_exponent": "dVpdExp",
     "photosynthesis.half_saturation_light": "halfSatPar",
     "photosynthesis.light_extinction_coefficient": "attenuation",
     # phenology

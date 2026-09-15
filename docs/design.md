@@ -4,7 +4,7 @@
 
 ### 1. Hierarchical named data structures
 
-All inputs are organised into domain-grouped Pydantic models:
+All inputs are organized into domain-grouped Pydantic models:
 
 ```
 SIPNETParameters
@@ -37,7 +37,7 @@ Unit strings use UDUNITS syntax, the convention of netCDF and the Climate and Fo
 | year⁻¹ | `"yr-1"` | |
 | leaf area index | `"m2 m-2"` | |
 
-The substance is deliberately kept out of the unit string. Pint parses `"g C m-2"` as gram·coulomb per square metre without complaint, so a qualifier inside the string would be a silent error rather than a caught one; `pysipnet.units.validate_units` refuses it. `format_units("g m-2", constituent="C")` puts it back for display as `g C m⁻²`.
+The substance is deliberately kept out of the unit string. Pint parses `"g C m-2"` as gram·coulomb per square meter without complaint, so a qualifier inside the string would be a silent error rather than a caught one; `pysipnet.units.validate_units` refuses it. `format_units("g m-2", constituent="C")` puts it back for display as `g C m⁻²`.
 
 "Per timestep" is not a unit either. A flux integrated over the step is in `"g m-2"`, and the fact that it is a total over the step is the variable's *kind*, carried as the `time_reference` and `cell_methods` attributes on the xarray representation.
 
@@ -65,7 +65,7 @@ log_params = [k for k, s in specs.items() if s.domain == ParameterDomain.POSITIV
 
 This is useful, for example, to map parameters to an unconstrained domain for parameter estimation tasks.
 
-### 4. Fully serialisable run specification
+### 4. Fully serializable run specification
 
 A complete run specification (parameters + climate + flags) round-trips through plain dict/JSON:
 
@@ -92,7 +92,7 @@ Data layer    →    IO layer    →    Runner    →    Result
  dataclass)        .clim, .out)      + workdir)     xarray Dataset)
 ```
 
-Nothing above the IO layer touches the filesystem.  The runner takes Python objects, the IO layer materialises them to disk, and the runner calls the binary.
+Nothing above the IO layer touches the filesystem.  The runner takes Python objects, the IO layer materializes them to disk, and the runner calls the binary.
 
 ### 6. Stateless, isolated runs
 
@@ -104,11 +104,11 @@ pySIPNET is intentionally scoped to single runs.  The ensemble layer is separate
 
 **[Hydra](https://hydra.cc/)** — for structured sweep specification (grid, random, Ax/Optuna).  pySIPNET's Pydantic models map naturally to Hydra structured configs via `OmegaConf`.
 
-**[Parsl](https://parsl-project.org/)** — for execution on HPC clusters (SLURM, PBS) and cloud.  A Parsl `python_app` wrapping `SIPNETRunner.run()` + `model_dump()` / `model_validate()` for serialisation is sufficient for most ensemble workflows.
+**[Parsl](https://parsl-project.org/)** — for execution on HPC clusters (SLURM, PBS) and cloud.  A Parsl `python_app` wrapping `SIPNETRunner.run()` + `model_dump()` / `model_validate()` for serialization is sufficient for most ensemble workflows.
 
 **[Dask](https://dask.org/)** — for local multi-core or distributed cluster execution.  Simpler setup than Parsl; better for local development.
 
-The key design property that enables all of these: `SIPNETRunner.run()` is a pure function from a serialisable config to a serialisable result.
+The key design property that enables all of these: `SIPNETRunner.run()` is a pure function from a serializable config to a serializable result.
 
 ## Model options
 

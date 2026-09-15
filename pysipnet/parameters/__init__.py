@@ -1,4 +1,4 @@
-"""SIPNET parameter models, organised by model version.
+"""SIPNET parameter models, organized by model version.
 
 The top-level imports expose the v1 API directly for convenience::
 

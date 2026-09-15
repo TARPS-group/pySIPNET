@@ -17,7 +17,7 @@ The parameter side is better: every field carries a `ParameterSpec` with a Pint
 unit string, a description and a domain. But the parameter names themselves
 (`a_max`, `psn_t_min`, `d_vpd_slope`, `soil_whc`) are abbreviations, the unit
 strings cannot express "grams of carbon" (§5.2), and there is no link between an
-initial condition and the state variable it initialises.
+initial condition and the state variable it initializes.
 
 This document proposes one registry that describes every variable pySIPNET
 exposes (outputs first, then parameters and climate drivers), a naming
@@ -51,7 +51,7 @@ each one, calls `updateState()` and then `outputState()`. The order matters:
   `(oldSoilWater + envi.soilWater) / (2 × soilWHC)`, the two-point linear mean
   of start and end wetness.
 - **One column is cumulative.** `cumNEE` prints `trackers.totNee`, which is
-  never reset. It is serialised in restart checkpoints
+  never reset. It is serialized in restart checkpoints
   (`restart.c`, `"trackers.totNee"`), so a restarted run continues the total.
 - **Two columns are not what their headers say.**
   - `plantWoodC` prints `getTotalWoodC()` = `envi.plantWoodC +
@@ -59,7 +59,7 @@ each one, calls `updateState()` and then `outputState()`. The order matters:
     term that SIPNET's model-structure docs call C_wood,storage.
   - `nppStorage` prints `envi.plantCAccountingDelta`, a *state* variable (the
     storage term itself, which can be negative), not a flux.
-- **`n2o` is total volatilisation.** `trackers.n2o = fluxes.nVolatilization ×
+- **`n2o` is total volatilization.** `trackers.n2o = fluxes.nVolatilization ×
   length`, and `nVolatilization = nVolatilizationFrac × minN × f(T) × f(W)`.
   Nothing partitions it into N₂O versus other gases. It is in g N.
 - **`ch4` is carbon mass.** `(soilMethane + litterMethane) × length`, g C m⁻².
@@ -68,7 +68,7 @@ each one, calls `updateState()` and then `outputState()`. The order matters:
   `SIPNETResult.climate` but not from a bare `.out` file.
 - **Fixed print precision.** Each column has a hard-coded `%w.pf` format
   (§2.2). NEE, GPP and all respiration terms are printed to 3 decimals, so a
-  half-hourly NEE of 0.05 g C m⁻² carries a 1% quantisation floor. ET gets 8
+  half-hourly NEE of 0.05 g C m⁻² carries a 1% quantization floor. ET gets 8
   decimals; N pools 4; `n2o` 6. This is a real noise floor for data
   assimilation and belongs in the registry.
 
@@ -110,7 +110,7 @@ over step), **mean** (two-point mean over step), **rate** (per-day rate),
 | 27 | `soilOrgN` | `envi.soilOrgN` | state | g N m⁻² | 4 | `nitrogen_cycle` | |
 | 28 | `litterN` | `envi.litterN` | state | g N m⁻² | 4 | `nitrogen_cycle` | |
 | 29 | `plantStorageN` | `envi.plantStorageN` | state | g N m⁻² | 4 | `nitrogen_cycle` | filled by leaf-off resorption |
-| 30 | `n2o` | `fluxes.nVolatilization × length` | sum | g N m⁻² | 6 | `nitrogen_cycle` | total volatilised mineral N, not speciated |
+| 30 | `n2o` | `fluxes.nVolatilization × length` | sum | g N m⁻² | 6 | `nitrogen_cycle` | total volatilized mineral N, not speciated |
 | 31 | `nLeaching` | `fluxes.nLeaching × length` | sum | g N m⁻² | 4 | `nitrogen_cycle` | |
 | 32 | `nFixation` | `fluxes.nFixation × length` | sum | g N m⁻² | 4 | `nitrogen_cycle` | |
 | 33 | `nUptake` | `fluxes.nUptake × length` | sum | g N m⁻² | 4 | `nitrogen_cycle` | |
@@ -156,7 +156,7 @@ are exactly zero otherwise, not merely small.
    `_POOL_COLS`) and duplicate what a registry would hold.
 6. **Parameter unit strings cannot say "carbon".** `"g / m**2"` plus a
    separate `constituent="C"` is a workaround for the fact that Pint parses
-   `"g C / m**2"` as gram·coulomb per square metre without error (verified:
+   `"g C / m**2"` as gram·coulomb per square meter without error (verified:
    `[mass]·[current]·[time]/[length]²`). `validate_unit_string` would accept
    that silently. Only 12 of ~60 parameter fields set `constituent`.
 7. **Parameter names follow SIPNET's abbreviations**, not the convention the
@@ -164,8 +164,8 @@ are exactly zero otherwise, not merely small.
    `half_sat_par`, `soil_whc`, `wue_const`, `rd_const`, `leaf_c_sp_wt`,
    `c_frac_leaf`, `frozen_soil_fol_r_eff`, `lai`.
 8. **No initial-condition ↔ state link.** `initial_conditions.plant_wood`
-   initialises the `plantWoodC` pool; `lai` initialises `plantLeafC` *via*
-   `leafCSpWt`; `soil_water_frac` initialises `soilWater` *via* `soilWHC`. A DA
+   initializes the `plantWoodC` pool; `lai` initializes `plantLeafC` *via*
+   `leafCSpWt`; `soil_water_frac` initializes `soilWater` *via* `soilWHC`. A DA
    workflow that restarts from a posterior state needs exactly this mapping, and
    the two indirect ones need the conversion spelled out.
 
@@ -188,12 +188,12 @@ Reuse it.
 Found while cross-checking `sipnet/docs/user-guide/model-outputs.md` against the
 source:
 
-- `rSoil` is labelled "Heterotrophic respiration" with symbol R_H. Source:
+- `rSoil` is labeled "Heterotrophic respiration" with symbol R_H. Source:
   `rSoil = rRoot + rh`.
 - The table omits `plantStorageN` and `nppStorage`, both of which
   `outputHeader()` writes; the example header is also missing them.
 - `n2o` is described as "Nitrous oxide production"; source is total mineral-N
-  volatilisation.
+  volatilization.
 - `evapotranspiration` definition omits `eventEvap`.
 - `plantWoodC` is described as "Woody plant carbon" without mentioning that the
   printed value includes the storage term (the model-structure page does say
@@ -251,7 +251,7 @@ Proposed output names (mapping is the registry's job; this is the content):
 | `soilOrgN` | `soil_organic_nitrogen` | | Soil organic nitrogen |
 | `litterN` | `litter_nitrogen` | | Litter nitrogen |
 | `plantStorageN` | `plant_nitrogen_storage` | | Plant stored nitrogen |
-| `n2o` | `nitrogen_volatilization` | | Mineral N lost to volatilisation |
+| `n2o` | `nitrogen_volatilization` | | Mineral N lost to volatilization |
 | `nLeaching` | `nitrogen_leaching` | | Mineral N lost to leaching |
 | `nFixation` | `nitrogen_fixation` | | Nitrogen fixation |
 | `nUptake` | `nitrogen_uptake` | | Plant nitrogen uptake |
@@ -267,7 +267,7 @@ Two names need a decision from you:
   description, because the column also contains the storage-lag term and
   "above_ground_wood_carbon" would over-promise a physical meaning.
 - **`nitrogen_volatilization` vs `n2o_emission`.** Recommendation: the former.
-  SIPNET's header says n2o but computes total volatilisation; naming it N₂O
+  SIPNET's header says n2o but computes total volatilization; naming it N₂O
   would repeat SIPNET's error under our name.
 
 ### 4.2 The registry
@@ -303,7 +303,7 @@ class VariableSpec:
     short_label: str           # "NEE"; falls back to long_label
     aliases: tuple[str, ...]   # ("nee",) etc.; also old pySIPNET names
     requires_flag: str | None  # ModelFlags field, e.g. "nitrogen_cycle"
-    output_decimals: int | None  # printf precision -> quantisation floor
+    output_decimals: int | None  # printf precision -> quantization floor
     sign_convention: str = ""  # "positive = flux to atmosphere"
     cf_standard_name: str | None = None
     group: str = ""            # "carbon_pools", "carbon_fluxes", "water", ...
@@ -318,7 +318,7 @@ Helpers: `OUTPUT_VARIABLES: tuple[VariableSpec, ...]` in SIPNET column order;
 
 Why Python declarations rather than a YAML file: they are type-checked by mypy,
 importable without file I/O at import time (a stated convention), and
-`to_records()` gives you the serialisable form on demand. The docs table is
+`to_records()` gives you the serializable form on demand. The docs table is
 generated from the registry by a `mkdocs-gen-files` script so it cannot drift.
 
 Why `constituent` stays separate from `units`: see §5.
@@ -326,7 +326,7 @@ Why `constituent` stays separate from `units`: see §5.
 `cf_standard_name` is optional and should only be filled after checking the
 current CF table; candidates exist for GPP, NPP, LAI, soil/litter/wood carbon
 content, evapotranspiration and transpiration, but several of our columns
-(storage term, soil respiration as root+heterotrophic, volatilisation) have no
+(storage term, soil respiration as root+heterotrophic, volatilization) have no
 exact CF name and must stay `None` rather than be approximated.
 
 ### 4.3 How the registry is used
@@ -340,8 +340,8 @@ exact CF name and must stay `None` rather than be approximated.
 - **`viz.py`** drops `_FLUX_COLS`/`_POOL_COLS` and reads labels from the
   registry.
 - **`SIPNETResult.nee()/gpp()/et()`** become thin wrappers over aliases or are
-  removed in favour of `result.outputs["nee"]`.
-- **Serialisation:** `RunConfig` and `RunProvenance` are unaffected; the
+  removed in favor of `result.outputs["nee"]`.
+- **Serialization:** `RunConfig` and `RunProvenance` are unaffected; the
   registry version travels implicitly with the package version.
 
 ### 4.4 Tests (each one guards a silent failure)
@@ -386,7 +386,7 @@ Parameters already have `ParameterSpec`. Proposed changes, in a later phase:
   | `photosynthesis.a_max` | `aMax` | `photosynthesis.max_photosynthesis_rate` |
   | `photosynthesis.psn_t_min` | `psnTMin` | `photosynthesis.min_photosynthesis_temperature` |
   | `photosynthesis.psn_t_opt` | `psnTOpt` | `photosynthesis.optimum_photosynthesis_temperature` |
-  | `photosynthesis.d_vpd_slope` | `dVpdSlope` | `photosynthesis.vapour_pressure_deficit_slope` |
+  | `photosynthesis.d_vpd_slope` | `dVpdSlope` | `photosynthesis.vapor_pressure_deficit_slope` |
   | `photosynthesis.half_sat_par` | `halfSatPar` | `photosynthesis.half_saturation_light` |
   | `water.soil_whc` | `soilWHC` | `water.soil_water_holding_capacity` |
   | `water.wue_const` | `wueConst` | `water.water_use_efficiency_constant` |
@@ -396,15 +396,15 @@ Parameters already have `ParameterSpec`. Proposed changes, in a later phase:
 
 - Climate drivers: `tair → air_temperature`, `tsoil → soil_temperature`,
   `par → photosynthetically_active_radiation`, `precip → precipitation`,
-  `vpd → vapour_pressure_deficit`, `vpd_soil → soil_vapour_pressure_deficit`,
-  `vpress → vapour_pressure`, `wspd → wind_speed`, `length →
+  `vpd → vapor_pressure_deficit`, `vpd_soil → soil_vapor_pressure_deficit`,
+  `vpress → vapor_pressure`, `wspd → wind_speed`, `length →
   timestep_length`, with `time → hour_of_day`, `day → day_of_year` to match
   outputs. Same `VariableSpec` type, `kind=DRIVER`, plus a `file_units` field
   where SIPNET converts on read (precip mm→cm, VPD Pa→kPa, PAR total→per day).
 
 Doing outputs first, alone, is deliberate: it is self-contained, it has the
 worst current state, and it lets the naming and units conventions be exercised
-before touching the parameter model that `RunConfig` serialises.
+before touching the parameter model that `RunConfig` serializes.
 
 ## 5. Units (your question 2)
 
@@ -421,8 +421,8 @@ Examples: `"g m-2"`, `"g m-2 d-1"`, `"cm"`, `"cm d-1"`, `"1"`, `"degC"`,
 
 ### 5.2 Why not the current Pint-expression syntax
 
-- Pint parses `"g C / m**2"` as gram·coulomb per square metre and
-  `"g N m-2"` as gram·newton·metre, with no error. The constituent can never go
+- Pint parses `"g C / m**2"` as gram·coulomb per square meter and
+  `"g N m-2"` as gram·newton·meter, with no error. The constituent can never go
   in the string, so the string is not self-describing in the way a reader
   expects, and the validator gives false confidence.
 - `"g / m**2"` is not what netCDF, xarray, cf_xarray, MetPy, PEcAn or any CF
@@ -490,17 +490,17 @@ Reasons this is the right container, in order of weight:
 
 1. **Metadata travels with the data.** `DataArray.attrs` is where units, long
    name and cell methods live in every CF tool; `DataFrame.attrs` exists but is
-   dropped by most operations and by every serialiser. The registry is only
+   dropped by most operations and by every serializer. The registry is only
    useful if the values carry it.
 2. **Ensembles stack.** `xr.concat(datasets, dim="member")` and a `site`
    dimension are the natural shape for the DA workflows this package exists
    for; a list of DataFrames needs a MultiIndex and re-invents this. The
    ensemble runner is out of scope, but the single-run object should be the
    thing it stacks.
-3. **Serialisation.** `to_netcdf` / `to_zarr` with CF attrs gives a
+3. **Serialization.** `to_netcdf` / `to_zarr` with CF attrs gives a
    self-describing on-disk format for free; `CSV` of a DataFrame loses units.
 4. **Time handling.** A real `datetime64` axis fixes the leap-year/partial-year
-   problem and makes `resample("1YE").sum()` honour `cell_methods`
+   problem and makes `resample("1YE").sum()` honor `cell_methods`
    (we can provide `aggregate(freq)` that applies the registry rule per
    variable: sum for fluxes, mean for states, last for cumulative).
 
@@ -514,7 +514,7 @@ working everywhere; the registry itself has no xarray dependency either way.
 
 ### 6.2 One subtlety to document
 
-The time coordinate marks the **start** of each step (SIPNET's labelling), but
+The time coordinate marks the **start** of each step (SIPNET's labeling), but
 pools are values at the **end**. In CF terms fluxes are `time: sum` over
 `time_bounds`, and states are `time: point` valid at the *upper* bound. The
 registry records this per variable, the Dataset carries `time_bounds`, and the

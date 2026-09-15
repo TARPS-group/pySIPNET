@@ -132,7 +132,7 @@ class TestPlatformKey:
         assert platform_key() == f"linux-{expected}"
 
     def test_unknown_architecture_passes_through(self, monkeypatch):
-        """An unrecognised machine still produces a key, so the error can name it."""
+        """An unrecognized machine still produces a key, so the error can name it."""
         monkeypatch.setattr("pysipnet.build.platform.system", lambda: "Linux")
         monkeypatch.setattr("pysipnet.build.platform.machine", lambda: "riscv64")
         assert platform_key() == "linux-riscv64"
@@ -149,7 +149,7 @@ class TestReleaseAsset:
     def test_defaults_to_this_machine(self, monkeypatch, key):
         """The no-argument path is what download_sipnet actually uses.
 
-        Parametrised over every platform so the assertion cannot be satisfied
+        Parametrized over every platform so the assertion cannot be satisfied
         by a hard-coded key: whichever one an implementation picked, some case
         here would disagree with it.
         """

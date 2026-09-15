@@ -76,7 +76,7 @@ def sipnet_site_fields(
     Raises
     ------
     ValueError
-        If any parameter name is unrecognised or is a reserved field name.
+        If any parameter name is unrecognized or is a reserved field name.
 
     Examples
     --------
@@ -125,7 +125,7 @@ def sipnet_member_fields(
     Raises
     ------
     ValueError
-        If any parameter name is unrecognised or is a reserved field name.
+        If any parameter name is unrecognized or is a reserved field name.
 
     Examples
     --------
@@ -146,7 +146,7 @@ def sipnet_member_fields(
 
 
 def _validate_param_names(names: Any, *, context: str) -> None:
-    """Raise ValueError if any name is reserved or unrecognised."""
+    """Raise ValueError if any name is reserved or unrecognized."""
     reserved = _RESERVED_FIELDS & set(names)
     if reserved:
         raise ValueError(
@@ -157,6 +157,6 @@ def _validate_param_names(names: Any, *, context: str) -> None:
     unknown = {n for n in names if n not in _PARAM_TO_GROUP}
     if unknown:
         raise ValueError(
-            f"{context}: unrecognised parameter name(s): {sorted(unknown)}. "
+            f"{context}: unrecognized parameter name(s): {sorted(unknown)}. "
             "Use a name from pysipnet.parameters.SIPNET_PARAMS_BY_GROUP."
         )
