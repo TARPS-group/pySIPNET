@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from pysipnet.parameters.model import PARAMETER_SPECS
-from pysipnet.variables import OUTPUT_VARIABLES_BY_NAME
+from pysipnet.variables import CLIMATE_VARIABLES_BY_NAME, OUTPUT_VARIABLES_BY_NAME
 
 if TYPE_CHECKING:
     import plotly.graph_objects as go
@@ -27,11 +27,13 @@ if TYPE_CHECKING:
 
 # ── Panel definitions ──────────────────────────────────────────────────────────
 
-_CLIM_PANELS: list[tuple[str, str, int, int]] = [
-    ("tair", "Air Temperature (°C)", 3, 1),
-    ("par", "PAR (mol m⁻²)", 3, 2),
-    ("precip", "Precipitation (mm)", 4, 1),
-    ("vpd", "VPD (Pa)", 4, 2),
+# Climate panels: (registry name, subplot row, subplot column). Labels come
+# from the climate registry so they carry the right units.
+_CLIM_PANELS: list[tuple[str, int, int]] = [
+    ("air_temperature", 3, 1),
+    ("photosynthetically_active_radiation", 3, 2),
+    ("precipitation", 4, 1),
+    ("vapour_pressure_deficit", 4, 2),
 ]
 
 # Output variables shown in the two output panels, by registry name. Labels
@@ -248,7 +250,7 @@ def dashboard(
     clim = result.climate.data
 
     x_ts = ts["year"] + (ts["day_of_year"] - 1) / 365
-    x_clim = clim["year"] + (clim["day"] - 1) / 365
+    x_clim = clim["year"] + (clim["day_of_year"] - 1) / 365
 
     flux_cols = _labels(_FLUX_VARIABLES)
     if show_cum_nee and "cumulative_net_ecosystem_exchange" in ts.columns:
@@ -289,11 +291,8 @@ def dashboard(
             # Table rows: blank (section headers added as annotations below)
             "",
             "",
-            # Climate panels
-            "Air Temperature (°C)",
-            "PAR (mol m⁻²)",
-            "Precipitation (mm)",
-            "VPD (Pa)",
+            # Climate panels, labelled from the registry
+            *[CLIMATE_VARIABLES_BY_NAME[name].axis_label() for name, _, _ in _CLIM_PANELS],
             # Output panels
             "Fluxes  (g C m⁻² per timestep · ET in cm)",
             "Carbon & Water Pools  (g C m⁻² · soil water in cm)",
@@ -307,9 +306,10 @@ def dashboard(
 
     # ── Climate inputs ────────────────────────────────────────────────────────
 
-    for col, label, row, col_idx in _CLIM_PANELS:
+    for col, row, col_idx in _CLIM_PANELS:
         if col not in clim.columns:
             continue
+        label = CLIMATE_VARIABLES_BY_NAME[col].label
         fig.add_trace(
             go.Scatter(x=x_clim, y=clim[col], mode="lines", name=label, showlegend=False),
             row=row,

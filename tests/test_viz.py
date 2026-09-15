@@ -38,17 +38,17 @@ def _make_result(include_litter: bool = False):
 
     clim_cols = {
         "year": 2020,
-        "day": range(1, n + 1),
-        "time": 0.0,
-        "length": 1.0,
-        "tair": 15.0,
-        "tsoil": 10.0,
-        "par": 8.0,
-        "precip": 2.0,
-        "vpd": 800.0,
-        "vpd_soil": 400.0,
-        "vpress": 1200.0,
-        "wspd": 2.5,
+        "day_of_year": range(1, n + 1),
+        "hour_of_day": 0.0,
+        "time_step_length": 1.0,
+        "air_temperature": 15.0,
+        "soil_temperature": 10.0,
+        "photosynthetically_active_radiation": 8.0,
+        "precipitation": 2.0,
+        "vapour_pressure_deficit": 800.0,
+        "soil_vapour_pressure_deficit": 400.0,
+        "vapour_pressure": 1200.0,
+        "wind_speed": 2.5,
     }
 
     from pysipnet.climate import ClimateDrivers
@@ -150,17 +150,17 @@ class TestDashboard:
             pd.DataFrame(
                 {
                     "year": [2020],
-                    "day": [1],
-                    "time": [0.0],
-                    "length": [1.0],
-                    "tair": [15.0],
-                    "tsoil": [10.0],
-                    "par": [8.0],
-                    "precip": [2.0],
-                    "vpd": [800.0],
-                    "vpd_soil": [400.0],
-                    "vpress": [1200.0],
-                    "wspd": [2.5],
+                    "day_of_year": [1],
+                    "hour_of_day": [0.0],
+                    "time_step_length": [1.0],
+                    "air_temperature": [15.0],
+                    "soil_temperature": [10.0],
+                    "photosynthetically_active_radiation": [8.0],
+                    "precipitation": [2.0],
+                    "vapour_pressure_deficit": [800.0],
+                    "soil_vapour_pressure_deficit": [400.0],
+                    "vapour_pressure": [1200.0],
+                    "wind_speed": [2.5],
                 }
             )
         )

@@ -10,7 +10,7 @@ from __future__ import annotations
 import mkdocs_gen_files
 
 from pysipnet.parameters.model import PARAMETER_SPECS
-from pysipnet.variables import OUTPUT_VARIABLES, VariableKind
+from pysipnet.variables import CLIMATE_VARIABLES, OUTPUT_VARIABLES, VariableKind
 
 KIND_TEXT = {
     VariableKind.COORDINATE: "coordinate",
@@ -112,3 +112,44 @@ for path, spec in PARAMETER_SPECS.items():
 
 with mkdocs_gen_files.open("reference/parameters.md", "w") as f:
     f.write("\n".join(param_lines) + "\n")
+
+
+# ── Climate drivers ───────────────────────────────────────────────────────────
+
+clim_lines = [
+    "# Climate drivers",
+    "",
+    "Every column of the `.clim` climate file, in file order, as described by",
+    "[`pysipnet.variables.CLIMATE_VARIABLES`][pysipnet.variables]. This page is",
+    "generated from the registry.",
+    "",
+    "**Units.** The `Units` column is what goes **in the file** and in a",
+    "`ClimateDrivers` DataFrame. SIPNET converts some columns on read; the",
+    "`SIPNET converts to` column records that, because SIPNET's own documentation",
+    "quotes the converted units.",
+    "",
+    "**Time convention.** Rows are labelled with the *start* of the timestep. Means",
+    "are over the step; `photosynthetically_active_radiation` and `precipitation`",
+    "are totals over the step.",
+    "",
+    "**Aliases.** `ClimateDrivers.from_dataframe` accepts a DataFrame whose columns",
+    "use these aliases (the short names pySIPNET used previously, or SIPNET's",
+    "column names) and renames them; stored columns always use the full names.",
+    "",
+    "| Name | SIPNET column | Kind | Units | SIPNET converts to | Aliases | Description |",
+    "|:-----|:--------------|:-----|:------|:-------------------|:--------|:------------|",
+]
+for spec in CLIMATE_VARIABLES:
+    aliases = ", ".join(f"`{a}`" for a in spec.aliases)
+    converts = ""
+    if spec.internal_units or spec.internal_conversion:
+        converts = spec.internal_conversion
+        if spec.internal_units:
+            converts = f"{spec.internal_units}: {converts}" if converts else spec.internal_units
+    clim_lines.append(
+        f"| `{spec.name}` | `{spec.sipnet_name}` | {KIND_TEXT[spec.kind]} | "
+        f"{spec.formatted_units()} | {converts} | {aliases} | {spec.description} |"
+    )
+
+with mkdocs_gen_files.open("reference/climate-drivers.md", "w") as f:
+    f.write("\n".join(clim_lines) + "\n")

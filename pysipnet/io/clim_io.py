@@ -11,7 +11,9 @@ from those constants rather than encoding it locally.
 Two column-count variants are accepted on read:
 
 * **14 columns (what the writer produces)**: ``loc | year | day | time | length | tair |
-  tsoil | par | precip | vpd | vpd_soil | vpress | wspd | soil_wetness``
+  tsoil | par | precip | vpd | vpdSoil | vPress | wspd | soilWetness`` (SIPNET's
+  names; the Python column names are the registry names in
+  :data:`pysipnet.variables.CLIMATE_VARIABLES`, e.g. ``air_temperature`` for ``tair``).
 * **13 columns**: the same layout without the leading ``loc`` column.
 
 The writer always produces 14 columns.  The ``loc`` column (col 1) and the
@@ -21,14 +23,14 @@ a constant. See :data:`_SOIL_WETNESS_FILL` for the soil-wetness filler.
 
 Column 8 (``par``) units
 ~~~~~~~~~~~~~~~~~~~~~~~~~
-The ``par`` column is the **total** PAR over the timestep in Einstein m⁻².
-SIPNET divides by the ``length`` column to obtain the per-day rate.  Ensure
-values are consistent with the timestep length.
+``photosynthetically_active_radiation`` is the **total** PAR over the timestep
+in Einstein m⁻². SIPNET divides by ``time_step_length`` to obtain the per-day
+rate. Ensure values are consistent with the timestep length.
 
 Column 10 (``vpd``) and column 13 (``wspd``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-SIPNET requires vpd > 0 and wspd > 0.  Values ≤ 0 are silently clamped by
-SIPNET internally.  :class:`~pysipnet.climate.ClimateDrivers` warns but does
+SIPNET requires ``vapour_pressure_deficit`` > 0 and ``wind_speed`` > 0. Values ≤ 0 are
+silently clamped by SIPNET internally.  :class:`~pysipnet.climate.ClimateDrivers` warns but does
 not error on non-positive values, matching SIPNET's own tolerance.
 
 12-column layout
@@ -45,7 +47,7 @@ from typing import Literal
 
 import pandas as pd
 
-from pysipnet.climate import CLIM_COLUMNS, ClimateDrivers
+from pysipnet.climate import CLIMATE_COLUMNS, ClimateDrivers
 
 # ── Climate file layouts ──────────────────────────────────────────────────────
 #
@@ -201,17 +203,17 @@ def _write_14_column(climate: ClimateDrivers, path: Path) -> None:
         parts = [
             str(climate.loc),
             str(int(row["year"])),
-            str(int(row["day"])),
-            f"{row['time']:.6g}",
-            f"{row['length']:.6g}",
-            f"{row['tair']:.6g}",
-            f"{row['tsoil']:.6g}",
-            f"{row['par']:.10g}",
-            f"{row['precip']:.6g}",
-            f"{row['vpd']:.6g}",
-            f"{row['vpd_soil']:.6g}",
-            f"{row['vpress']:.6g}",
-            f"{row['wspd']:.6g}",
+            str(int(row["day_of_year"])),
+            f"{row['hour_of_day']:.6g}",
+            f"{row['time_step_length']:.6g}",
+            f"{row['air_temperature']:.6g}",
+            f"{row['soil_temperature']:.6g}",
+            f"{row['photosynthetically_active_radiation']:.10g}",
+            f"{row['precipitation']:.6g}",
+            f"{row['vapour_pressure_deficit']:.6g}",
+            f"{row['soil_vapour_pressure_deficit']:.6g}",
+            f"{row['vapour_pressure']:.6g}",
+            f"{row['wind_speed']:.6g}",
             f"{_SOIL_WETNESS_FILL:.2f}",
         ]
         rows.append(" ".join(parts))
@@ -224,17 +226,17 @@ def _write_12_column(climate: ClimateDrivers, path: Path) -> None:
     for _, row in df.iterrows():
         parts = [
             str(int(row["year"])),
-            str(int(row["day"])),
-            f"{row['time']:.6g}",
-            f"{row['length']:.6g}",
-            f"{row['tair']:.6g}",
-            f"{row['tsoil']:.6g}",
-            f"{row['par']:.10g}",
-            f"{row['precip']:.6g}",
-            f"{row['vpd']:.6g}",
-            f"{row['vpd_soil']:.6g}",
-            f"{row['vpress']:.6g}",
-            f"{row['wspd']:.6g}",
+            str(int(row["day_of_year"])),
+            f"{row['hour_of_day']:.6g}",
+            f"{row['time_step_length']:.6g}",
+            f"{row['air_temperature']:.6g}",
+            f"{row['soil_temperature']:.6g}",
+            f"{row['photosynthetically_active_radiation']:.10g}",
+            f"{row['precipitation']:.6g}",
+            f"{row['vapour_pressure_deficit']:.6g}",
+            f"{row['soil_vapour_pressure_deficit']:.6g}",
+            f"{row['vapour_pressure']:.6g}",
+            f"{row['wind_speed']:.6g}",
         ]
         rows.append(" ".join(parts))
     path.write_text("\n".join(rows) + "\n")
@@ -252,8 +254,8 @@ def _read_14_column(path: Path) -> ClimateDrivers:
             f"Expected {_N_COLS_13} or {_N_COLS_14} columns in a 14-column-layout climate file, "
             f"got {n_cols}. Expected the 14- or 13-column layout."
         )
-    data.columns = CLIM_COLUMNS
-    for col in ("year", "day"):
+    data.columns = CLIMATE_COLUMNS
+    for col in ("year", "day_of_year"):
         data[col] = data[col].astype(int)
     return ClimateDrivers.from_dataframe(data, n_columns=14)
 
@@ -267,7 +269,7 @@ def _read_12_column(path: Path) -> ClimateDrivers:
             "Expected the 12-column layout."
         )
     data = raw.copy()
-    data.columns = CLIM_COLUMNS
-    for col in ("year", "day"):
+    data.columns = CLIMATE_COLUMNS
+    for col in ("year", "day_of_year"):
         data[col] = data[col].astype(int)
     return ClimateDrivers.from_dataframe(data, n_columns=12)

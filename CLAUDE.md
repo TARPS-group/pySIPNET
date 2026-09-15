@@ -230,6 +230,19 @@ pin, though the previous pin accepted it.
 
 No header, no comment character. Whitespace-delimited, one row per timestep.
 
+The table uses SIPNET's column names. The Python column names are the
+registry names in `CLIMATE_VARIABLES` (`pysipnet/variables.py`):
+`air_temperature` (tair), `soil_temperature` (tsoil),
+`photosynthetically_active_radiation` (par), `precipitation` (precip),
+`vapour_pressure_deficit` (vpd), `soil_vapour_pressure_deficit` (vpdSoil),
+`vapour_pressure` (vPress), `wind_speed` (wspd), and the shared time columns
+`year`, `day_of_year`, `hour_of_day`, `time_step_length`. Each spec records
+the file units and SIPNET's internal conversion below as `units` /
+`internal_units` / `internal_conversion`. `ClimateDrivers.from_dataframe`
+accepts the old short names and SIPNET's names as aliases and renames them;
+`ClimateDrivers.dataset` gives the same 1-D `time` layout as outputs. The
+docs page `reference/climate-drivers.md` is generated from the registry.
+
 | Col (12) | Col (14) | Name | File units | Internal conversion |
 |---|---|---|---|---|
 | — | 1 | loc | integer | ignored, with a log line |
@@ -528,6 +541,7 @@ pySIPNET/
 │   ├── variables.py              # the output-variable registry (names, units, kinds, labels)
 │   ├── units.py                  # UDUNITS unit strings: Pint registry, validation, formatting
 │   ├── climate.py                # ClimateDrivers + validation
+│   ├── dataset.py                # shared DataFrame → xarray builder (time = step start)
 │   ├── events.py                 # management events (arity checked against SIPNET)
 │   ├── io/
 │   │   ├── param_io.py           # read/write .param

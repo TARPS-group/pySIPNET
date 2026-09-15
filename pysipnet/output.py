@@ -258,21 +258,13 @@ class SIPNETOutput:
 
 # ── DataFrame → Dataset ────────────────────────────────────────────────────────
 
-TIME_DIMENSION = "time"
-
-_TIME_CONVENTION = (
-    "The 'time' coordinate is the START of each timestep, as SIPNET labels its rows. "
-    "State variables are values at the END of the timestep; fluxes are totals OVER "
-    "the timestep. Each variable's 'time_reference' attribute says which."
-)
-
 
 def output_dataframe_to_dataset(
     df: pd.DataFrame, time_step_length: np.ndarray | None = None
 ) -> xr.Dataset:
     """Turn a parsed output DataFrame into a self-describing :class:`xarray.Dataset`.
 
-    Layout:
+    Layout (see :func:`pysipnet.dataset.dataframe_to_dataset`):
 
     - one dimension, ``time``, whose coordinate is the **start** of each
       timestep as ``datetime64``, built from ``year``, ``day_of_year`` and
@@ -285,70 +277,13 @@ def output_dataframe_to_dataset(
 
     Columns the registry does not know become variables with no attributes.
     """
-    import pandas as pd
-    import xarray as xr
+    from pysipnet.dataset import dataframe_to_dataset
 
-    if df.empty:
-        return xr.Dataset()
-
-    missing = [c for c in TIME_COORDINATE_NAMES if c not in df.columns]
-    if missing:
-        raise ValueError(
-            f"Cannot build a time coordinate: output is missing {missing}. "
-            "Was the file read without a header row?"
-        )
-
-    start = (
-        pd.to_datetime(df["year"].astype(int).astype(str), format="%Y")
-        + pd.to_timedelta(df["day_of_year"].astype(int) - 1, unit="D")
-        + pd.to_timedelta(df["hour_of_day"].astype(float), unit="h")
-    )
-
-    coords: dict[str, Any] = {
-        TIME_DIMENSION: (
-            TIME_DIMENSION,
-            start.to_numpy(),
-            {
-                "long_name": "Start of timestep",
-                "description": "Calendar time at the start of the timestep, as SIPNET labels it.",
-            },
-        ),
-    }
-    for name in TIME_COORDINATE_NAMES:
-        coords[name] = (TIME_DIMENSION, df[name].to_numpy(), _attributes_for(name))
-
-    if time_step_length is not None:
-        length = np.asarray(time_step_length, dtype=float)
-        if len(length) != len(df):
-            raise ValueError(
-                f"time_step_length has {len(length)} values but the output has {len(df)} rows."
-            )
-        length_td = pd.to_timedelta(length, unit="D").to_numpy()
-        coords["time_step_length"] = (
-            TIME_DIMENSION,
-            length_td,
-            {"long_name": "Timestep length", "description": "Duration of the timestep."},
-        )
-        coords["time_step_end"] = (
-            TIME_DIMENSION,
-            start.to_numpy() + length_td,
-            {
-                "long_name": "End of timestep",
-                "description": "Calendar time at the end of the timestep; state variables "
-                "are valid at this instant.",
-            },
-        )
-
-    data_vars = {
-        name: (TIME_DIMENSION, df[name].to_numpy(), _attributes_for(name))
-        for name in df.columns
-        if name not in TIME_COORDINATE_NAMES
-    }
-
-    return xr.Dataset(
-        data_vars,
-        coords=coords,
-        attrs={"source": "SIPNET, via pySIPNET", "time_convention": _TIME_CONVENTION},
+    return dataframe_to_dataset(
+        df,
+        attributes_for=_attributes_for,
+        time_step_length=time_step_length,
+        source="SIPNET output, via pySIPNET",
     )
 
 

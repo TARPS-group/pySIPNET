@@ -497,7 +497,7 @@ class SIPNETRunner:
         if not (provenance.returncode == 0 and out_src.exists()):
             return SIPNETOutput.from_dataframe(pd.DataFrame())
 
-        step_length = climate.data["length"].to_numpy()
+        step_length = climate.data["time_step_length"].to_numpy()
 
         if effective_output_dir is not None:
             dest = effective_output_dir / f"sipnet_{run_id}.out"

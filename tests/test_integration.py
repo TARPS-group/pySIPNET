@@ -41,17 +41,17 @@ def _make_climate(n_days: int = 30, year: int = 2010, start_doy: int = 150):
         rows.append(
             {
                 "year": year,
-                "day": start_doy + i,
-                "time": 0.0,
-                "length": 1.0,
-                "tair": 18.0 + 5.0 * np.sin(np.pi * i / n_days),
-                "tsoil": 12.0 + 3.0 * np.sin(np.pi * i / n_days),
-                "par": 15.0,
-                "precip": 2.0,
-                "vpd": 1200.0,
-                "vpd_soil": 600.0,
-                "vpress": 1500.0,
-                "wspd": 2.0,
+                "day_of_year": start_doy + i,
+                "hour_of_day": 0.0,
+                "time_step_length": 1.0,
+                "air_temperature": 18.0 + 5.0 * np.sin(np.pi * i / n_days),
+                "soil_temperature": 12.0 + 3.0 * np.sin(np.pi * i / n_days),
+                "photosynthetically_active_radiation": 15.0,
+                "precipitation": 2.0,
+                "vapour_pressure_deficit": 1200.0,
+                "soil_vapour_pressure_deficit": 600.0,
+                "vapour_pressure": 1500.0,
+                "wind_speed": 2.0,
             }
         )
     df = pd.DataFrame(rows)
@@ -138,7 +138,7 @@ class TestEndToEnd:
         assert ds["time"].attrs["long_name"] == "Start of timestep"
         expected_end = (
             ds["time"].values
-            + pd.to_timedelta(climate.data["length"].to_numpy(), unit="D").to_numpy()
+            + pd.to_timedelta(climate.data["time_step_length"].to_numpy(), unit="D").to_numpy()
         )
         np.testing.assert_array_equal(ds["time_step_end"].values, expected_end)
         assert ds["wood_carbon"].attrs["time_reference"] == "value at the end of the timestep"

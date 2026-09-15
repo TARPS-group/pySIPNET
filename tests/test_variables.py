@@ -276,7 +276,7 @@ def test_dataset_step_bounds_from_lengths():
     ds = output_dataframe_to_dataset(_frame(), time_step_length=np.full(4, 0.5))
     assert ds["time_step_end"].values[0] == np.datetime64("2020-01-01T12:00")
     assert ds["time_step_length"].values[0] == np.timedelta64(12, "h")
-    with pytest.raises(ValueError, match="values but the output has"):
+    with pytest.raises(ValueError, match="values but the data has"):
         output_dataframe_to_dataset(_frame(), time_step_length=np.ones(3))
 
 
@@ -328,3 +328,72 @@ def test_binary_header_matches_registry(minimal_params, tmp_path):
     header = result.outputs.source_path.read_text().splitlines()[0].split()
     assert header == [v.sipnet_name for v in OUTPUT_VARIABLES]
     assert re.match(r"^\d{4} ", result.outputs.source_path.read_text().splitlines()[1])
+
+
+# ---------------------------------------------------------------------------
+# Climate drivers
+# ---------------------------------------------------------------------------
+
+# Written by hand from readClimData() in sipnet/src/sipnet/sipnet.c (12-column layout).
+EXPECTED_CLIMATE_NAMES: dict[str, str] = {
+    "year": "year",
+    "day": "day_of_year",
+    "time": "hour_of_day",
+    "length": "time_step_length",
+    "tair": "air_temperature",
+    "tsoil": "soil_temperature",
+    "par": "photosynthetically_active_radiation",
+    "precip": "precipitation",
+    "vpd": "vapour_pressure_deficit",
+    "vpdSoil": "soil_vapour_pressure_deficit",
+    "vPress": "vapour_pressure",
+    "wspd": "wind_speed",
+}
+
+
+def test_climate_registry_matches_the_independent_mapping():
+    from pysipnet.variables import CLIMATE_VARIABLES
+
+    assert {v.sipnet_name: v.name for v in CLIMATE_VARIABLES} == EXPECTED_CLIMATE_NAMES
+    assert [v.sipnet_name for v in CLIMATE_VARIABLES] == list(EXPECTED_CLIMATE_NAMES)
+
+
+@pytest.mark.parametrize(
+    "spec",
+    __import__("pysipnet.variables", fromlist=["CLIMATE_VARIABLES"]).CLIMATE_VARIABLES,
+    ids=lambda s: s.name,
+)
+def test_climate_spec_follows_conventions(spec):
+    assert NAME_PATTERN.match(spec.name)
+    assert not (set(spec.name.split("_")) & FORBIDDEN_NAME_TOKENS), spec.name
+    assert spec.description.strip() and spec.long_label.strip()
+    if spec.internal_units:
+        from pysipnet.units import validate_units
+
+        validate_units(spec.internal_units)
+        assert spec.internal_conversion, f"{spec.name}: say how SIPNET converts it"
+    attrs = spec.xarray_attributes()
+    assert attrs["units"] == spec.units
+    assert "time_reference" in attrs
+
+
+def test_climate_time_coordinates_match_output_coordinates():
+    """Outputs and drivers share the same time columns so they can be aligned directly."""
+    from pysipnet.variables import CLIMATE_COLUMN_NAMES
+
+    assert CLIMATE_COLUMN_NAMES[:3] == TIME_COORDINATE_NAMES
+
+
+def test_previous_climate_names_still_resolve():
+    from pysipnet.variables import resolve_climate_variable
+
+    for old, new in {
+        "tair": "air_temperature",
+        "vpd_soil": "soil_vapour_pressure_deficit",
+        "vPress": "vapour_pressure",
+        "length": "time_step_length",
+        "day": "day_of_year",
+    }.items():
+        assert resolve_climate_variable(old).name == new
+    with pytest.raises(KeyError, match="not a SIPNET climate driver"):
+        resolve_climate_variable("rain")

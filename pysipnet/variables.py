@@ -1,4 +1,4 @@
-"""The variable registry: what every SIPNET output column is.
+"""The variable registry: what every SIPNET output column and climate driver is.
 
 SIPNET writes a ``.out`` file whose header names (``plantWoodC``, ``rSoil``,
 ``nppStorage``) say little about what the numbers are, and its documentation
@@ -31,6 +31,16 @@ to the end of the step.  Each spec's :attr:`VariableSpec.time_reference`
 states this in words, and the same text travels as an attribute on the
 xarray representation so a user never has to look it up.
 
+Climate drivers
+---------------
+:data:`CLIMATE_VARIABLES` describes the columns of the ``.clim`` input file the
+same way. Each :class:`ClimateVariableSpec` also records the units SIPNET
+converts the value to on read (``internal_units``), because SIPNET's own
+documentation quotes those rather than the file units. Climate rows follow the
+same time convention: ``year`` / ``day_of_year`` / ``hour_of_day`` are the
+start of the step, means are over the step, and ``photosynthetically_active_radiation``
+and ``precipitation`` are totals over the step.
+
 Precision
 ---------
 SIPNET prints every column with a fixed number of decimals (``%8.3f`` and the
@@ -44,7 +54,7 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, cast
 
 from pysipnet.units import UnitStyle, format_units, validate_units
 
@@ -722,6 +732,226 @@ LEGACY_OUTPUT_COLUMNS: dict[str, str] = {
 }
 
 
+# ── Climate drivers ────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class ClimateVariableSpec(VariableSpec):
+    """A column of the ``.clim`` climate driver file.
+
+    ``units`` are the units **in the file**, which is what a user supplies.
+    SIPNET converts some columns on read; ``internal_units`` and
+    ``internal_conversion`` record that so nobody has to reconcile the two
+    conventions from the SIPNET docs.
+    """
+
+    internal_units: str = ""
+    """Units SIPNET works in after reading the column, when different from *units*."""
+
+    internal_conversion: str = ""
+    """How SIPNET converts the file value, e.g. ``"× 0.1 (mm → cm)"``."""
+
+    def xarray_attributes(self) -> dict[str, Any]:
+        attrs = super().xarray_attributes()
+        if self.internal_units:
+            attrs["sipnet_internal_units"] = self.internal_units
+            attrs["sipnet_internal_conversion"] = self.internal_conversion
+        return attrs
+
+
+def _climate(**kwargs: Any) -> ClimateVariableSpec:
+    return ClimateVariableSpec(**kwargs)
+
+
+CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
+    # In the order of the 12-column .clim layout (readClimData in src/sipnet/sipnet.c).
+    _climate(
+        name="year",
+        sipnet_name="year",
+        kind=VariableKind.COORDINATE,
+        units="1",
+        description="Calendar year at the start of the timestep.",
+        long_label="Year",
+        group="time",
+    ),
+    _climate(
+        name="day_of_year",
+        sipnet_name="day",
+        kind=VariableKind.COORDINATE,
+        units="d",
+        description="Day of year at the start of the timestep; 1 is January 1st.",
+        long_label="Day of year",
+        short_label="DOY",
+        aliases=("day", "doy"),
+        group="time",
+    ),
+    _climate(
+        name="hour_of_day",
+        sipnet_name="time",
+        kind=VariableKind.COORDINATE,
+        units="h",
+        description="Hours after midnight at the start of the timestep; may be fractional.",
+        long_label="Hour of day",
+        aliases=("time",),
+        group="time",
+    ),
+    _climate(
+        name="time_step_length",
+        sipnet_name="length",
+        kind=VariableKind.COORDINATE,
+        units="d",
+        description="Duration of the timestep in days. SIPNET also accepts a negative value "
+        "meaning seconds; pySIPNET writes days only.",
+        long_label="Timestep length",
+        aliases=("length",),
+        group="time",
+    ),
+    _climate(
+        name="air_temperature",
+        sipnet_name="tair",
+        kind=VariableKind.MEAN,
+        units="degC",
+        description="Mean air temperature over the timestep.",
+        long_label="Air temperature",
+        aliases=("tair",),
+        group="meteorology",
+    ),
+    _climate(
+        name="soil_temperature",
+        sipnet_name="tsoil",
+        kind=VariableKind.MEAN,
+        units="degC",
+        description="Mean soil temperature over the timestep.",
+        long_label="Soil temperature",
+        aliases=("tsoil",),
+        group="meteorology",
+    ),
+    _climate(
+        name="photosynthetically_active_radiation",
+        sipnet_name="par",
+        kind=VariableKind.FLUX,
+        units="mol m-2",
+        constituent="photons",
+        description="Photosynthetically active radiation summed over the timestep, as moles "
+        "of photons per square metre of ground (1 Einstein = 1 mol). To convert an "
+        "instantaneous flux in µmol m⁻² s⁻¹, multiply by the timestep length in seconds "
+        "and divide by 1e6.",
+        long_label="Photosynthetically active radiation",
+        short_label="PAR",
+        aliases=("par",),
+        internal_units="mol m-2 d-1",
+        internal_conversion="÷ time_step_length (total over step → per day)",
+        group="meteorology",
+    ),
+    _climate(
+        name="precipitation",
+        sipnet_name="precip",
+        kind=VariableKind.FLUX,
+        units="mm",
+        constituent="H2O",
+        description="Total precipitation over the timestep as a depth of liquid water "
+        "equivalent; rain or snow.",
+        long_label="Precipitation",
+        aliases=("precip",),
+        internal_units="cm",
+        internal_conversion="× 0.1 (mm → cm)",
+        group="meteorology",
+    ),
+    _climate(
+        name="vapour_pressure_deficit",
+        sipnet_name="vpd",
+        kind=VariableKind.MEAN,
+        units="Pa",
+        description="Mean vapour pressure deficit of the air over the timestep. SIPNET clamps "
+        "values below a tiny positive number up to it.",
+        long_label="Vapour pressure deficit",
+        short_label="VPD",
+        aliases=("vpd",),
+        internal_units="kPa",
+        internal_conversion="× 0.001 (Pa → kPa), clamped ≥ 1e-6",
+        group="meteorology",
+    ),
+    _climate(
+        name="soil_vapour_pressure_deficit",
+        sipnet_name="vpdSoil",
+        kind=VariableKind.MEAN,
+        units="Pa",
+        description="Mean vapour pressure deficit between the soil and the air over the "
+        "timestep, using saturation vapour pressure at the soil temperature.",
+        long_label="Soil vapour pressure deficit",
+        aliases=("vpd_soil", "vpdSoil"),
+        internal_units="kPa",
+        internal_conversion="× 0.001 (Pa → kPa)",
+        group="meteorology",
+    ),
+    _climate(
+        name="vapour_pressure",
+        sipnet_name="vPress",
+        kind=VariableKind.MEAN,
+        units="Pa",
+        description="Mean vapour pressure in the canopy airspace over the timestep.",
+        long_label="Vapour pressure",
+        aliases=("vpress", "vPress"),
+        internal_units="kPa",
+        internal_conversion="× 0.001 (Pa → kPa)",
+        group="meteorology",
+    ),
+    _climate(
+        name="wind_speed",
+        sipnet_name="wspd",
+        kind=VariableKind.MEAN,
+        units="m s-1",
+        description="Mean wind speed over the timestep. SIPNET clamps values below a tiny "
+        "positive number up to it.",
+        long_label="Wind speed",
+        aliases=("wspd",),
+        internal_conversion="clamped ≥ 1e-6",
+        group="meteorology",
+    ),
+)
+"""Every column of the 12-value climate record, in file order."""
+
+CLIMATE_COLUMN_NAMES: tuple[str, ...] = tuple(v.name for v in CLIMATE_VARIABLES)
+CLIMATE_VARIABLES_BY_NAME: dict[str, ClimateVariableSpec] = {v.name: v for v in CLIMATE_VARIABLES}
+
+
+def _build_alias_index_for(
+    specs: tuple[VariableSpec, ...],
+) -> dict[str, VariableSpec]:
+    index: dict[str, VariableSpec] = {}
+    for spec in specs:
+        for key in (spec.name, spec.sipnet_name, *spec.aliases):
+            existing = index.get(key)
+            if existing is not None and existing is not spec:
+                raise ValueError(
+                    f"Alias {key!r} is claimed by both {existing.name!r} and {spec.name!r}."
+                )
+            index[key] = spec
+    return index
+
+
+_CLIMATE_ALIAS_INDEX: dict[str, VariableSpec] = _build_alias_index_for(CLIMATE_VARIABLES)
+
+
+def resolve_climate_variable(name: str) -> ClimateVariableSpec:
+    """Return the climate spec for a column name, alias or SIPNET column name."""
+    spec = _CLIMATE_ALIAS_INDEX.get(name)
+    if spec is None:
+        raise KeyError(
+            f"{name!r} is not a SIPNET climate driver or alias. "
+            f"Expected one of {list(CLIMATE_COLUMN_NAMES)}."
+        )
+    return cast(ClimateVariableSpec, spec)
+
+
+def climate_variable_records() -> list[dict[str, Any]]:
+    """The climate registry as JSON-serialisable dicts, for documentation and export."""
+    return [spec.to_record() for spec in CLIMATE_VARIABLES]
+
+
+# ── Lookups ────────────────────────────────────────────────────────────────────
+
+
 def _build_alias_index() -> dict[str, VariableSpec]:
     index: dict[str, VariableSpec] = {}
     for spec in OUTPUT_VARIABLES:
@@ -771,6 +1001,12 @@ def output_variable_records() -> list[dict[str, Any]]:
 
 __all__ = [
     "Aggregation",
+    "CLIMATE_COLUMN_NAMES",
+    "CLIMATE_VARIABLES",
+    "CLIMATE_VARIABLES_BY_NAME",
+    "ClimateVariableSpec",
+    "climate_variable_records",
+    "resolve_climate_variable",
     "LEGACY_OUTPUT_COLUMNS",
     "NAME_PATTERN",
     "OUTPUT_VARIABLES",
