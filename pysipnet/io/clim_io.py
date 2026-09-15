@@ -93,7 +93,7 @@ def write_clim_file(climate: ClimateDrivers, path: Path) -> None:
     Parameters
     ----------
     climate:
-        :class:`~pysipnet.climate.ClimateDrivers` to serialise.
+        :class:`~pysipnet.climate.ClimateDrivers` to serialize.
     path:
         Output path (typically ``<workdir>/sipnet.clim``).
     """

@@ -187,7 +187,7 @@ result          = ensemble_runner.run(spec)
 ```
 
 !!! important "Pickling requirement"
-    `LocalBackend` uses Python's `multiprocessing` module, which serialises
+    `LocalBackend` uses Python's `multiprocessing` module, which serializes
     the model callable and all field values with `pickle`.  `SIPNETModel` is
     picklable.
 

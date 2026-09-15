@@ -2,7 +2,7 @@
 
 Every parameter field carries a :class:`ParameterSpec`: the SIPNET name it is
 written under, its units, its mathematical domain, a description, plot labels,
-aliases, and (for initial conditions) which output state it initialises.
+aliases, and (for initial conditions) which output state it initializes.
 :func:`get_parameter_specs` returns them all as a flat ``{dotted.path: spec}``
 dict, which is what calibration tooling, the parameter-file writer and the
 generated documentation read.
@@ -46,7 +46,7 @@ Parameter domains
 -----------------
 :class:`ParameterDomain` encodes the mathematical support of each parameter.
 This is the primary piece of information needed to select a bijector for
-unconstrained optimisation or MCMC:
+unconstrained optimization or MCMC:
 
 +---------------------+--------------------+------------------------------+
 | Domain              | Support            | Typical bijector             |
@@ -91,7 +91,7 @@ _MISSING: Any = dataclasses.MISSING
 class ParameterDomain(StrEnum):
     """Mathematical support of a scalar parameter.
 
-    Use this when constructing bijectors for unconstrained optimisation or
+    Use this when constructing bijectors for unconstrained optimization or
     sampling (e.g., TensorFlow Probability, NumPyro, PyMC).
     """
 
@@ -180,7 +180,7 @@ class ParameterSpec:
         return f"{self.long_label} ({self.formatted_units(style)})"
 
     def to_record(self) -> dict[str, Any]:
-        """A plain, JSON-serialisable dict of every field."""
+        """A plain, JSON-serializable dict of every field."""
         record = asdict(self)
         record["domain"] = self.domain.value
         record["aliases"] = list(self.aliases)

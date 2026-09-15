@@ -47,7 +47,7 @@ Precision
 SIPNET prints every column with a fixed number of decimals (``%8.3f`` and the
 like), recorded in :attr:`VariableSpec.output_decimals`.  Carbon fluxes get
 three decimals, so a half-hourly NEE of 0.05 g C m⁻² carries a 1 %
-quantisation floor.  That matters when the output feeds a likelihood.
+quantization floor.  That matters when the output feeds a likelihood.
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ NAME_PATTERN = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
 
 
 class VariableKind(StrEnum):
-    """What a value in a column represents, relative to the timestep it is labelled with."""
+    """What a value in a column represents, relative to the timestep it is labeled with."""
 
     COORDINATE = "coordinate"
     """Identifies the row: the start of the timestep."""
@@ -226,7 +226,7 @@ class VariableSpec:
         return attrs
 
     def to_record(self) -> dict[str, Any]:
-        """A plain, JSON-serialisable dict of every field plus the derived properties."""
+        """A plain, JSON-serializable dict of every field plus the derived properties."""
         record = asdict(self)
         record["kind"] = self.kind.value
         record["aliases"] = list(self.aliases)
@@ -838,7 +838,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
         units="mol m-2",
         constituent="photons",
         description="Photosynthetically active radiation summed over the timestep, as moles "
-        "of photons per square metre of ground (1 Einstein = 1 mol). To convert an "
+        "of photons per square meter of ground (1 Einstein = 1 mol). To convert an "
         "instantaneous flux in µmol m⁻² s⁻¹, multiply by the timestep length in seconds "
         "and divide by 1e6.",
         long_label="Photosynthetically active radiation",
@@ -950,7 +950,7 @@ def resolve_climate_variable(name: str) -> ClimateVariableSpec:
 
 
 def climate_variable_records() -> list[dict[str, Any]]:
-    """The climate registry as JSON-serialisable dicts, for documentation and export."""
+    """The climate registry as JSON-serializable dicts, for documentation and export."""
     return [spec.to_record() for spec in CLIMATE_VARIABLES]
 
 
@@ -1009,7 +1009,7 @@ def resolve_output_variable_names(names: list[str] | tuple[str, ...]) -> list[st
 
 
 def output_variable_records() -> list[dict[str, Any]]:
-    """The whole registry as JSON-serialisable dicts, for documentation and export."""
+    """The whole registry as JSON-serializable dicts, for documentation and export."""
     return [spec.to_record() for spec in OUTPUT_VARIABLES]
 
 

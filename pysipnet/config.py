@@ -1,4 +1,4 @@
-"""RunConfig — serialisable run specification for reproducible SIPNET workflows."""
+"""RunConfig — serializable run specification for reproducible SIPNET workflows."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ _MODE_REFERENCE = "reference"
 
 @dataclass
 class RunConfig:
-    """Serialisable specification for a single SIPNET run.
+    """Serializable specification for a single SIPNET run.
 
     A ``RunConfig`` captures everything needed to reproduce a model run:
     the model flags, the full parameter set, the climate forcing, and any

@@ -73,7 +73,7 @@ for path in site_files:
     climate = ClimateDrivers.from_path(path, n_columns=14)
     result = runner.run(params, climate, run_id=Path(path).stem)
 
-    # Output is eagerly parsed into memory (default behaviour)
+    # Output is eagerly parsed into memory (default behavior)
     results[Path(path).stem] = result.outputs.data
 
 # All outputs now in a dict of DataFrames — climate files never loaded into Python

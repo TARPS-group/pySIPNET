@@ -14,7 +14,7 @@ inputs are live Python objects in memory.  When a session ends, they are
 gone.  Reproducibility means being able to reconstruct those inputs precisely
 and re-run the model to get the same output.
 
-Beyond re-running, a saved specification is also a communication artefact:
+Beyond re-running, a saved specification is also a communication artifact:
 it tells a future reader (or your future self) exactly what was fed into the
 model to produce a given result.
 
@@ -170,7 +170,7 @@ result = model(soil_carbon=row["soil_init"], soil_wetness_fraction=row["soil_wat
 
 If you are using PyEns, its `EnsembleSpec` is the structured override
 manifest: it describes the ensemble axes and the parameter grids along them.
-`EnsembleSpec` has its own `dump` and `load` methods for serialisation.
+`EnsembleSpec` has its own `dump` and `load` methods for serialization.
 Save the shared context and the spec together so that the full specification
 is self-contained:
 
@@ -225,7 +225,7 @@ spec    = EnsembleSpec.load("my_ensemble/spec.json")
 
 Some workflows involve many sequential model evaluations driven by an
 external algorithm, where the inputs to each evaluation depend on the results
-of previous ones.  Examples include MCMC samplers, optimisation routines, and
+of previous ones.  Examples include MCMC samplers, optimization routines, and
 data assimilation / state estimation algorithms such as ensemble Kalman
 filters or particle filters.
 
@@ -240,9 +240,9 @@ The external algorithm's responsibility is to record its own state — the
 random seed, the step history, the acceptance decisions, the filter weights.
 pySIPNET does not provide classes for this.
 
-### The two-artefact pattern
+### The two-artifact pattern
 
-For a typical iterative run, two artefacts together make the workflow fully
+For a typical iterative run, two artifacts together make the workflow fully
 reproducible:
 
 **1. A shared `RunConfig`** — written once at the start, capturing the flags,
@@ -282,7 +282,7 @@ with open("experiment/run_log.csv", "w", newline="") as log_file:
 
 ### Replaying any evaluation
 
-Given the two artefacts, replaying evaluation 42 is straightforward:
+Given the two artifacts, replaying evaluation 42 is straightforward:
 
 ```python
 import pandas as pd
@@ -341,7 +341,7 @@ When reproducing results months or years later, the metadata fields in
 | Field | What it tells you |
 |:------|:------------------|
 | `sipnet_commit` | Exact SIPNET C source revision.  Use `git checkout <hash>` in the `sipnet/` submodule, then `make sipnet` to rebuild the same binary. |
-| `pysipnet_version` | pySIPNET version at save time.  Useful for identifying API or file-format differences if behaviour seems to differ. |
+| `pysipnet_version` | pySIPNET version at save time.  Useful for identifying API or file-format differences if behavior seems to differ. |
 | `created_at` | ISO 8601 UTC timestamp of when the config was written. |
 
 For `reference_only=True` configs, the `sha256` field in `config.json` lets

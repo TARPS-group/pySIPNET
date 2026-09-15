@@ -26,7 +26,7 @@ print(climate)
 
 ## 2. Define parameters
 
-Parameters are organised into domain-specific groups.  Pydantic validates
+Parameters are organized into domain-specific groups.  Pydantic validates
 every value at construction time — invalid values raise `ValidationError`
 immediately.
 

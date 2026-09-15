@@ -283,7 +283,7 @@ class TestOutputIO:
         assert second.provenance.workdir.exists()
 
     def test_the_run_id_still_labels_the_directory(self, minimal_params, tmp_path):
-        """Unpredictable, but still recognisable while debugging."""
+        """Unpredictable, but still recognizable while debugging."""
         runner = SIPNETRunner(flags=ModelFlags.standard(), workdir_base=tmp_path, keep_workdir=True)
         result = runner.run(minimal_params, _make_climate(), run_id="member42")
         assert result.provenance.workdir.name.startswith("sipnet_member42_")

@@ -25,7 +25,7 @@ applies it.
 
 A header token the registry does not know is kept under its SIPNET name and
 reported with a :class:`UnknownOutputColumnWarning`. That is deliberately loud:
-a column added upstream should be modelled, not silently passed through, and
+a column added upstream should be modeled, not silently passed through, and
 ``tests/test_variables.py`` asserts the pinned binary produces none.
 """
 

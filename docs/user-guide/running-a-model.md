@@ -274,7 +274,7 @@ result_warm     = model(optimum_photosynthesis_temperature=28.0)
 result_combined = model(max_photosynthesis_rate=140.0, optimum_photosynthesis_temperature=28.0)
 ```
 
-Unrecognised parameter names raise `ValueError` immediately.  Invalid values
+Unrecognized parameter names raise `ValueError` immediately.  Invalid values
 (e.g., a negative `max_photosynthesis_rate`) raise `ValidationError` before the binary is called.
 
 ### Climate and event overrides
@@ -428,7 +428,7 @@ from pysipnet.parameters.base import get_parameter_specs, ParameterDomain
 specs = get_parameter_specs(SIPNETParameters)
 # {"photosynthesis.max_photosynthesis_rate": ParameterSpec(sipnet_name="aMax", units="nmol g-1 s-1", constituent="CO2", domain=POSITIVE, ...), ...}
 
-# Parameters requiring a log bijector for unconstrained optimisation
+# Parameters requiring a log bijector for unconstrained optimization
 log_params = {k for k, s in specs.items() if s.domain == ParameterDomain.POSITIVE}
 
 # Per-year rate parameters

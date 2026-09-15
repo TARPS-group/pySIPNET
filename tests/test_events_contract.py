@@ -116,7 +116,7 @@ class TestArityMatchesSipnet:
             "SIPNET exits with EXIT_CODE_UNKNOWN_EVENT_TYPE_OR_PARAM on these."
         )
 
-    def test_unmodelled_event_types_are_the_ones_we_expect(self):
+    def test_unmodeled_event_types_are_the_ones_we_expect(self):
         """Pin the known gaps so a new upstream type shows up as a change.
 
         ``leafon`` and ``leafoff`` prescribe leaf-out and leaf-fall timing from
@@ -193,7 +193,7 @@ class TestSipnetReceivesWhatWeWrote:
         assert events_out.strip(), f"SIPNET applied no event for {event.type}"
 
     def test_a_surplus_value_would_be_silently_swallowed(self, tmp_path, reference_fixture_dir):
-        """Document the behaviour that made the tillage bug invisible.
+        """Document the behavior that made the tillage bug invisible.
 
         Writing an extra value by hand does not fail. Nothing warns. This is
         why the arity is asserted against the SIPNET header rather than

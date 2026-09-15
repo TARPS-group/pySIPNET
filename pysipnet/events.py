@@ -30,7 +30,7 @@ Events must be listed in chronological order (SIPNET errors otherwise).
 Inline comments using ``#`` are permitted — ``sscanf`` stops reading at
 non-numeric characters, so trailing ``# text`` is silently ignored.
 
-Serialisation
+Serialization
 -------------
 All event classes are frozen Pydantic models, so a complete event sequence
 can be round-tripped through ``model_dump`` / ``model_validate`` for storage
@@ -266,7 +266,7 @@ class EventSequence(BaseModel):
                 )
         return self
 
-    # ── Serialisation ──────────────────────────────────────────────────────
+    # ── Serialization ──────────────────────────────────────────────────────
 
     def to_file(self, path: str | Path) -> None:
         """Write the event sequence to a SIPNET ``events.in`` file."""

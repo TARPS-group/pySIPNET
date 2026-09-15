@@ -58,7 +58,7 @@ SIPNET clamps VPD and wind speed up to a tiny positive value when they fall
 below it — note the test is "below", so small negatives are silently clamped
 too, not just zeros, to avoid division by zero.  :meth:`ClimateDrivers.validate` flags
 non-positive values as warnings rather than errors, matching SIPNET's
-behaviour while making the issue visible to the user.
+behavior while making the issue visible to the user.
 """
 
 from __future__ import annotations
@@ -312,7 +312,7 @@ class ClimateDrivers:
                 stacklevel=3,
             )
 
-    # ── Serialisation ──────────────────────────────────────────────────────────
+    # ── Serialization ──────────────────────────────────────────────────────────
 
     def to_file(self, path: str | Path) -> None:
         """Write the climate data to a SIPNET-format ``.clim`` file."""

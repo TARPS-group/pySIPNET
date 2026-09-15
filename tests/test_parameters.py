@@ -220,22 +220,22 @@ class TestUnsupportedFlags:
             assert getattr(ModelFlags(), flag) is False
 
     def test_a_saved_config_with_an_unsupported_flag_is_refused_on_load(self):
-        """Deserialisation must not be a way around the gate."""
+        """Deserialization must not be a way around the gate."""
         with pytest.raises(ValidationError, match="not supported"):
             ModelFlags.model_validate({"flooding": True})
 
     def test_every_sipnet_parameter_is_either_modelled_or_listed(self, sipnet_source_params):
         """Nothing SIPNET registers may go unaccounted for.
 
-        If a pin bump adds a parameter, it is either modelled or it belongs to
+        If a pin bump adds a parameter, it is either modeled or it belongs to
         a flag we refuse. Anything else is a silent gap: SIPNET would require
         it under some configuration and we would have no way to supply it.
         """
         from pysipnet.io.param_io import PYTHON_TO_SIPNET
 
-        modelled = set(PYTHON_TO_SIPNET.values())
+        modeled = set(PYTHON_TO_SIPNET.values())
         listed = {p for _, params in UNSUPPORTED_FLAGS.values() for p in params}
-        unaccounted = sipnet_source_params - modelled - listed
+        unaccounted = sipnet_source_params - modeled - listed
         assert not unaccounted, (
             f"SIPNET registers {sorted(unaccounted)}, which pySIPNET neither models "
             "nor lists in UNSUPPORTED_FLAGS."
@@ -252,18 +252,18 @@ class TestUnsupportedFlags:
         """Every parameter named in the message must be real, and still absent.
 
         Guards two ways of going stale: naming a parameter SIPNET does not
-        have, and keeping a flag listed after its parameters were modelled.
+        have, and keeping a flag listed after its parameters were modeled.
         """
         from pysipnet.io.param_io import PYTHON_TO_SIPNET
 
-        modelled = set(PYTHON_TO_SIPNET.values())
+        modeled = set(PYTHON_TO_SIPNET.values())
         for flag, (_, params) in UNSUPPORTED_FLAGS.items():
             for param in params:
                 assert param in sipnet_source_params, (
                     f"{flag}: {param} is not a parameter SIPNET v2.1.0 registers"
                 )
-                assert param not in modelled, (
-                    f"{flag}: {param} is modelled now — remove {flag} from UNSUPPORTED_FLAGS"
+                assert param not in modeled, (
+                    f"{flag}: {param} is modeled now — remove {flag} from UNSUPPORTED_FLAGS"
                 )
 
 
@@ -315,9 +315,9 @@ class TestModelFlagsName:
         assert ModelFlags(litter_pool=True, name="niwot-forest").name == "niwot-forest"
 
     def test_does_not_change_the_model_configuration(self):
-        labelled = ModelFlags(litter_pool=True, name="anything")
-        unlabelled = ModelFlags(litter_pool=True)
-        assert labelled.to_config_keys() == unlabelled.to_config_keys()
+        labeled = ModelFlags(litter_pool=True, name="anything")
+        unlabeled = ModelFlags(litter_pool=True)
+        assert labeled.to_config_keys() == unlabeled.to_config_keys()
 
     def test_participates_in_equality(self):
         """Documented consequence of keeping the label on the model itself."""
@@ -357,7 +357,7 @@ class TestModelFlagsAreImmutable:
         assert len({ModelFlags.standard(), ModelFlags.forest()}) == 2
 
 
-class TestModelFlagsSerialisation:
+class TestModelFlagsSerialization:
     def test_roundtrips_through_a_dict(self):
         flags = ModelFlags.forest()
         assert ModelFlags.model_validate(flags.model_dump()) == flags
@@ -506,7 +506,7 @@ class TestParameterSpecConventions:
         initial = {p: s for p, s in PARAMETER_SPECS.items() if p.startswith("initial_conditions.")}
         assert initial, "no initial conditions found"
         for path, spec in initial.items():
-            assert spec.initializes, f"{path} does not say which state it initialises"
+            assert spec.initializes, f"{path} does not say which state it initializes"
             for name in spec.initializes:
                 assert OUTPUT_VARIABLES_BY_NAME[name].kind is VariableKind.STATE, (path, name)
         others = {p: s for p, s in PARAMETER_SPECS.items() if p not in initial}
