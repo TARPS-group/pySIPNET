@@ -9,7 +9,7 @@ pySIPNET is independent of the [PEcAn](https://github.com/pecanproject) ecosyste
 - Typed, hierarchical parameter models with units and validation on every field
 - Validated climate driver container (12- and 14-column SIPNET layouts)
 - Isolated run execution — each run gets its own working directory, enabling trivial parallelism
-- Clean output as labelled DataFrames (optional xarray export)
+- Clean output as a labelled DataFrame or a self-describing xarray Dataset, every variable named for what it is and carrying its units and time reference
 - `SIPNETModel` — a single callable compatible with PyEns, Dask, Parsl, Ray, and any framework that treats the model as `(**inputs) → output`
 
 ## Quick start

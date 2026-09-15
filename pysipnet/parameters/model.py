@@ -203,7 +203,18 @@ class ModelFlags(BaseModel):
 
     # ── Processes on by default ──
     snow: bool = True
-    """Track a snowpack instead of treating all precipitation as liquid."""
+    """Require the snow melt rate parameter.
+
+    SIPNET's documentation says this flag switches the snowpack on or off, but
+    at the pinned version the snowpack is always simulated: precipitation
+    below 0 °C falls as snow regardless of the flag. The only effect of turning
+    it off is that ``water.snow_melt_rate`` is no longer required. If the
+    parameter is supplied anyway (pySIPNET writes every parameter that is not
+    ``None``) it is used exactly as with the flag on; if it is omitted SIPNET
+    leaves it at zero and snow that falls never melts. Leave this on unless you
+    want exactly that. ``tests/test_integration.py`` pins this behaviour so an
+    upstream fix is noticed.
+    """
 
     gdd: bool = True
     """Decide when leaves appear from accumulated growing degree-days.
@@ -496,8 +507,8 @@ class InitialConditions(ParameterGroup):
         constituent="H2O",
         domain=_D.NON_NEGATIVE,
         default=0.0,
-        description="Snowpack at the start of the run as a depth of liquid water. Only used "
-        "when ModelFlags.snow is on.",
+        description="Snowpack at the start of the run as a depth of liquid water. The "
+        "snowpack is simulated whether or not ModelFlags.snow is on.",
         long_label="Initial snow water equivalent",
         short_label="Initial SWE",
         aliases=("snow",),
@@ -952,10 +963,12 @@ class WaterParams(ParameterGroup):
     )
     water_use_efficiency: float = param_field(
         sipnet_name="wueConst",
-        units="1",
+        units="mg g-1 kPa",
+        constituent="CO2",
         domain=_D.POSITIVE,
         description="Water use efficiency constant linking transpiration to gross primary "
-        "production.",
+        "production: water use efficiency in mg CO2 per g water is this value divided by "
+        "the vapour pressure deficit in kPa.",
         long_label="Water use efficiency",
         short_label="WUE",
         aliases=("wue_const",),
@@ -993,7 +1006,8 @@ class WaterParams(ParameterGroup):
         constituent="H2O",
         domain=_D.POSITIVE,
         description="Snow melted per degree of air temperature above freezing per day. "
-        "Required when ModelFlags.snow is on.",
+        "Required when ModelFlags.snow is on. With the flag off it is optional but still "
+        "used if supplied; if omitted SIPNET uses zero and snow never melts.",
         long_label="Snow melt rate",
         aliases=("snow_melt",),
         default=None,
@@ -1027,11 +1041,12 @@ class WaterParams(ParameterGroup):
     )
     leaf_water_pool_depth: float | None = param_field(
         sipnet_name="leafPoolDepth",
-        units="cm",
+        units="cm d-1",
         constituent="H2O",
         domain=_D.NON_NEGATIVE,
-        description="Depth of water the canopy can hold per unit leaf area, capping "
-        "interception evaporation. Required when ModelFlags.leaf_water is on.",
+        description="Cap on interception evaporation per unit leaf area index: the canopy "
+        "can evaporate at most this rate times the leaf area index. Required when "
+        "ModelFlags.leaf_water is on.",
         long_label="Leaf water pool depth",
         aliases=("leaf_pool_depth",),
         default=None,

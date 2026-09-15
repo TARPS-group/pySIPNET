@@ -490,3 +490,9 @@ class TestClimateRegistry:
         assert ds["precipitation"].attrs["time_reference"] == "total over the timestep"
         assert ds["precipitation"].attrs["sipnet_internal_units"] == "cm"
         assert "time_step_length" in ds.coords and "time_step_length" not in ds.data_vars
+
+    def test_alias_and_canonical_column_together_is_an_error(self):
+        df = _make_df()
+        df["tair"] = df["air_temperature"] + 1.0
+        with pytest.raises(ValueError, match="canonical name"):
+            ClimateDrivers.from_dataframe(df)

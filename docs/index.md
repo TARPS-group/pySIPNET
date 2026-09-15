@@ -13,7 +13,7 @@ pySIPNET provides:
 - **Typed, hierarchical parameter models** — every parameter carries its units, domain, and a description.
 - **Validated climate drivers** — the forcing data structure catches format errors before SIPNET does.
 - **Isolated run execution** — each run gets a fresh working directory; runs never share state.
-- **Clean output** — SIPNET output is parsed into a labelled DataFrame.
+- **Clean output** — columns are named for what they are (`net_ecosystem_exchange`, not `nee`), carry units and a stated start-of-step or end-of-step time reference, and are available as a DataFrame or an xarray Dataset.
 
 SIPNET is often run within the [PEcAn](https://github.com/pecanproject) ecosystem, but pySIPNET is **independent of PEcAn**.  It makes no assumptions about PEcAn conventions, file layouts, or data formats.
 

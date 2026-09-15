@@ -26,10 +26,11 @@ SIPNET labels each row with the **start** of the timestep (``year``,
 has been applied, so a ``STATE`` value is the pool at the *end* of the step.
 ``FLUX`` values are integrals over the step, ``MEAN`` values are means over
 it, the single ``RATE`` value is a per-day rate for the step, and
-``CUMULATIVE`` values run from the start of the simulation (or of the restart)
-to the end of the step.  Each spec's :attr:`VariableSpec.time_reference`
-states this in words, and the same text travels as an attribute on the
-xarray representation so a user never has to look it up.
+``CUMULATIVE`` values run from the start of the simulation to the end of the
+step (and continue across a restart, which carries them in the checkpoint).
+Each spec's :attr:`VariableSpec.time_reference` states this in words, and the
+same text travels as an attribute on the xarray representation so a user never
+has to look it up.
 
 Climate drivers
 ---------------
@@ -259,7 +260,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
         name="day_of_year",
         sipnet_name="day",
         kind=VariableKind.COORDINATE,
-        units="d",
+        units="1",
         description="Day of year at the start of the timestep; 1 is January 1st.",
         long_label="Day of year",
         short_label="DOY",
@@ -401,11 +402,13 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
         kind=VariableKind.STATE,
         units="cm",
         constituent="H2O",
-        description="Snowpack as a depth of liquid water equivalent.",
+        description="Snowpack as a depth of liquid water equivalent. Simulated whether or not "
+        "ModelFlags.snow is on: at the pinned SIPNET the flag only decides whether the snow "
+        "melt rate parameter is required. If that parameter is supplied it is used either "
+        "way; if it is omitted SIPNET leaves it at zero and snow never melts.",
         long_label="Snow water equivalent",
         short_label="SWE",
         aliases=("snow",),
-        requires_flag="snow",
         output_decimals=2,
         group="water",
     ),
@@ -443,8 +446,9 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
         kind=VariableKind.CUMULATIVE,
         **_GC,
         description=(
-            "Net ecosystem exchange summed from the start of the simulation, or of the "
-            "restart checkpoint it resumed from, to the end of the timestep."
+            "Net ecosystem exchange summed from the start of the simulation to the end of "
+            "the timestep. The total is carried in restart checkpoints, so a restarted run "
+            "continues it rather than starting again."
         ),
         long_label="Cumulative net ecosystem exchange",
         short_label="Cumulative NEE",
@@ -755,6 +759,7 @@ class ClimateVariableSpec(VariableSpec):
         attrs = super().xarray_attributes()
         if self.internal_units:
             attrs["sipnet_internal_units"] = self.internal_units
+        if self.internal_conversion:
             attrs["sipnet_internal_conversion"] = self.internal_conversion
         return attrs
 
@@ -778,7 +783,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
         name="day_of_year",
         sipnet_name="day",
         kind=VariableKind.COORDINATE,
-        units="d",
+        units="1",
         description="Day of year at the start of the timestep; 1 is January 1st.",
         long_label="Day of year",
         short_label="DOY",
@@ -798,7 +803,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
     _climate(
         name="time_step_length",
         sipnet_name="length",
-        kind=VariableKind.COORDINATE,
+        kind=VariableKind.FLUX,
         units="d",
         description="Duration of the timestep in days. SIPNET also accepts a negative value "
         "meaning seconds; pySIPNET writes days only.",
@@ -985,10 +990,19 @@ def resolve_output_variable(name: str) -> VariableSpec:
 
 
 def resolve_output_variable_names(names: list[str] | tuple[str, ...]) -> list[str]:
-    """Map names or aliases to canonical variable names, preserving order and dropping repeats."""
+    """Map names or aliases to canonical variable names, preserving order and dropping repeats.
+
+    Columns written only by older SIPNET versions (:data:`LEGACY_OUTPUT_COLUMNS`) are
+    accepted under either their SIPNET or their pySIPNET name.
+    """
     resolved: list[str] = []
     for name in names:
-        canonical = resolve_output_variable(name).name
+        if name in LEGACY_OUTPUT_COLUMNS:
+            canonical = LEGACY_OUTPUT_COLUMNS[name]
+        elif name in LEGACY_OUTPUT_COLUMNS.values():
+            canonical = name
+        else:
+            canonical = resolve_output_variable(name).name
         if canonical not in resolved:
             resolved.append(canonical)
     return resolved

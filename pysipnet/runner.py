@@ -486,9 +486,12 @@ class SIPNETRunner:
 
         The timestep lengths come from the climate drivers; SIPNET does not
         write them, and without them the output cannot say when each step ends.
+        They are handed over as a callable so a file-backed climate is not read
+        just to build a result nobody has asked for the Dataset of.
         """
         import shutil
 
+        import numpy as np
         import pandas as pd
 
         from pysipnet.io.output_reader import read_output_file
@@ -497,7 +500,8 @@ class SIPNETRunner:
         if not (provenance.returncode == 0 and out_src.exists()):
             return SIPNETOutput.from_dataframe(pd.DataFrame())
 
-        step_length = climate.data["time_step_length"].to_numpy()
+        def step_length() -> np.ndarray:
+            return climate.data["time_step_length"].to_numpy()
 
         if effective_output_dir is not None:
             dest = effective_output_dir / f"sipnet_{run_id}.out"

@@ -157,7 +157,8 @@ frames = [
     for r in results
 ]
 combined = pd.concat(frames, ignore_index=True)
-# combined has columns: year, day, time, nee, gpp, run_id
+# combined has columns: year, day_of_year, hour_of_day,
+#   net_ecosystem_exchange, gross_primary_production, run_id
 ```
 
 `load(variables=[...])` reads only the requested variables from disk each time it

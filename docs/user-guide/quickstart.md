@@ -115,9 +115,6 @@ result.outputs["nee"].plot()
 Every column's meaning, units and SIPNET name are listed on the
 [Output variables](../reference/output-variables.md) page.
 
-```python
-```
-
 ## Next steps
 
 - [Running a Model](running-a-model.md) — parameter overrides, `SIPNETModel`,

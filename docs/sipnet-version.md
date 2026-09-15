@@ -90,8 +90,10 @@ process writes zeros rather than omitting its column.
 Older SIPNET wrote a `Notes:` line above the header, which v2.1.0 removed. The
 output reader detects the header by content rather than expecting that line, so
 files from older versions still read. Columns are matched by name, never by
-position, so a column set that changes between versions costs only a mapping
-entry.
+position. A column set that changes between versions costs a `VariableSpec` in
+`pysipnet.variables.OUTPUT_VARIABLES` (name, kind, units, description) and an
+update to `tests/test_variables.py`, which asserts the binary's header equals the
+registry token for token.
 
 ## Moving to a newer SIPNET
 
@@ -107,9 +109,13 @@ Expect to revisit:
    `SIPNETParameters.validate_for_flags`.
 2. **Model flags.** Any new feature switch belongs in `ModelFlags`, along with
    the restrictions SIPNET enforces on combining it with others.
-3. **Output columns.** New columns need entries in
-   `SIPNET_TO_PYTHON_OUTPUT`; unmapped ones keep their SIPNET spelling rather
-   than being dropped.
+3. **Output columns.** A new column needs a `VariableSpec` in
+   `pysipnet.variables.OUTPUT_VARIABLES`. An unmapped header token is kept under
+   its SIPNET name with an `UnknownOutputColumnWarning`, and
+   `tests/test_variables.py` fails until it is described.
+5. **Climate columns and parameter names.** `CLIMATE_VARIABLES` records each
+   `.clim` column and the conversion SIPNET applies on read; each parameter's
+   `ParameterSpec.sipnet_name` is where a renamed SIPNET parameter lands.
 4. **Golden fixtures.** Regenerate with `python -m tests.test_golden` and
    review the diff, recording the before-and-after values in the commit.
 

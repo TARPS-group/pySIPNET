@@ -51,6 +51,10 @@ _UDUNITS_EXPONENT = re.compile(r"(?<=[A-Za-z])(-?\d+)")
 # them as something else (coulomb, newton, ...), so they must be refused here.
 _CONSTITUENT_TOKENS: frozenset[str] = frozenset({"C", "N", "H2O", "CO2", "CH4", "N2O"})
 
+# A symbol with an optional signed integer exponent ("m", "m-2", "kPa-1"), or the
+# bare "1" of a dimensionless quantity.
+_UDUNITS_TOKEN = re.compile(r"[A-Za-z]+(-?\d+)?|1")
+
 _SUPERSCRIPT = str.maketrans("-0123456789", "⁻⁰¹²³⁴⁵⁶⁷⁸⁹")
 
 # Display symbols for tokens whose UDUNITS spelling is not what a reader wants
@@ -85,7 +89,14 @@ def validate_units(units: str) -> None:
     """Raise ``ValueError`` unless *units* is a valid, substance-free unit string."""
     if not units.strip():
         raise ValueError("Unit string is empty; use '1' for dimensionless quantities.")
-    offending = _CONSTITUENT_TOKENS & set(units.split())
+    tokens = units.split()
+    bad = [t for t in tokens if not _UDUNITS_TOKEN.fullmatch(t)]
+    if bad:
+        raise ValueError(
+            f"Unit string {units!r} is not in UDUNITS syntax: {bad}. Write symbols separated "
+            "by spaces with plain signed exponents, e.g. 'g m-2 d-1', or '1' for dimensionless."
+        )
+    offending = _CONSTITUENT_TOKENS & set(tokens)
     if offending:
         raise ValueError(
             f"Unit string {units!r} contains the substance token(s) {sorted(offending)}. "

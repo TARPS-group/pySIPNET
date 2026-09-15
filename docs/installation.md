@@ -29,7 +29,6 @@ Using [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv sync                              # installs runtime + dev dependencies
-uv sync --extra xarray               # + xarray for Dataset output
 uv sync --extra viz                  # + plotly for the result dashboard
 ```
 

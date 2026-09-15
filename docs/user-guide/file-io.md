@@ -73,10 +73,17 @@ result = runner.run(params, climate, run_id="baseline_2020")
 at construction time.  The runner serialises this to disk as a new `.clim` file
 in the working directory.
 
+Columns are named as on the [Climate drivers](../reference/climate-drivers.md)
+page (`air_temperature`, `vapour_pressure_deficit`, `time_step_length`, ...).
+`from_dataframe` also accepts the short names pySIPNET used previously and
+SIPNET's own column names (`tair`, `vpdSoil`, `length`) and renames them; the
+stored columns are always the full names.
+
 ```python
 # Full data in memory — good for interactive use and data manipulation
 climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
 climate.data        # DataFrame always available
+climate.dataset     # the same on an xarray `time` axis shared with outputs
 climate.validate()  # full validation runs immediately
 ```
 

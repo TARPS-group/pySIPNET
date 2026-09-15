@@ -111,10 +111,15 @@ def dataframe_to_dataset(
             },
         )
 
+    # A time_step_length column becomes the coordinate of that name when lengths
+    # are given; otherwise it stays an ordinary variable.
+    as_coordinate = set(TIME_COORDINATE_NAMES)
+    if time_step_length is not None:
+        as_coordinate.add("time_step_length")
     data_vars = {
         name: (TIME_DIMENSION, df[name].to_numpy(), attributes_for(name))
         for name in df.columns
-        if name not in TIME_COORDINATE_NAMES and name != "time_step_length"
+        if name not in as_coordinate
     }
 
     return xr.Dataset(

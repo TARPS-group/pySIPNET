@@ -34,8 +34,9 @@ attribute in words.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 import numpy as np
 
@@ -50,6 +51,9 @@ from pysipnet.variables import (
 if TYPE_CHECKING:
     import pandas as pd
     import xarray as xr
+
+
+TimeStepLengths: TypeAlias = "np.ndarray | Callable[[], np.ndarray]"
 
 
 class SIPNETOutput:
@@ -67,8 +71,10 @@ class SIPNETOutput:
         The file is checked for existence at construction time.
     time_step_length:
         Length of each timestep in days, one value per row, taken from the
-        climate drivers. Optional; when given, :attr:`dataset` carries
-        ``time_step_end`` and ``time_step_length`` coordinates.
+        climate drivers, or a zero-argument callable returning that array so a
+        file-backed climate is not read until :attr:`dataset` needs it.
+        Optional; when given, :attr:`dataset` carries ``time_step_end`` and
+        ``time_step_length`` coordinates.
     """
 
     def __init__(
@@ -76,7 +82,7 @@ class SIPNETOutput:
         *,
         data: pd.DataFrame | None = None,
         source_path: Path | None = None,
-        time_step_length: np.ndarray | None = None,
+        time_step_length: TimeStepLengths | None = None,
     ) -> None:
         if (data is None) == (source_path is None):
             raise ValueError(
@@ -85,15 +91,13 @@ class SIPNETOutput:
         self._data: pd.DataFrame | None = data
         self._dataset: xr.Dataset | None = None
         self.source_path: Path | None = source_path
-        self.time_step_length: np.ndarray | None = (
-            None if time_step_length is None else np.asarray(time_step_length, dtype=float)
-        )
+        self._time_step_length: TimeStepLengths | None = time_step_length
 
     # ── Construction ───────────────────────────────────────────────────────────
 
     @classmethod
     def from_path(
-        cls, path: str | Path, *, time_step_length: np.ndarray | None = None
+        cls, path: str | Path, *, time_step_length: TimeStepLengths | None = None
     ) -> SIPNETOutput:
         """Create a file-backed instance without reading the output into memory.
 
@@ -123,7 +127,7 @@ class SIPNETOutput:
 
     @classmethod
     def from_dataframe(
-        cls, df: pd.DataFrame, *, time_step_length: np.ndarray | None = None
+        cls, df: pd.DataFrame, *, time_step_length: TimeStepLengths | None = None
     ) -> SIPNETOutput:
         """Create a memory-backed instance from an already-parsed DataFrame.
 
@@ -152,6 +156,19 @@ class SIPNETOutput:
 
             self._data = read_output_file(self._require_source())
         return self._data
+
+    @property
+    def time_step_length(self) -> np.ndarray | None:
+        """Timestep lengths in days, one per row, or ``None`` when not supplied.
+
+        Resolved on first access when a callable was given, which is what lets
+        a file-backed climate stay unread until the Dataset is built.
+        """
+        if callable(self._time_step_length):
+            self._time_step_length = np.asarray(self._time_step_length(), dtype=float)
+        elif self._time_step_length is not None:
+            self._time_step_length = np.asarray(self._time_step_length, dtype=float)
+        return self._time_step_length
 
     @property
     def dataset(self) -> xr.Dataset:

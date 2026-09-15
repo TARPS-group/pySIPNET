@@ -21,7 +21,7 @@ No code in pySIPNET reads parameters by column index or relies on dict key order
 
 ### 2. Unambiguous names and units for every variable
 
-Every output column is described by a [`VariableSpec`][pysipnet.variables.VariableSpec] in the registry `pysipnet.variables.OUTPUT_VARIABLES`: its pySIPNET name, the SIPNET column it comes from, whether it is a pool at the end of the step or a total over it, its units, a description, plot labels and aliases. The [Output variables](reference/output-variables.md) page is generated from that registry. Every parameter field carries the same kind of information via a [`ParameterSpec`][pysipnet.parameters.base.ParameterSpec] embedded in Pydantic's `json_schema_extra`.
+Every output column is described by a [`VariableSpec`][pysipnet.variables.VariableSpec] in the registry `pysipnet.variables.OUTPUT_VARIABLES`: its pySIPNET name, the SIPNET column it comes from, whether it is a pool at the end of the step or a total over it, its units, a description, plot labels and aliases. The [Output variables](reference/output-variables.md) page is generated from that registry. Every parameter field carries the same kind of information via a [`ParameterSpec`][pysipnet.parameters.base.ParameterSpec] embedded in Pydantic's `json_schema_extra`; `pysipnet.PARAMETER_SPECS` is the flat `{"group.field": spec}` view, `resolve_parameter_name()` maps an old or SIPNET name to the current field, and the [Parameters](reference/parameters.md) and [Climate drivers](reference/climate-drivers.md) pages are generated from the specs.
 
 Names are lower-case words joined by underscores with no acronyms or truncations (`net_ecosystem_exchange`, not `nee`); the familiar short forms are aliases that lookups accept.
 

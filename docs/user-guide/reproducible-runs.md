@@ -163,7 +163,7 @@ runner = SIPNETRunner(flags=context.flags)
 model  = SIPNETModel(runner, base_params=context.params, base_climate=context.climate)
 
 row = overrides.loc[42]
-result = model(soil=row["soil_init"], soil_wetness_fraction=row["soil_water_frac_init"])
+result = model(soil_carbon=row["soil_init"], soil_wetness_fraction=row["soil_water_frac_init"])
 ```
 
 ### Using PyEns
@@ -199,7 +199,7 @@ model   = SIPNETModel(runner, base_params=context.params, base_climate=context.c
 members = Axis("member", size=500)
 fields  = sipnet_member_fields(
     members,
-    soil=soil_samples,
+    soil_carbon=soil_samples,
     soil_wetness_fraction=water_samples,
 )
 spec = EnsembleSpec(inputs={**fields})

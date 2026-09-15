@@ -159,7 +159,7 @@ spec = EnsembleSpec(inputs={
         sites,
         climates=[clim_hf, clim_nr],
         total_wood_carbon=[30000.0, 24000.0],    # initial wood C per site
-        soil=[10000.0, 8500.0],           # initial soil C per site
+        soil_carbon=[10000.0, 8500.0],    # initial soil C per site
     ),
     # Member-level: max_photosynthesis_rate varies per member, aligned on the members axis
     **sipnet_member_fields(
@@ -273,7 +273,7 @@ print(spec.describe())
 #   Fields:
 #     climate    Grid along [site]
 #     total_wood_carbon Grid along [site]
-#     soil       Grid along [site]
+#     soil_carbon       Grid along [site]
 #     max_photosynthesis_rate      Grid along [member]
 #   Total runs: 100
 ```

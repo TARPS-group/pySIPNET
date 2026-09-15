@@ -42,8 +42,11 @@ A SIPNET run requires two inputs: climate drivers and a parameter set.
 ### Climate data
 
 Climate forcing is stored in a SIPNET `.clim` file — one row per timestep.
-The current layout has 12 columns: four identifying the timestep (year, day,
-time, length) and eight meteorological values.
+The current layout has 12 columns: four identifying the timestep (SIPNET's
+`year day time length`, which become `year`, `day_of_year`, `hour_of_day`,
+`time_step_length` in Python) and eight meteorological values. Every column's
+name, units and the conversion SIPNET applies on read are on the
+[Climate drivers](../reference/climate-drivers.md) page.
 
 ```python
 from pysipnet import ClimateDrivers
@@ -256,8 +259,12 @@ print(result.outputs.data[["net_ecosystem_exchange", "gross_primary_production"]
 
 ### Parameter overrides
 
-Pass any SIPNET parameter name as a keyword argument to override its value
-for that run.  All other parameters stay at their baseline values.  The
+Pass any parameter field name as a keyword argument to override its value
+for that run. Field names follow the same convention as output columns
+(`max_photosynthesis_rate`, not `a_max`); the full list is on the
+[Parameters](../reference/parameters.md) page. An old or SIPNET-style name raises
+`ValueError` naming the current field, and `pysipnet.resolve_parameter_name("aMax")`
+returns it directly.  All other parameters stay at their baseline values.  The
 override is applied, Pydantic-validated, and discarded — `model.base_params`
 is never mutated.
 
@@ -316,11 +323,17 @@ from pysipnet.variables import resolve_output_variable
 
 spec = resolve_output_variable("nee")      # aliases resolve to the full spec
 spec.name           # 'net_ecosystem_exchange'
-spec.units          # 'g m-2'
+spec.units          # 'g m-2'  (UDUNITS syntax; the substance is kept separate, see below)
 spec.constituent    # 'C'
+spec.formatted_units()  # 'g C m⁻²'
 spec.axis_label()   # 'Net ecosystem exchange (g C m⁻²)'
 spec.time_reference # 'total over the timestep'
 ```
+
+Unit strings use UDUNITS syntax (`"g m-2"`, `"cm d-1"`, `"1"` for dimensionless) with
+the substance in a separate `constituent` field, because a `C` inside a unit string
+would be read as coulombs by units libraries. `formatted_units()` and `axis_label()`
+put it back for display. See [Design](../design.md) for the convention.
 
 Every column is always present. A process that is switched off writes zeros
 rather than omitting its column, so the nitrogen and methane columns are there
@@ -404,8 +417,10 @@ sum(len(ps) for ps in SIPNET_PARAMS_BY_GROUP.values())  # 58
 ### get_parameter_specs
 
 For calibration and DA workflows, `get_parameter_specs` returns the full
-`ParameterSpec` for each parameter — including unit, mathematical domain, and
-whether the value is a per-year rate:
+`ParameterSpec` for each parameter — including units, mathematical domain, and
+whether the value is a per-year rate. The same dict is precomputed as
+`pysipnet.PARAMETER_SPECS`, and the [Parameters](../reference/parameters.md) page is
+generated from it:
 
 ```python
 from pysipnet.parameters.base import get_parameter_specs, ParameterDomain

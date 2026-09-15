@@ -143,7 +143,7 @@ class ClimateDrivers:
             Path to the ``.clim`` file.
         n_columns:
             Which layout to expect.  ``14`` expects 14 columns (site index
-            in col 1, soil-wetness in col 14); ``"v2"`` expects 12 columns.
+            in col 1, soil-wetness in col 14); ``12`` expects 12 columns.
         """
         from pysipnet.io.clim_io import read_clim_file
 
@@ -375,9 +375,16 @@ def _rename_aliases(df: pd.DataFrame) -> pd.DataFrame:
         if column in CLIMATE_VARIABLES_BY_NAME:
             continue
         try:
-            renames[column] = resolve_climate_variable(str(column)).name
+            target = resolve_climate_variable(str(column)).name
         except KeyError:
             continue  # an extra column; from_dataframe drops it
+        if target in df.columns or target in renames.values():
+            raise ValueError(
+                f"Climate DataFrame has column {column!r} and its canonical name {target!r} "
+                "(or another alias of it). Keep one of them; there is no way to know which "
+                "holds the intended values."
+            )
+        renames[column] = target
     return df.rename(columns=renames) if renames else df
 
 

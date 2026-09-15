@@ -150,6 +150,32 @@ def test_labels_render(spec: VariableSpec):
     assert spec.axis_label("html")
 
 
+@pytest.mark.parametrize("spec", OUTPUT_VARIABLES, ids=lambda s: s.name)
+def test_requires_flag_names_a_model_flag(spec: VariableSpec):
+    """A typo in requires_flag would otherwise pass every test."""
+    from pysipnet.parameters.model import ModelFlags
+
+    assert spec.requires_flag is None or spec.requires_flag in ModelFlags.model_fields
+
+
+def test_legacy_columns_are_selectable_by_either_name():
+    """Output saved by SIPNET v2.1.0 can still be read column-by-column."""
+    assert resolve_output_variable_names(["bcdeltaC", "carbon_balance_error", "nee"]) == [
+        "carbon_balance_error",
+        "net_ecosystem_exchange",
+    ]
+
+
+def test_units_must_be_udunits_syntax():
+    from pysipnet.units import validate_units
+
+    for bad in ("g/m2", "m**-2", "g m^-2", "kg C m-2"):
+        with pytest.raises(ValueError):
+            validate_units(bad)
+    for good in ("g m-2 d-1", "1", "degC", "m2 m-2", "mg g-1 kPa"):
+        validate_units(good)
+
+
 def test_aliases_are_unique_and_resolve_to_their_owner():
     seen: dict[str, str] = {}
     for spec in OUTPUT_VARIABLES:
@@ -375,6 +401,16 @@ def test_climate_spec_follows_conventions(spec):
     attrs = spec.xarray_attributes()
     assert attrs["units"] == spec.units
     assert "time_reference" in attrs
+
+
+def test_climate_conversion_note_survives_without_internal_units():
+    """wind_speed is clamped but not converted; the note must still reach the Dataset."""
+    from pysipnet.variables import CLIMATE_VARIABLES_BY_NAME
+
+    attrs = CLIMATE_VARIABLES_BY_NAME["wind_speed"].xarray_attributes()
+    assert "sipnet_internal_conversion" in attrs and "sipnet_internal_units" not in attrs
+    length = CLIMATE_VARIABLES_BY_NAME["time_step_length"]
+    assert length.aggregation.value == "sum", "a duration sums when resampling"
 
 
 def test_climate_time_coordinates_match_output_coordinates():

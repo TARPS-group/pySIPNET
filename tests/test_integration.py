@@ -564,3 +564,85 @@ class TestFailedRunsRaise:
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())
         assert result.provenance.success
         assert not result.outputs.data.empty
+
+
+# ---------------------------------------------------------------------------
+# Snow flag
+# ---------------------------------------------------------------------------
+
+
+class TestSnowFlag:
+    """At the pinned SIPNET the snow flag does not switch the snowpack off.
+
+    SIPNET's documentation says ``SNOW = 0`` treats all precipitation as
+    liquid. The source disagrees: nothing in the flux code reads ``ctx.snow``,
+    so snow falls and accumulates either way and the flag only decides whether
+    ``snowMelt`` is required. The registry describes the column accordingly.
+    If this test starts failing, upstream has fixed it, and the descriptions
+    of ``ModelFlags.snow`` and ``snow_water_equivalent`` need revisiting.
+    """
+
+    @staticmethod
+    def _freezing_climate(n_days: int = 10):
+        from pysipnet.climate import ClimateDrivers
+
+        rows = [
+            {
+                "year": 2010,
+                "day_of_year": 10 + i,
+                "hour_of_day": 0.0,
+                "time_step_length": 1.0,
+                "air_temperature": -5.0,
+                "soil_temperature": -2.0,
+                "photosynthetically_active_radiation": 5.0,
+                "precipitation": 10.0,
+                "vapour_pressure_deficit": 300.0,
+                "soil_vapour_pressure_deficit": 200.0,
+                "vapour_pressure": 300.0,
+                "wind_speed": 2.0,
+            }
+            for i in range(n_days)
+        ]
+        return ClimateDrivers.from_dataframe(pd.DataFrame(rows))
+
+    def test_file_backed_climate_is_not_read_to_build_the_result(self, minimal_params, tmp_path):
+        """The step lengths for the Dataset are fetched lazily, so from_path stays lazy."""
+        from pysipnet.climate import ClimateDrivers
+
+        path = tmp_path / "site.clim"
+        self._freezing_climate().to_file(path)
+        climate = ClimateDrivers.from_path(path)
+        result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, climate)
+        assert result.provenance.success
+        assert climate._data is None, "building the result must not read the climate file"
+        assert "time_step_end" in result.outputs.dataset.coords
+        assert climate._data is not None, "the Dataset needs the step lengths"
+
+    def test_snow_melts_identically_with_the_flag_off_when_the_rate_is_supplied(
+        self, minimal_params
+    ):
+        """With snow_melt_rate written to the file, the flag changes nothing at all."""
+        climate = self._freezing_climate(n_days=10)
+        df = climate.data.copy()
+        df.loc[5:, "air_temperature"] = 10.0  # five freezing days, then a thaw
+        from pysipnet.climate import ClimateDrivers
+
+        thaw = ClimateDrivers.from_dataframe(df)
+        on = SIPNETRunner(flags=ModelFlags(snow=True)).run(minimal_params, thaw)
+        off = SIPNETRunner(flags=ModelFlags(snow=False)).run(minimal_params, thaw)
+        swe = off.outputs.variable("snow_water_equivalent")
+        assert swe.max() > swe.iloc[-1], "the thaw should melt some snow with the flag off"
+        np.testing.assert_array_equal(
+            on.outputs.variable("snow_water_equivalent").to_numpy(), swe.to_numpy()
+        )
+
+    def test_snowpack_accumulates_with_the_flag_off(self, minimal_params):
+        climate = self._freezing_climate()
+        on = SIPNETRunner(flags=ModelFlags(snow=True)).run(minimal_params, climate)
+        off = SIPNETRunner(flags=ModelFlags(snow=False)).run(minimal_params, climate)
+
+        swe_off = off.outputs.variable("snow_water_equivalent")
+        assert swe_off.iloc[-1] > swe_off.iloc[0] > 0, "snow should accumulate below 0 °C"
+        np.testing.assert_array_equal(
+            on.outputs.variable("snow_water_equivalent").to_numpy(), swe_off.to_numpy()
+        )

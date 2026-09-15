@@ -111,7 +111,7 @@ together, refresh `SIPNET_RELEASE_ASSETS`, and rebuild with
    - **Run layer**: manages the binary, working directory, and subprocess execution
    - **Output layer**: parses SIPNET output into typed Python/pandas/xarray objects
 
-5. **Version-forward design.** Version-specific logic (file format differences, available parameters) is isolated behind version adapters so the public API stays stable when v2 support is added.
+5. **Version-forward design.** Version-specific logic (file format differences, available parameters) is isolated behind version adapters so the public API stays stable when the pinned SIPNET version moves.
 
 ### Primary Use Cases (in priority order)
 
@@ -362,7 +362,7 @@ error.
 
 `SIPNETOutput` exposes `.data` (DataFrame), `.dataset` (xarray, one `time`
 dimension = step start, plus `time_step_end` / `time_step_length` coordinates
-from the climate's `length` column, attributes from
+from the climate's `time_step_length` column, attributes from
 `VariableSpec.xarray_attributes()`), `["nee"]` (DataArray by name or alias) and
 `.variable("nee")` (Series). xarray is a required dependency.
 
@@ -526,6 +526,19 @@ different parameters depending on `sipnet.in`. `ModelFlags` mirrors this in
 
 11. **A new required parameter arrived with the leaf events: `leafOnReallocFrac`.** Leaf-out has to take carbon from somewhere, and this caps how much of `plantWoodC + coarseRootC` it may draw on. SIPNET scales the transfer down if demand exceeds `(plantWoodC + coarseRootC) × leafOnReallocFrac`. Required unconditionally, so every param file needs it; upstream's Niwot fixture uses `0.2`.
 
+12. **The `SNOW` flag does not switch the snowpack off.** SIPNET's docs say
+    `SNOW = 0` treats all precipitation as liquid, but at this pin nothing in
+    `calcPrecip()`, `snowPack()` or `updateState()` reads `ctx.snow`; the only
+    uses are the requiredness of `snowMelt` and the restart-checkpoint flag
+    check. Precipitation below 0 °C falls as snow either way. SIPNET reads any
+    registered parameter it finds whether or not it is required, and pySIPNET
+    writes every non-`None` field, so with the flag off and `snowMelt` still
+    supplied the run is identical to the flag being on; only when `snowMelt`
+    is omitted does it default to zero and the snow never melt. Verified by
+    running the binary both ways on identical climate: identical snow columns. `tests/test_integration.py::TestSnowFlag` pins this so an
+    upstream fix shows up. Consequently the `snow` output column is **not**
+    zero when the flag is off, unlike `litter`, the nitrogen group and `ch4`.
+
 ## File Structure
 
 ```
@@ -558,6 +571,8 @@ pySIPNET/
 │   ├── test_sipnet_in.py         # the sipnet.in contract, incl. SIPNET's config dump
 │   ├── test_param_file_contract.py  # the .param contract across flag combinations
 │   ├── test_events_contract.py   # the events.in contract, incl. arities
+│   ├── test_param_name_mapping.py   # the Python→SIPNET parameter map, stated by hand
+│   ├── test_integration.py       # end-to-end behaviour, flags, mass balance, snow flag
 │   ├── test_variables.py         # the .out header contract and the registry's own rules
 │   ├── test_download.py          # prebuilt-binary download and its verification
 │   ├── test_fidelity.py          # wrapper output == bare binary output
@@ -608,7 +623,7 @@ treatment.
 
 - **Python ≥ 3.11**
 - **Pydantic v2** for all data models (parameter validation, units enforcement)
-- **pandas** for climate time series and output; **xarray** as an optional output format
+- **pandas** for climate time series and output; **xarray** for the metadata-carrying `dataset` views (required dependency)
 - **NumPy** for numerical operations
 - **No comments unless the WHY is non-obvious.** Well-named identifiers are preferred.
 - **Type hints everywhere.**
