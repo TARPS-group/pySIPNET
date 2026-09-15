@@ -92,8 +92,8 @@ runner = SIPNETRunner(flags=ModelFlags.standard())
 result = runner.run(params, climate)
 
 print(result.provenance.success)   # True
-print(result.nee().sum())          # annual NEE  (g C m⁻²)
-print(result.gpp().sum())          # annual GPP
+print(result.outputs.variable("nee").sum())   # annual NEE (g C m⁻²)
+print(result.outputs.variable("gpp").sum())   # annual GPP
 ```
 
 ## 4. Inspect the result
@@ -101,11 +101,21 @@ print(result.gpp().sum())          # annual GPP
 ```python
 ts = result.outputs.data   # pandas DataFrame, one row per timestep
 print(ts.columns.tolist())
-# ['year', 'day', 'time', 'plant_wood_c', ..., 'nee', 'gpp', ...]
+# ['year', 'day_of_year', 'hour_of_day', 'wood_carbon', ...,
+#  'net_ecosystem_exchange', 'gross_primary_production', ...]
 
 import matplotlib.pyplot as plt
-ts.plot(x="day", y=["nee", "gpp"])
+ts.plot(x="day_of_year", y=["net_ecosystem_exchange", "gross_primary_production"])
 plt.show()
+
+# Or the xarray view, which knows its units:
+result.outputs["nee"].plot()
+```
+
+Every column's meaning, units and SIPNET name are listed on the
+[Output variables](../reference/output-variables.md) page.
+
+```python
 ```
 
 ## Next steps

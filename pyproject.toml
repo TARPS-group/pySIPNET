@@ -23,10 +23,10 @@ dependencies = [
     "pandas>=2.0",
     "numpy>=1.24",
     "pint>=0.23",
+    "xarray>=2023.0",
 ]
 
 [project.optional-dependencies]
-xarray = ["xarray>=2023.0"]
 viz = ["plotly>=5.3"]
 examples = ["matplotlib>=3.7", "jupyter>=1.0", "nbformat>=4.2.0"]
 

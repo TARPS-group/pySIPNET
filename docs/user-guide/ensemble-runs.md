@@ -62,7 +62,7 @@ You can call it directly to verify it works before handing it to PyEns:
 
 ```python
 result = model(a_max=112.0, base_veg_resp=0.02)
-print(result.outputs.data[["nee", "gpp"]].sum())
+print(result.outputs.data[["net_ecosystem_exchange", "gross_primary_production"]].sum())
 ```
 
 Any SIPNET parameter name can be passed as a keyword argument.  The
@@ -99,7 +99,7 @@ print(result.n_failed)  # 0 if all succeeded
 for record in result:
     coord  = record.coordinate   # e.g. {"a_max": 3}  (integer axis index)
     output = record.output       # SIPNETResult
-    print(coord, output.gpp().sum())
+    print(coord, output.outputs.variable("gpp").sum())
 ```
 
 ---
@@ -230,7 +230,7 @@ and `coordinates` always correspond.
 for rec in result.succeeded:
     site   = rec.coordinate.get("site", "?")
     member = rec.coordinate.get("member", "?")
-    annual_nee = rec.output.nee().sum()
+    annual_nee = rec.output.outputs.variable("nee").sum()
     print(f"site={site}, member={member}: NEE={annual_nee:.1f} g C m⁻²")
 ```
 
@@ -238,7 +238,7 @@ for rec in result.succeeded:
 
 ```python
 record = result[{"site": "harvard_forest", "member": 12}]
-record.output.gpp().plot()
+record.output.outputs["gpp"].plot()
 ```
 
 ### Collecting outputs into a DataFrame
@@ -250,8 +250,8 @@ rows = []
 for rec in result.succeeded:
     rows.append({
         **rec.coordinate,
-        "annual_nee": rec.output.nee().sum(),
-        "annual_gpp": rec.output.gpp().sum(),
+        "annual_nee": rec.output.outputs.variable("nee").sum(),
+        "annual_gpp": rec.output.outputs.variable("gpp").sum(),
     })
 df = pd.DataFrame(rows)
 print(df.groupby("site")[["annual_nee", "annual_gpp"]].mean())

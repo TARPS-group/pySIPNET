@@ -284,6 +284,15 @@ class TestRoundtrip:
 # ---------------------------------------------------------------------------
 
 
+_EXPECTED_COLUMNS = [
+    "year",
+    "day_of_year",
+    "hour_of_day",
+    "wood_carbon",
+    "net_ecosystem_exchange",
+]
+
+
 class TestOutputHeaderDetection:
     """The reader must find the header in all three layouts SIPNET produces.
 
@@ -307,7 +316,7 @@ class TestOutputHeaderDetection:
         from pysipnet.io.output_reader import read_output_file
 
         df = read_output_file(self._write(tmp_path, self.HEADER, self.ROW_1, self.ROW_2))
-        assert list(df.columns) == ["year", "day", "time", "plant_wood_c", "nee"]
+        assert list(df.columns) == _EXPECTED_COLUMNS
         assert len(df) == 2
 
     def test_notes_line_then_header_then_data(self, tmp_path):
@@ -317,7 +326,7 @@ class TestOutputHeaderDetection:
         df = read_output_file(
             self._write(tmp_path, "Notes: (PlantWoodC in g C/m^2;", self.HEADER, self.ROW_1)
         )
-        assert list(df.columns) == ["year", "day", "time", "plant_wood_c", "nee"]
+        assert list(df.columns) == _EXPECTED_COLUMNS
         assert len(df) == 1
 
     def test_data_only(self, tmp_path):
@@ -335,14 +344,32 @@ class TestOutputHeaderDetection:
         df = read_output_file(self._write(tmp_path, self.HEADER, self.ROW_1, self.ROW_2))
         assert df["year"].tolist() == [1998, 1998]
 
-    def test_unmapped_column_keeps_its_sipnet_name(self, tmp_path):
-        """A column added by a future SIPNET version must still be readable."""
+    def test_unmapped_column_keeps_its_sipnet_name_and_warns(self, tmp_path):
+        """A column added by a future SIPNET version must still be readable.
+
+        It must also be noticed: a silently passed-through column would never
+        get a description or units, so the reader warns.
+        """
+        from pysipnet.io.output_reader import UnknownOutputColumnWarning, read_output_file
+
+        with pytest.warns(UnknownOutputColumnWarning, match="somethingNew"):
+            df = read_output_file(
+                self._write(tmp_path, "year day time somethingNew", "1998 305 0.00 1.5")
+            )
+        assert "somethingNew" in df.columns
+
+    def test_legacy_column_reads_under_a_convention_name(self, tmp_path):
+        """Output saved from SIPNET v2.1.0 still reads, without a warning."""
+        import warnings
+
         from pysipnet.io.output_reader import read_output_file
 
-        df = read_output_file(
-            self._write(tmp_path, "year day time somethingNew", "1998 305 0.00 1.5")
-        )
-        assert "somethingNew" in df.columns
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            df = read_output_file(
+                self._write(tmp_path, "year day time bcdeltaC", "1998 305 0.00 0.0")
+            )
+        assert "carbon_balance_error" in df.columns
 
     def test_empty_file_gives_an_empty_frame(self, tmp_path):
         from pysipnet.io.output_reader import read_output_file
@@ -351,12 +378,26 @@ class TestOutputHeaderDetection:
         path.write_text("")
         assert read_output_file(path).empty
 
-    def test_column_selection_keeps_the_time_coordinates(self, tmp_path):
-        """year/day/time identify each row, so they survive any selection."""
+    def test_variable_selection_keeps_the_time_coordinates(self, tmp_path):
+        """year/day_of_year/hour_of_day identify each row, so they survive any selection."""
         from pysipnet.io.output_reader import read_output_file
 
-        df = read_output_file(self._write(tmp_path, self.HEADER, self.ROW_1), columns=["nee"])
-        assert set(df.columns) == {"year", "day", "time", "nee"}
+        df = read_output_file(self._write(tmp_path, self.HEADER, self.ROW_1), variables=["nee"])
+        assert set(df.columns) == {"year", "day_of_year", "hour_of_day", "net_ecosystem_exchange"}
+
+    def test_variable_selection_accepts_names_aliases_and_sipnet_tokens(self, tmp_path):
+        from pysipnet.io.output_reader import read_output_file
+
+        path = self._write(tmp_path, self.HEADER, self.ROW_1)
+        for name in ("nee", "NEE", "net_ecosystem_exchange"):
+            df = read_output_file(path, variables=[name])
+            assert "net_ecosystem_exchange" in df.columns
+
+    def test_unknown_variable_selection_is_an_error(self, tmp_path):
+        from pysipnet.io.output_reader import read_output_file
+
+        with pytest.raises(KeyError, match="not a SIPNET output variable"):
+            read_output_file(self._write(tmp_path, self.HEADER, self.ROW_1), variables=["wood"])
 
 
 class TestNonFiniteValuesAreRefused:

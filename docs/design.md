@@ -19,20 +19,27 @@ SIPNETParameters
 
 No code in pySIPNET reads parameters by column index or relies on dict key ordering.
 
-### 2. Unambiguous units for every parameter
+### 2. Unambiguous names and units for every variable
 
-Every parameter field carries its units via a [`ParameterSpec`][pysipnet.parameters.base.ParameterSpec] embedded in Pydantic's `json_schema_extra`.  Unit strings follow [Pint](https://pint.readthedocs.io/) format and are validated at class-definition time:
+Every output column is described by a [`VariableSpec`][pysipnet.variables.VariableSpec] in the registry `pysipnet.variables.OUTPUT_VARIABLES`: its pySIPNET name, the SIPNET column it comes from, whether it is a pool at the end of the step or a total over it, its units, a description, plot labels and aliases. The [Output variables](reference/output-variables.md) page is generated from that registry. Every parameter field carries the same kind of information via a [`ParameterSpec`][pysipnet.parameters.base.ParameterSpec] embedded in Pydantic's `json_schema_extra`.
 
-| Quantity | `unit` string |
-|:---------|:--------------|
-| nmol CO₂ g⁻¹ leaf s⁻¹ | `"nmol / (g * s)"` |
-| g C m⁻² | `"g / m**2"` |
-| dimensionless | `"1"` |
-| °C | `"degC"` |
-| year⁻¹ | `"1 / year"` |
-| Einstein m⁻² (total per step) | `"einstein / m**2"` |
+Names are lower-case words joined by underscores with no acronyms or truncations (`net_ecosystem_exchange`, not `nee`); the familiar short forms are aliases that lookups accept.
 
-When the physical unit does not fully capture the substance (e.g., "grams of *carbon*" vs. generic "grams"), the `constituent` field on `ParameterSpec` provides the qualifier (`"C"`, `"N"`, `"CO2 g-1 leaf"`).
+Unit strings use UDUNITS syntax, the convention of netCDF and the Climate and Forecast metadata conventions, and are validated at import time by the Pint registry in `pysipnet.units`:
+
+| Quantity | `units` string | `constituent` |
+|:---------|:---------------|:--------------|
+| g C m⁻² | `"g m-2"` | `"C"` |
+| g N m⁻² d⁻¹ | `"g m-2 d-1"` | `"N"` |
+| cm of water | `"cm"` | `"H2O"` |
+| dimensionless | `"1"` | |
+| °C | `"degC"` | |
+| year⁻¹ | `"yr-1"` | |
+| leaf area index | `"m2 m-2"` | |
+
+The substance is deliberately kept out of the unit string. Pint parses `"g C m-2"` as gram·coulomb per square metre without complaint, so a qualifier inside the string would be a silent error rather than a caught one; `pysipnet.units.validate_units` refuses it. `format_units("g m-2", constituent="C")` puts it back for display as `g C m⁻²`.
+
+"Per timestep" is not a unit either. A flux integrated over the step is in `"g m-2"`, and the fact that it is a total over the step is the variable's *kind*, carried as the `time_reference` and `cell_methods` attributes on the xarray representation.
 
 ### 3. Documented parameter domains
 
@@ -81,8 +88,8 @@ This enables:
 
 ```
 Data layer    →    IO layer    →    Runner    →    Result
-(Pydantic +        (.param,         (subprocess    (DataFrame)
- dataclass)        .clim, .out)      + workdir)
+(Pydantic +        (.param,         (subprocess    (DataFrame and
+ dataclass)        .clim, .out)      + workdir)     xarray Dataset)
 ```
 
 Nothing above the IO layer touches the filesystem.  The runner takes Python objects, the IO layer materialises them to disk, and the runner calls the binary.

@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from pysipnet.variables import OUTPUT_VARIABLES_BY_NAME
+
 if TYPE_CHECKING:
     import plotly.graph_objects as go
 
@@ -31,23 +33,30 @@ _CLIM_PANELS: list[tuple[str, str, int, int]] = [
     ("vpd", "VPD (Pa)", 4, 2),
 ]
 
-_FLUX_COLS: dict[str, str] = {
-    "nee": "NEE",
-    "gpp": "GPP",
-    "evapotranspiration": "ET",
-    "ra": "Rₐ",
-    "rh": "Rₕ",
-}
+# Output variables shown in the two output panels, by registry name. Labels
+# and units come from the registry so the dashboard cannot disagree with it.
+_FLUX_VARIABLES: tuple[str, ...] = (
+    "net_ecosystem_exchange",
+    "gross_primary_production",
+    "evapotranspiration",
+    "autotrophic_respiration",
+    "heterotrophic_respiration",
+)
 
-_POOL_COLS: dict[str, str] = {
-    "plant_wood_c": "Wood C (stem)",  # aboveground wood; roots tracked separately
-    "plant_leaf_c": "Leaf C",
-    "coarse_root_c": "Coarse Root C",
-    "fine_root_c": "Fine Root C",
-    "soil_c": "Soil C",
-    "litter_c": "Litter C",
-    "soil_water": "Soil Water",
-}
+_POOL_VARIABLES: tuple[str, ...] = (
+    "wood_carbon",
+    "leaf_carbon",
+    "coarse_root_carbon",
+    "fine_root_carbon",
+    "soil_carbon",
+    "litter_carbon",
+    "soil_water",
+)
+
+
+def _labels(names: tuple[str, ...]) -> dict[str, str]:
+    return {name: OUTPUT_VARIABLES_BY_NAME[name].label for name in names}
+
 
 _TH_BG = "#e8eef4"  # table header background
 _ROW_A = "#f9fafb"  # odd-group row fill
@@ -236,12 +245,13 @@ def dashboard(
 
     clim = result.climate.data
 
-    x_ts = ts["year"] + (ts["day"] - 1) / 365
+    x_ts = ts["year"] + (ts["day_of_year"] - 1) / 365
     x_clim = clim["year"] + (clim["day"] - 1) / 365
 
-    flux_cols = dict(_FLUX_COLS)
-    if show_cum_nee and "cum_nee" in ts.columns:
-        flux_cols["cum_nee"] = "Cumulative NEE"
+    flux_cols = _labels(_FLUX_VARIABLES)
+    if show_cum_nee and "cumulative_net_ecosystem_exchange" in ts.columns:
+        flux_cols.update(_labels(("cumulative_net_ecosystem_exchange",)))
+    pool_cols = _labels(_POOL_VARIABLES)
 
     # ── Compute section-boundary paper coordinates ─────────────────────────────
     #
@@ -320,7 +330,7 @@ def dashboard(
     # ── Pools (legend3) ───────────────────────────────────────────────────────
 
     pool_trace_indices: dict[str, int] = {}
-    for col, label in _POOL_COLS.items():
+    for col, label in pool_cols.items():
         if col not in ts.columns:
             continue
         pool_trace_indices[label] = len(fig.data)

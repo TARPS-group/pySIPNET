@@ -153,7 +153,7 @@ class SIPNETModel:
         model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
         nee_by_a_max = {
-            v: model(a_max=v).nee().sum()
+            v: model(a_max=v).outputs["nee"].sum().item()
             for v in [80.0, 100.0, 120.0, 140.0]
         }
     """

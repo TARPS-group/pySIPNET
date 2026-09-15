@@ -48,7 +48,7 @@ climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
 runner  = SIPNETRunner(flags=ModelFlags.standard())
 result  = runner.run(params, climate)
 
-print(result.nee().describe())
+print(result.outputs["nee"])   # net_ecosystem_exchange, with units attached
 ```
 
 ## Getting started

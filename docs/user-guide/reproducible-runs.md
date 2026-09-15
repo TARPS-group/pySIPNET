@@ -309,8 +309,8 @@ writer.writerow({
     "iter": i,
     "a_max": a_max,
     "base_veg_resp": bvr,
-    "annual_nee": result.nee().sum(),
-    "annual_gpp": result.gpp().sum(),
+    "annual_nee": result.outputs.variable("nee").sum(),
+    "annual_gpp": result.outputs.variable("gpp").sum(),
     "log_lik": log_lik,
 })
 ```

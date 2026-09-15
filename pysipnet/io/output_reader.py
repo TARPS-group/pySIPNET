@@ -7,112 +7,73 @@ generated ``sipnet.in``), so the file is a row of column names followed by one
 row per timestep, all space-separated.
 
 Columns are matched by name rather than by position. That matters because the
-set of columns depends on which processes are switched on, and it changes
-between SIPNET versions, so anything positional would silently read the wrong
-values after a change.
+set of columns changes between SIPNET versions, so anything positional would
+silently read the wrong values after a change.
 
 Older SIPNET versions, up to and including v2.0.0, wrote an extra ``Notes:``
 line above the header. v2.1.0 removed it. Both layouts are handled, along with
 files that have no header at all, which is what an externally compiled binary
 run with ``--no-print-header`` produces.
 
-Columns at the pinned version
------------------------------
-35 columns, always all present: SIPNET writes a column even for a process that
-is switched off, filling it with zeros. Grouped by what they describe:
+Column names
+------------
+SIPNET's header tokens (``plantWoodC``, ``rSoil``, ``nppStorage``) are renamed
+to the registry names in :mod:`pysipnet.variables` (``wood_carbon``,
+``soil_respiration``, ``wood_storage_carbon``). The registry is the single
+statement of that mapping and of what each column means; this module only
+applies it.
 
-- **Time**: ``year``, ``day``, ``time``
-- **Carbon pools**: ``plantWoodC``, ``plantLeafC``, ``soil``, ``coarseRootC``,
-  ``fineRootC``, ``litter``
-- **Carbon fluxes**: ``woodCreation``, ``npp``, ``nee``, ``cumNEE``, ``gpp``,
-  ``nppStorage``
-- **Respiration**: ``rAboveground``, ``rSoil``, ``rRoot``, ``ra``, ``rh``,
-  ``rtot``
-- **Water**: ``soilWater``, ``soilWetnessFrac``, ``snow``,
-  ``evapotranspiration``, ``fluxestranspiration``
-- **Nitrogen** (zero unless the nitrogen cycle is on): ``minN``, ``soilOrgN``,
-  ``litterN``, ``n2o``, ``nLeaching``, ``nFixation``, ``nUptake``
-- **Methane** (zero unless anaerobic processes are on): ``ch4``
-- **Nitrogen storage**: ``plantStorageN``, the pool leaf-out draws on
-
-SIPNET checks its own carbon and nitrogen closure, but at the pinned version it
-reports the result as a log warning from ``checkBalance()`` rather than as
-output columns. v2.1.0 wrote ``bcdeltaC`` and ``bcdeltaN`` instead; both names
-are still mapped so output saved from that version reads.
-
-``microbeC``, ``litterWater`` and ``fPAR`` were written by older versions and
-are retained in the name mapping so previously saved output still reads.
-
-The column count is therefore 35 at the pinned version, and was 36 at v2.1.0.
-Nothing in the reader depends on the count: columns are matched by name, which
-is what lets one reader handle all of these.
+A header token the registry does not know is kept under its SIPNET name and
+reported with a :class:`UnknownOutputColumnWarning`. That is deliberately loud:
+a column added upstream should be modelled, not silently passed through, and
+``tests/test_variables.py`` asserts the pinned binary produces none.
 """
 
 from __future__ import annotations
 
+import warnings
+from io import StringIO
 from pathlib import Path
 
 import pandas as pd
 
-# Maps SIPNET camelCase output column names → snake_case Python names.
-SIPNET_TO_PYTHON_OUTPUT: dict[str, str] = {
-    "year": "year",
-    "day": "day",
-    "time": "time",
-    "plantWoodC": "plant_wood_c",
-    "plantLeafC": "plant_leaf_c",
-    "woodCreation": "wood_creation",
-    "soil": "soil_c",
-    "coarseRootC": "coarse_root_c",
-    "fineRootC": "fine_root_c",
-    "litter": "litter_c",
-    "soilWater": "soil_water",
-    "soilWetnessFrac": "soil_wetness_frac",
-    "snow": "snow",
-    "npp": "npp",
-    "nee": "nee",
-    "cumNEE": "cum_nee",
-    "gpp": "gpp",
-    "rAboveground": "r_aboveground",
-    "rSoil": "r_soil",
-    "rRoot": "r_root",
-    "ra": "ra",
-    "rh": "rh",
-    "rtot": "rtot",
-    "evapotranspiration": "evapotranspiration",
-    "fluxestranspiration": "transpiration",
-    # Nitrogen cycle; zero unless ModelFlags.nitrogen_cycle is on.
-    "minN": "mineral_n",
-    "soilOrgN": "soil_organic_n",
-    "litterN": "litter_n",
-    "n2o": "n2o",
-    "nLeaching": "n_leaching",
-    "nFixation": "n_fixation",
-    "nUptake": "n_uptake",
-    # Plant nitrogen held in storage; leaf-out draws on this pool.
-    "plantStorageN": "plant_storage_n",
-    # Methane; zero unless ModelFlags.anaerobic is on.
-    "ch4": "ch4",
-    # Carbon held back from allocation to represent storage lag.
-    "nppStorage": "npp_storage",
-    # Written by SIPNET v2.1.0 as its mass-balance closure errors. The pinned
-    # version reports those as log warnings instead, but the names are kept so
-    # output saved from v2.1.0 still reads.
-    "bcdeltaC": "balance_delta_c",
-    "bcdeltaN": "balance_delta_n",
-    # Written by SIPNET versions older than the pinned one; kept so that
-    # previously saved output files still read.
-    "fPAR": "f_par",
-    "microbeC": "microbe_c",
-    "litterWater": "litter_water",
-}
+from pysipnet.variables import (
+    LEGACY_OUTPUT_COLUMNS,
+    OUTPUT_VARIABLES_BY_SIPNET_NAME,
+    TIME_COORDINATE_NAMES,
+    resolve_output_variable_names,
+)
+
+
+class UnknownOutputColumnWarning(UserWarning):
+    """SIPNET wrote a column the variable registry does not describe."""
+
+
+def sipnet_column_to_variable_name(sipnet_name: str) -> str:
+    """Map one SIPNET header token to its pySIPNET variable name.
+
+    Unknown tokens are returned unchanged, with a warning.
+    """
+    spec = OUTPUT_VARIABLES_BY_SIPNET_NAME.get(sipnet_name)
+    if spec is not None:
+        return spec.name
+    legacy = LEGACY_OUTPUT_COLUMNS.get(sipnet_name)
+    if legacy is not None:
+        return legacy
+    warnings.warn(
+        f"SIPNET output column {sipnet_name!r} is not in the variable registry; "
+        "keeping its SIPNET name. Add it to pysipnet.variables.OUTPUT_VARIABLES.",
+        UnknownOutputColumnWarning,
+        stacklevel=3,
+    )
+    return sipnet_name
 
 
 def _split_header(lines: list[str]) -> tuple[list[str] | None, int]:
     """Work out where the header is and where the data starts.
 
-    Returns the column names (or ``None`` when the file has no header) and the
-    index of the first data row.
+    Returns the SIPNET column names (or ``None`` when the file has no header)
+    and the index of the first data row.
 
     Three layouts occur in practice:
 
@@ -135,31 +96,25 @@ def _split_header(lines: list[str]) -> tuple[list[str] | None, int]:
     return None, 0
 
 
-def read_output_file(path: Path, columns: list[str] | None = None) -> pd.DataFrame:
-    """Read a SIPNET ``.out`` file into a DataFrame.
-
-    Column names in the result are the snake_case names from
-    :data:`SIPNET_TO_PYTHON_OUTPUT`. A SIPNET column with no entry in that
-    mapping keeps its original name, so a column added by a future SIPNET
-    version is still readable.
+def read_output_file(path: Path, variables: list[str] | None = None) -> pd.DataFrame:
+    """Read a SIPNET ``.out`` file into a DataFrame with registry column names.
 
     Parameters
     ----------
     path:
         The ``.out`` file to read.
-    columns:
-        Which columns to keep, using the snake_case names. ``year``, ``day``
-        and ``time`` are always kept because they identify each row. Pass
-        ``None`` for everything. Ignored for files with no header row, where
-        columns cannot be selected by name.
+    variables:
+        Which variables to keep, by registry name or alias (``"nee"`` and
+        ``"net_ecosystem_exchange"`` both work). The time coordinates
+        ``year``, ``day_of_year`` and ``hour_of_day`` are always kept because
+        they identify each row. ``None`` keeps everything. Ignored for files
+        with no header row, where columns cannot be selected by name.
 
     Returns
     -------
     pandas.DataFrame
         One row per timestep. Empty if the file is empty.
     """
-    from io import StringIO
-
     lines = path.read_text().splitlines()
     if not lines:
         return pd.DataFrame()
@@ -173,19 +128,17 @@ def read_output_file(path: Path, columns: list[str] | None = None) -> pd.DataFra
         python_cols = None
         usecols = None
     else:
-        python_cols = [SIPNET_TO_PYTHON_OUTPUT.get(c, c) for c in sipnet_cols]
-        if columns is not None:
-            # The time coordinates identify each row, so they are always kept.
-            requested = {"year", "day", "time"} | set(columns)
+        python_cols = [sipnet_column_to_variable_name(c) for c in sipnet_cols]
+        if variables is not None:
+            requested = set(TIME_COORDINATE_NAMES) | set(resolve_output_variable_names(variables))
             usecols = [c for c in python_cols if c in requested]
         else:
             usecols = None
 
-    df = pd.read_csv(
+    return pd.read_csv(
         StringIO(data_text),
         sep=r"\s+",
         header=None,
         names=python_cols,
         usecols=usecols,
     )
-    return df

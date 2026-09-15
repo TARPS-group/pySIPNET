@@ -18,21 +18,21 @@ def _make_result(include_litter: bool = False):
     n = 10
     ts_cols = {
         "year": 2020,
-        "day": range(1, n + 1),
-        "time": 0.0,
-        "nee": -1.0,
-        "gpp": 3.0,
+        "day_of_year": range(1, n + 1),
+        "hour_of_day": 0.0,
+        "net_ecosystem_exchange": -1.0,
+        "gross_primary_production": 3.0,
         "evapotranspiration": 0.2,
-        "ra": 1.0,
-        "rh": 1.0,
-        "cum_nee": range(-n, 0),
-        "plant_wood_c": 30000.0,
-        "plant_leaf_c": 100.0,
-        "soil_c": 10000.0,
+        "autotrophic_respiration": 1.0,
+        "heterotrophic_respiration": 1.0,
+        "cumulative_net_ecosystem_exchange": range(-n, 0),
+        "wood_carbon": 30000.0,
+        "leaf_carbon": 100.0,
+        "soil_carbon": 10000.0,
         "soil_water": 6.0,
     }
     if include_litter:
-        ts_cols["litter_c"] = 200.0
+        ts_cols["litter_carbon"] = 200.0
 
     ts = pd.DataFrame(ts_cols)
 
@@ -103,7 +103,7 @@ class TestDashboard:
 
         fig = dashboard(_make_result())
         names = {t.name for t in fig.data}
-        assert "Wood C (stem)" in names
+        assert "Wood C" in names
         assert "Soil C" in names
 
     def test_missing_column_skipped(self):

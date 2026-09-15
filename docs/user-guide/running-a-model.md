@@ -251,7 +251,7 @@ Call `model()` with no arguments to run the baseline:
 
 ```python
 result = model()
-print(result.outputs.data[["nee", "gpp"]].sum())
+print(result.outputs.data[["net_ecosystem_exchange", "gross_primary_production"]].sum())
 ```
 
 ### Parameter overrides
@@ -291,7 +291,7 @@ import pandas as pd
 rows = []
 for a_max in [80.0, 100.0, 112.0, 130.0, 150.0]:
     r = model(a_max=a_max)
-    rows.append({"a_max": a_max, "annual_gpp": r.gpp().sum()})
+    rows.append({"a_max": a_max, "annual_gpp": r.outputs.variable("gpp").sum()})
 
 pd.DataFrame(rows)
 ```
@@ -302,72 +302,79 @@ pd.DataFrame(rows)
 
 Both `SIPNETModel` and `SIPNETRunner.run()` return a `SIPNETResult`.
 
-### The outputs DataFrame
+### Output variables
 
-`result.outputs` is a `SIPNETOutput` object.  Access the full DataFrame via
-`.data`:
+`result.outputs` is a `SIPNETOutput`. Its columns are named for what they are,
+not for what SIPNET calls them: `net_ecosystem_exchange` rather than `nee`,
+`soil_respiration` rather than `rSoil`. The full list, with units, meaning and
+the SIPNET column each one comes from, is on the
+[Output variables](../reference/output-variables.md) page; the same information
+is available in code from `pysipnet.variables`.
 
 ```python
-print(result.outputs.data.columns.tolist())
-# 35 columns:
-#  'year', 'day', 'time', 'plant_wood_c',
-#  'plant_leaf_c', 'wood_creation', 'soil_c', 'coarse_root_c',
-#  'fine_root_c', 'litter_c', 'soil_water', 'soil_wetness_frac',
-#  'snow', 'npp', 'nee', 'cum_nee',
-#  'gpp', 'r_aboveground', 'r_soil', 'r_root',
-#  'ra', 'rh', 'rtot', 'evapotranspiration',
-#  'transpiration', 'mineral_n', 'soil_organic_n', 'litter_n',
-#  'plant_storage_n', 'n2o', 'n_leaching', 'n_fixation',
-#  'n_uptake', 'ch4', 'npp_storage'
+from pysipnet.variables import resolve_output_variable
+
+spec = resolve_output_variable("nee")      # aliases resolve to the full spec
+spec.name           # 'net_ecosystem_exchange'
+spec.units          # 'g m-2'
+spec.constituent    # 'C'
+spec.axis_label()   # 'Net ecosystem exchange (g C m⁻²)'
+spec.time_reference # 'total over the timestep'
 ```
 
 Every column is always present. A process that is switched off writes zeros
 rather than omitting its column, so the nitrogen and methane columns are there
-but empty unless those processes are on. SIPNET checks its own carbon and
-nitrogen closure but reports the result as a log warning rather than an
-output column, so a failed check appears in `result.provenance.stderr`.
+but zero unless those processes are on (`requires_flag` on the spec says which).
+SIPNET checks its own carbon and nitrogen closure but reports the result as a
+log warning rather than an output column, so a failed check appears in
+`result.provenance.stderr`.
 
-Key variables:
+!!! note "Start of step versus end of step"
+    SIPNET labels each row with the **start** of its timestep. Pools
+    (`wood_carbon`, `soil_water`, ...) are the values at the **end** of that
+    step, and fluxes (`net_ecosystem_exchange`, `evapotranspiration`, ...) are
+    totals **over** it. One column, `transpiration_rate`, is a per-day rate
+    rather than a total. The `kind` and `time_reference` fields of each
+    variable spell this out, and the xarray view below carries them as
+    attributes.
 
-| Column | Units | Description |
-|:-------|:------|:------------|
-| `nee` | g C m⁻² per timestep | Net ecosystem exchange (positive = to atmosphere) |
-| `gpp` | g C m⁻² per timestep | Gross primary production |
-| `npp` | g C m⁻² per timestep | Net primary production |
-| `ra` | g C m⁻² per timestep | Total autotrophic respiration |
-| `rh` | g C m⁻² per timestep | Heterotrophic respiration |
-| `evapotranspiration` | cm per timestep | Evapotranspiration |
-| `plant_wood_c` | g C m⁻² | Aboveground wood C; roots are separate columns |
-| `soil_c` | g C m⁻² | Soil C pool |
-
-### Convenience accessors
+### Three views of the same output
 
 ```python
-result.nee()   # pd.Series — net ecosystem exchange
-result.gpp()   # pd.Series — gross primary production
-result.et()    # pd.Series — evapotranspiration
+df = result.outputs.data                    # pandas DataFrame, one row per timestep
+ds = result.outputs.dataset                 # xarray Dataset, one `time` dimension
+nee = result.outputs["nee"]                 # one variable as a DataArray, by name or alias
+nee_series = result.outputs.variable("nee") # ... or as a pandas Series
+```
+
+The Dataset is the representation to use when metadata matters or when
+results will be combined across runs:
+
+```python
+ds["net_ecosystem_exchange"].attrs
+# {'units': 'g m-2', 'long_name': 'Net ecosystem exchange',
+#  'time_reference': 'total over the timestep', 'cell_methods': 'time: sum',
+#  'constituent': 'C', 'sign_convention': 'positive is a flux from the ecosystem to the atmosphere', ...}
+
+ds["time"]              # datetime64, start of each timestep
+ds["time_step_end"]     # datetime64, end of each timestep
+ds["time_step_length"]  # timedelta64
+
+ds.to_netcdf("run.nc")  # self-describing on disk
 ```
 
 ### Annual summaries
 
+Fluxes sum; pools average. The registry records the right rule for each
+variable as `spec.aggregation`:
+
 ```python
 annual = (
     result.outputs.data
-    .groupby("year")[["nee", "gpp", "evapotranspiration"]]
+    .groupby("year")[["net_ecosystem_exchange", "gross_primary_production", "evapotranspiration"]]
     .sum()
 )
 ```
-
-### xarray output
-
-With the `xarray` extra installed, convert to a Dataset with `year`, `day`,
-and `time` as coordinates:
-
-```python
-ds = result.to_xarray()
-```
-
----
 
 ## Querying parameter metadata
 
