@@ -32,14 +32,14 @@ from pysipnet.parameters import (
 
 params = SIPNETParameters(
     initial_conditions=InitialConditions(
-        plant_wood=30000, lai=0.0, soil=10000,
-        soil_water_frac=0.5, fine_root_frac=0.05, coarse_root_frac=0.15,
+        total_wood_carbon=30000, leaf_area_index=0.0, soil_carbon=10000,
+        soil_wetness_fraction=0.5, fine_root_fraction=0.05, coarse_root_fraction=0.15,
     ),
     photosynthesis=PhotosynthesisParams(
-        a_max=112.0, a_max_frac=0.76, base_fol_resp_frac=0.1,
-        psn_t_min=2.0, psn_t_opt=24.0,
-        d_vpd_slope=0.05, d_vpd_exp=1.0,
-        half_sat_par=300.0, attenuation=0.5,
+        max_photosynthesis_rate=112.0, daily_mean_photosynthesis_fraction=0.76, foliar_respiration_fraction=0.1,
+        min_photosynthesis_temperature=2.0, optimum_photosynthesis_temperature=24.0,
+        vapour_pressure_deficit_slope=0.05, vapour_pressure_deficit_exponent=1.0,
+        half_saturation_light=300.0, light_extinction_coefficient=0.5,
     ),
     # ... and the five remaining groups
 )

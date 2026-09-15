@@ -163,7 +163,7 @@ runner = SIPNETRunner(flags=context.flags)
 model  = SIPNETModel(runner, base_params=context.params, base_climate=context.climate)
 
 row = overrides.loc[42]
-result = model(soil=row["soil_init"], soil_water_frac=row["soil_water_frac_init"])
+result = model(soil=row["soil_init"], soil_wetness_fraction=row["soil_water_frac_init"])
 ```
 
 ### Using PyEns
@@ -200,7 +200,7 @@ members = Axis("member", size=500)
 fields  = sipnet_member_fields(
     members,
     soil=soil_samples,
-    soil_water_frac=water_samples,
+    soil_wetness_fraction=water_samples,
 )
 spec = EnsembleSpec(inputs={**fields})
 
@@ -268,15 +268,15 @@ import csv
 
 with open("experiment/run_log.csv", "w", newline="") as log_file:
     writer = csv.DictWriter(
-        log_file, fieldnames=["iter", "a_max", "base_veg_resp", "log_lik"]
+        log_file, fieldnames=["iter", "max_photosynthesis_rate", "base_wood_respiration_rate", "log_lik"]
     )
     writer.writeheader()
 
-    for i, (a_max, bvr) in enumerate(sampler):
-        result = model(a_max=a_max, base_veg_resp=bvr)
+    for i, (max_photosynthesis_rate, bvr) in enumerate(sampler):
+        result = model(max_photosynthesis_rate=max_photosynthesis_rate, base_wood_respiration_rate=bvr)
         log_lik = compute_log_likelihood(result)
         writer.writerow(
-            {"iter": i, "a_max": a_max, "base_veg_resp": bvr, "log_lik": log_lik}
+            {"iter": i, "max_photosynthesis_rate": max_photosynthesis_rate, "base_wood_respiration_rate": bvr, "log_lik": log_lik}
         )
 ```
 
@@ -295,7 +295,7 @@ runner = SIPNETRunner(flags=context.flags)
 model  = SIPNETModel(runner, base_params=context.params, base_climate=context.climate)
 
 row    = log[log["iter"] == 42].iloc[0]
-result = model(a_max=row["a_max"], base_veg_resp=row["base_veg_resp"])
+result = model(max_photosynthesis_rate=row["max_photosynthesis_rate"], base_wood_respiration_rate=row["base_wood_respiration_rate"])
 ```
 
 ### Saving outputs selectively
@@ -307,8 +307,8 @@ to disk.  A practical pattern is to save only summary statistics per iteration:
 ```python
 writer.writerow({
     "iter": i,
-    "a_max": a_max,
-    "base_veg_resp": bvr,
+    "max_photosynthesis_rate": max_photosynthesis_rate,
+    "base_wood_respiration_rate": bvr,
     "annual_nee": result.outputs.variable("nee").sum(),
     "annual_gpp": result.outputs.variable("gpp").sum(),
     "log_lik": log_lik,

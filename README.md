@@ -32,8 +32,8 @@ climate    = ClimateDrivers.from_file("site1.clim", n_columns=14)
 other_site = ClimateDrivers.from_file("site2.clim", n_columns=14)
 
 params = SIPNETParameters(
-    photosynthesis=PhotosynthesisParams(a_max=112.0, psn_t_opt=24.0),
-    respiration=RespirationParams(base_veg_resp=0.02),
+    photosynthesis=PhotosynthesisParams(max_photosynthesis_rate=112.0, optimum_photosynthesis_temperature=24.0),
+    respiration=RespirationParams(base_wood_respiration_rate=0.02),
     # ... and the other five groups
 )
 
@@ -41,7 +41,7 @@ runner = SIPNETRunner(flags=ModelFlags.standard())
 model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
 result = model()                    # baseline run
-result = model(a_max=140.0)         # override a single parameter
+result = model(max_photosynthesis_rate=140.0)         # override a single parameter
 result = model(climate=other_site)  # swap climate drivers
 
 print(result.outputs.data[["net_ecosystem_exchange", "gross_primary_production"]].sum())

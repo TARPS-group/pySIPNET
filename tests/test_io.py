@@ -66,13 +66,13 @@ class TestFlatten:
             assert key in PYTHON_TO_SIPNET.values(), f"{key!r} not a known SIPNET name"
 
     def test_none_fields_omitted(self, minimal_params):
-        """snow_melt has a value but snow=False fields like leafPoolDepth are None."""
+        """snow_melt_rate has a value but snow=False fields like leafPoolDepth are None."""
         flat = _flatten(minimal_params)
-        # leaf_pool_depth defaults to None and should not appear
+        # leaf_water_pool_depth defaults to None and should not appear
         assert "leafPoolDepth" not in flat
 
     def test_non_none_optional_included(self, minimal_params):
-        """snow_melt=0.15 is set in minimal_params — must appear in flat output."""
+        """snow_melt_rate=0.15 is set in minimal_params — must appear in flat output."""
         flat = _flatten(minimal_params)
         assert "snowMelt" in flat
         assert flat["snowMelt"] == pytest.approx(0.15)
@@ -114,7 +114,7 @@ class TestWriteParamFile:
         assert written["soilWHC"] == pytest.approx(12.0)
 
     def test_validate_for_flags_called(self, tmp_path, flags):
-        """write_param_file must fail if snow_melt is missing with SNOW=1."""
+        """write_param_file must fail if snow_melt_rate is missing with SNOW=1."""
         from pysipnet.parameters.model import (
             AllocationParams,
             InitialConditions,
@@ -128,46 +128,46 @@ class TestWriteParamFile:
 
         params = SIPNETParameters(
             initial_conditions=InitialConditions(
-                plant_wood=1.0,
-                lai=0.0,
-                soil=1.0,
-                soil_water_frac=0.5,
-                fine_root_frac=0.05,
-                coarse_root_frac=0.15,
+                total_wood_carbon=1.0,
+                leaf_area_index=0.0,
+                soil_carbon=1.0,
+                soil_wetness_fraction=0.5,
+                fine_root_fraction=0.05,
+                coarse_root_fraction=0.15,
             ),
             photosynthesis=PhotosynthesisParams(
-                a_max=100.0,
-                a_max_frac=0.76,
-                base_fol_resp_frac=0.1,
-                psn_t_min=2.0,
-                psn_t_opt=24.0,
-                d_vpd_slope=0.05,
-                d_vpd_exp=1.0,
-                half_sat_par=300.0,
-                attenuation=0.5,
+                max_photosynthesis_rate=100.0,
+                daily_mean_photosynthesis_fraction=0.76,
+                foliar_respiration_fraction=0.1,
+                min_photosynthesis_temperature=2.0,
+                optimum_photosynthesis_temperature=24.0,
+                vapour_pressure_deficit_slope=0.05,
+                vapour_pressure_deficit_exponent=1.0,
+                half_saturation_light=300.0,
+                light_extinction_coefficient=0.5,
             ),
             phenology=PhenologyParams(
                 leaf_off_day=270.0,
-                gdd_leaf_on=100.0,
-                leaf_growth=50.0,
-                frac_leaf_fall=0.95,
+                leaf_on_growing_degree_days=100.0,
+                leaf_on_growth=50.0,
+                leaf_off_fall_fraction=0.95,
                 leaf_allocation=0.25,
                 leaf_turnover_rate=1.0,
-                leaf_on_realloc_frac=0.2,
+                leaf_on_reallocation_fraction=0.2,
             ),
             respiration=RespirationParams(
-                base_veg_resp=0.02,
-                veg_resp_q10=2.0,
-                growth_resp_frac=0.0,
-                frozen_soil_fol_r_eff=0.5,
+                base_wood_respiration_rate=0.02,
+                wood_respiration_q10=2.0,
+                growth_respiration_fraction=0.0,
+                frozen_soil_foliar_respiration_factor=0.5,
                 frozen_soil_threshold=-1.0,
-                base_fine_root_resp=0.5,
-                base_coarse_root_resp=0.1,
-                fine_root_q10=2.0,
-                coarse_root_q10=2.0,
-                base_soil_resp=0.06,
-                soil_resp_q10=2.0,
-                soil_resp_moist_effect=1.5,
+                base_fine_root_respiration_rate=0.5,
+                base_coarse_root_respiration_rate=0.1,
+                fine_root_respiration_q10=2.0,
+                coarse_root_respiration_q10=2.0,
+                base_soil_respiration_rate=0.06,
+                soil_respiration_q10=2.0,
+                soil_respiration_moisture_exponent=1.5,
             ),
             allocation=AllocationParams(
                 fine_root_allocation=0.35,
@@ -177,20 +177,20 @@ class TestWriteParamFile:
                 wood_turnover_rate=0.02,
             ),
             water=WaterParams(
-                water_remove_frac=0.1,
-                frozen_soil_eff=0.1,
-                wue_const=10.0,
-                soil_whc=12.0,
-                immed_evap_frac=0.1,
-                fast_flow_frac=0.1,
-                rd_const=100.0,
-                r_soil_const1=3.0,
-                r_soil_const2=2.0,
-                # snow_melt is None — should fail with SNOW=True flags
+                water_removal_fraction=0.1,
+                frozen_soil_water_fraction=0.1,
+                water_use_efficiency=10.0,
+                soil_water_holding_capacity=12.0,
+                interception_evaporation_fraction=0.1,
+                fast_flow_fraction=0.1,
+                aerodynamic_resistance_constant=100.0,
+                soil_resistance_intercept=3.0,
+                soil_resistance_slope=2.0,
+                # snow_melt_rate is None — should fail with SNOW=True flags
             ),
-            leaf=LeafPhysiologyParams(leaf_c_sp_wt=32.0, c_frac_leaf=0.45),
+            leaf=LeafPhysiologyParams(leaf_carbon_per_area=32.0, leaf_carbon_fraction=0.45),
         )
-        with pytest.raises(ValueError, match="snow_melt"):
+        with pytest.raises(ValueError, match="snow_melt_rate"):
             write_param_file(params, flags, tmp_path / "sipnet.param")
 
 
@@ -414,15 +414,15 @@ class TestNonFiniteValuesAreRefused:
 
         with pytest.raises(ValidationError):
             PhotosynthesisParams(
-                a_max=112.0,
-                a_max_frac=0.76,
-                base_fol_resp_frac=0.1,
-                psn_t_min=float("nan"),
-                psn_t_opt=24.0,
-                d_vpd_slope=0.05,
-                d_vpd_exp=1.0,
-                half_sat_par=17.0,
-                attenuation=0.5,
+                max_photosynthesis_rate=112.0,
+                daily_mean_photosynthesis_fraction=0.76,
+                foliar_respiration_fraction=0.1,
+                min_photosynthesis_temperature=float("nan"),
+                optimum_photosynthesis_temperature=24.0,
+                vapour_pressure_deficit_slope=0.05,
+                vapour_pressure_deficit_exponent=1.0,
+                half_saturation_light=17.0,
+                light_extinction_coefficient=0.5,
             )
 
     def test_inf_is_refused_at_construction(self):
@@ -430,15 +430,15 @@ class TestNonFiniteValuesAreRefused:
 
         with pytest.raises(ValidationError):
             PhotosynthesisParams(
-                a_max=float("inf"),
-                a_max_frac=0.76,
-                base_fol_resp_frac=0.1,
-                psn_t_min=2.0,
-                psn_t_opt=24.0,
-                d_vpd_slope=0.05,
-                d_vpd_exp=1.0,
-                half_sat_par=17.0,
-                attenuation=0.5,
+                max_photosynthesis_rate=float("inf"),
+                daily_mean_photosynthesis_fraction=0.76,
+                foliar_respiration_fraction=0.1,
+                min_photosynthesis_temperature=2.0,
+                optimum_photosynthesis_temperature=24.0,
+                vapour_pressure_deficit_slope=0.05,
+                vapour_pressure_deficit_exponent=1.0,
+                half_saturation_light=17.0,
+                light_extinction_coefficient=0.5,
             )
 
     def test_writer_refuses_a_non_finite_value_that_skipped_validation(
@@ -448,7 +448,7 @@ class TestNonFiniteValuesAreRefused:
         from pysipnet.parameters.model import ModelFlags
 
         data = minimal_params.model_dump()
-        data["photosynthesis"]["a_max"] = float("nan")
+        data["photosynthesis"]["max_photosynthesis_rate"] = float("nan")
         sneaked = type(minimal_params).model_construct(
             **{
                 k: type(getattr(minimal_params, k)).model_construct(**v)
@@ -467,7 +467,7 @@ class TestNonFiniteValuesAreRefused:
         from pysipnet.parameters.model import ModelFlags
 
         data = minimal_params.model_dump()
-        data["photosynthesis"]["a_max"] = np.float64(112.5)
+        data["photosynthesis"]["max_photosynthesis_rate"] = np.float64(112.5)
         params = type(minimal_params).model_validate(data)
         path = tmp_path / "sipnet.param"
         write_param_file(params, ModelFlags.standard(), path)

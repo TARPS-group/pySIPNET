@@ -21,7 +21,7 @@ The most direct way to run many SIPNET configurations is a Python loop:
 
 ```python
 results = []
-for a_max in [80.0, 100.0, 120.0, 140.0]:
+for max_photosynthesis_rate in [80.0, 100.0, 120.0, 140.0]:
     p = params.model_copy(update={"photosynthesis": ...})  # tedious
     results.append(runner.run(p, climate))
 ```
@@ -61,7 +61,7 @@ model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 You can call it directly to verify it works before handing it to PyEns:
 
 ```python
-result = model(a_max=112.0, base_veg_resp=0.02)
+result = model(max_photosynthesis_rate=112.0, base_wood_respiration_rate=0.02)
 print(result.outputs.data[["net_ecosystem_exchange", "gross_primary_production"]].sum())
 ```
 
@@ -80,9 +80,9 @@ and a `Grid` of values, then run through `EnsembleRunner`:
 from pyens import Axis, EnsembleSpec, Grid, EnsembleRunner, SequentialBackend
 
 a_max_values = [80.0, 90.0, 100.0, 110.0, 120.0, 130.0, 140.0]
-ax   = Axis("a_max", size=len(a_max_values))
+ax   = Axis("max_photosynthesis_rate", size=len(a_max_values))
 spec = EnsembleSpec(inputs={
-    "a_max": Grid(a_max_values, along=ax),
+    "max_photosynthesis_rate": Grid(a_max_values, along=ax),
 })
 
 ensemble_runner = EnsembleRunner(model, SequentialBackend())
@@ -97,7 +97,7 @@ print(result.n_runs)    # 7
 print(result.n_failed)  # 0 if all succeeded
 
 for record in result:
-    coord  = record.coordinate   # e.g. {"a_max": 3}  (integer axis index)
+    coord  = record.coordinate   # e.g. {"max_photosynthesis_rate": 3}  (integer axis index)
     output = record.output       # SIPNETResult
     print(coord, output.outputs.variable("gpp").sum())
 ```
@@ -110,12 +110,12 @@ Two `Grid` fields that reference **different** `Axis` instances are *crossed*:
 the ensemble runs every combination (Cartesian product).
 
 ```python
-a_max_ax = Axis("a_max",        size=5)
-resp_ax  = Axis("base_veg_resp", size=4)
+a_max_ax = Axis("max_photosynthesis_rate",        size=5)
+resp_ax  = Axis("base_wood_respiration_rate", size=4)
 
 spec = EnsembleSpec(inputs={
-    "a_max":         Grid([80.0, 100.0, 120.0, 140.0, 160.0], along=a_max_ax),
-    "base_veg_resp": Grid([0.01, 0.02, 0.03, 0.04],            along=resp_ax),
+    "max_photosynthesis_rate":         Grid([80.0, 100.0, 120.0, 140.0, 160.0], along=a_max_ax),
+    "base_wood_respiration_rate": Grid([0.01, 0.02, 0.03, 0.04],            along=resp_ax),
 })
 # 5 × 4 = 20 runs
 ```
@@ -158,13 +158,13 @@ spec = EnsembleSpec(inputs={
     **sipnet_site_fields(
         sites,
         climates=[clim_hf, clim_nr],
-        plant_wood=[30000.0, 24000.0],    # initial wood C per site
+        total_wood_carbon=[30000.0, 24000.0],    # initial wood C per site
         soil=[10000.0, 8500.0],           # initial soil C per site
     ),
-    # Member-level: a_max varies per member, aligned on the members axis
+    # Member-level: max_photosynthesis_rate varies per member, aligned on the members axis
     **sipnet_member_fields(
         members,
-        a_max=a_max_samples,
+        max_photosynthesis_rate=a_max_samples,
     ),
 })
 # 2 sites × 50 members = 100 runs
@@ -272,9 +272,9 @@ print(spec.describe())
 #     member (50)
 #   Fields:
 #     climate    Grid along [site]
-#     plant_wood Grid along [site]
+#     total_wood_carbon Grid along [site]
 #     soil       Grid along [site]
-#     a_max      Grid along [member]
+#     max_photosynthesis_rate      Grid along [member]
 #   Total runs: 100
 ```
 
@@ -298,14 +298,14 @@ sampler in a loop:
 ```python
 full_spec = EnsembleSpec(inputs={
     **sipnet_site_fields(sites, climates=[clim_hf, clim_nr]),
-    "a_max": ...,        # to be filled in per iteration
+    "max_photosynthesis_rate": ...,        # to be filled in per iteration
 })
 
-param_map = full_spec.freeze(free=["a_max"])
+param_map = full_spec.freeze(free=["max_photosynthesis_rate"])
 
 for iteration in range(n_iterations):
     theta = sampler.next_sample()
-    runnable = param_map(a_max=Grid(theta, along=members))
+    runnable = param_map(max_photosynthesis_rate=Grid(theta, along=members))
     result   = ensemble_runner.run(runnable)
     sampler.update(result)
 ```

@@ -365,7 +365,7 @@ class TestLitterPool:
         """Parameters with the two values the litter pool requires."""
         data = minimal_params.model_dump()
         data["respiration"]["litter_breakdown_rate"] = 0.5
-        data["respiration"]["frac_litter_respired"] = 0.5
+        data["respiration"]["litter_respired_fraction"] = 0.5
         return type(minimal_params).model_validate(data)
 
     def test_run_succeeds(self, litter_params):

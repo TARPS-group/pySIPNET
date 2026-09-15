@@ -67,6 +67,7 @@ nav:
       - MCMC Calibration: examples/mcmc_calibration.ipynb
   - Reference:
       - Output variables: reference/output-variables.md
+      - Parameters: reference/parameters.md
   - API Reference:
       - Overview: api/index.md
 

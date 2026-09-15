@@ -135,10 +135,10 @@ Separately, four flags are refused because *pySIPNET* cannot serve them: `nitrog
 The following SIPNET parameters are specified as **per-year rates** in the
 param file but converted to per-day internally (÷ 365):
 
-- `respiration.base_veg_resp`
-- `respiration.base_fine_root_resp`
-- `respiration.base_coarse_root_resp`
-- `respiration.base_soil_resp`
+- `respiration.base_wood_respiration_rate`
+- `respiration.base_fine_root_respiration_rate`
+- `respiration.base_coarse_root_respiration_rate`
+- `respiration.base_soil_respiration_rate`
 - `respiration.litter_breakdown_rate`
 - `allocation.fine_root_turnover_rate`
 - `allocation.coarse_root_turnover_rate`

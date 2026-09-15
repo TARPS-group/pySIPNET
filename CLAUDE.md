@@ -364,6 +364,23 @@ reads the log.
 
 Parameters are grouped as they appear in the Python data model. All initial conditions are also in the `.param` file (SIPNET makes no distinction).
 
+The lists below use **SIPNET's names**, because they describe the SIPNET
+contract. The Python field names follow the same convention as output
+variables (lower-case words, no acronyms): `aMax` is
+`photosynthesis.max_photosynthesis_rate`, `soilWHC` is
+`water.soil_water_holding_capacity`, `plantWoodInit` is
+`initial_conditions.total_wood_carbon`. Each field's `ParameterSpec`
+(`pysipnet/parameters/base.py`) records `sipnet_name`, UDUNITS `units`,
+`constituent`, labels, `aliases` (the pre-convention pySIPNET names) and, for
+initial conditions, `initializes` / `initializes_via` naming the output state
+it sets. `PARAMETER_SPECS` in `pysipnet/parameters/model.py` is the flat
+`{"group.field": spec}` view; `PYTHON_TO_SIPNET` in `param_io.py` is derived
+from it, and `tests/test_param_name_mapping.py` restates the mapping by hand.
+`resolve_parameter_name()` accepts a field name, an alias or a SIPNET name.
+Parameter groups forbid unknown keys, so a parameter set saved under an old
+name fails loudly on load. The docs page `reference/parameters.md` is
+generated from the specs.
+
 The authoritative source is the `initializeOneModelParam` block in
 `src/sipnet/sipnet.c` (`readParamData`). Its third argument is the required flag:
 `1` = always required, `0` = optional, and a `ctx.*` expression = **required

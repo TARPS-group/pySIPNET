@@ -14,7 +14,7 @@ Quickstart::
     model   = SIPNETModel(runner, base_params=params, base_climate=climate)
 
     result = model()                    # baseline run
-    result = model(a_max=120.0)         # single parameter override
+    result = model(max_photosynthesis_rate=120.0)         # single parameter override
 
 With agronomic events::
 

@@ -26,7 +26,7 @@ runner = SIPNETRunner(flags=ModelFlags.standard())
 model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 
 result        = model()                # baseline run
-result_tuned  = model(a_max=120.0)     # single parameter override
+result_tuned  = model(max_photosynthesis_rate=120.0)     # single parameter override
 result_site_b = model(climate=other)   # different climate drivers
 ```
 
@@ -78,46 +78,46 @@ from pysipnet.parameters import (
 
 params = SIPNETParameters(
     initial_conditions=InitialConditions(
-        plant_wood=30000.0,    # g C m⁻² — initial aboveground + root C
-        lai=0.0,               # m² m⁻² — leaf area index at t=0
-        soil=10000.0,          # g C m⁻² — initial soil C pool
-        soil_water_frac=0.5,   # fraction of water holding capacity
-        fine_root_frac=0.05,
-        coarse_root_frac=0.15,
+        total_wood_carbon=30000.0,    # g C m⁻² — initial aboveground + root C
+        leaf_area_index=0.0,               # m² m⁻² — leaf area index at t=0
+        soil_carbon=10000.0,          # g C m⁻² — initial soil C pool
+        soil_wetness_fraction=0.5,   # fraction of water holding capacity
+        fine_root_fraction=0.05,
+        coarse_root_fraction=0.15,
     ),
     photosynthesis=PhotosynthesisParams(
-        a_max=112.0,           # nmol CO₂ g⁻¹ leaf s⁻¹
-        a_max_frac=0.76,
-        base_fol_resp_frac=0.1,
-        psn_t_min=2.0,         # °C
-        psn_t_opt=24.0,        # °C
-        d_vpd_slope=0.05,
-        d_vpd_exp=1.0,
-        half_sat_par=300.0,    # mol photons m⁻² day⁻¹
-        attenuation=0.5,
+        max_photosynthesis_rate=112.0,           # nmol CO₂ g⁻¹ leaf s⁻¹
+        daily_mean_photosynthesis_fraction=0.76,
+        foliar_respiration_fraction=0.1,
+        min_photosynthesis_temperature=2.0,         # °C
+        optimum_photosynthesis_temperature=24.0,        # °C
+        vapour_pressure_deficit_slope=0.05,
+        vapour_pressure_deficit_exponent=1.0,
+        half_saturation_light=300.0,    # mol photons m⁻² day⁻¹
+        light_extinction_coefficient=0.5,
     ),
     phenology=PhenologyParams(
         leaf_off_day=270.0,
-        gdd_leaf_on=100.0,     # °C·day — required when the gdd flag is on
-        leaf_growth=50.0,      # g C m⁻²
-        frac_leaf_fall=0.95,
+        leaf_on_growing_degree_days=100.0,     # °C·day — required when the gdd flag is on
+        leaf_on_growth=50.0,      # g C m⁻²
+        leaf_off_fall_fraction=0.95,
         leaf_allocation=0.25,
         leaf_turnover_rate=1.0,  # year⁻¹
-        leaf_on_realloc_frac=0.2,  # cap on wood C drawn at leaf-out
+        leaf_on_reallocation_fraction=0.2,  # cap on wood C drawn at leaf-out
     ),
     respiration=RespirationParams(
-        base_veg_resp=0.02,        # year⁻¹ (SIPNET divides by 365 internally)
-        veg_resp_q10=2.0,
-        growth_resp_frac=0.0,
-        frozen_soil_fol_r_eff=0.5,
+        base_wood_respiration_rate=0.02,        # year⁻¹ (SIPNET divides by 365 internally)
+        wood_respiration_q10=2.0,
+        growth_respiration_fraction=0.0,
+        frozen_soil_foliar_respiration_factor=0.5,
         frozen_soil_threshold=-1.0,
-        base_fine_root_resp=0.5,   # year⁻¹
-        base_coarse_root_resp=0.1,
-        fine_root_q10=2.0,
-        coarse_root_q10=2.0,
-        base_soil_resp=0.06,       # year⁻¹
-        soil_resp_q10=2.0,
-        soil_resp_moist_effect=1.5,
+        base_fine_root_respiration_rate=0.5,   # year⁻¹
+        base_coarse_root_respiration_rate=0.1,
+        fine_root_respiration_q10=2.0,
+        coarse_root_respiration_q10=2.0,
+        base_soil_respiration_rate=0.06,       # year⁻¹
+        soil_respiration_q10=2.0,
+        soil_respiration_moisture_exponent=1.5,
     ),
     allocation=AllocationParams(
         fine_root_allocation=0.35,
@@ -127,20 +127,20 @@ params = SIPNETParameters(
         wood_turnover_rate=0.02,
     ),
     water=WaterParams(
-        water_remove_frac=0.1,
-        frozen_soil_eff=0.1,
-        wue_const=10.0,
-        soil_whc=12.0,     # cm — soil water holding capacity
-        immed_evap_frac=0.1,
-        fast_flow_frac=0.1,
-        snow_melt=0.15,    # cm °C⁻¹ day⁻¹ — required when the snow flag is on
-        rd_const=100.0,
-        r_soil_const1=3.0,
-        r_soil_const2=2.0,
+        water_removal_fraction=0.1,
+        frozen_soil_water_fraction=0.1,
+        water_use_efficiency=10.0,
+        soil_water_holding_capacity=12.0,     # cm — soil water holding capacity
+        interception_evaporation_fraction=0.1,
+        fast_flow_fraction=0.1,
+        snow_melt_rate=0.15,    # cm °C⁻¹ day⁻¹ — required when the snow flag is on
+        aerodynamic_resistance_constant=100.0,
+        soil_resistance_intercept=3.0,
+        soil_resistance_slope=2.0,
     ),
     leaf=LeafPhysiologyParams(
-        leaf_c_sp_wt=32.0,   # g C m⁻² leaf
-        c_frac_leaf=0.45,
+        leaf_carbon_per_area=32.0,   # g C m⁻² leaf
+        leaf_carbon_fraction=0.45,
     ),
 )
 ```
@@ -148,7 +148,7 @@ params = SIPNETParameters(
 #### Flag-dependent parameters
 
 `ModelFlags.standard()` turns on snow, degree-day leaf-out, and moisture-sensitive soil respiration.  This
-means `water.snow_melt` and `phenology.gdd_leaf_on` are required.  Call
+means `water.snow_melt_rate` and `phenology.leaf_on_growing_degree_days` are required.  Call
 `validate_for_flags` to catch mismatches before running:
 
 ```python
@@ -228,7 +228,7 @@ For I/O options — keeping files on disk, lazy output loading, climate staging
 | `ModelFlags.forest()` | as above, plus a separate litter carbon pool |
 
 Use `ModelFlags.forest()` for sites with a distinct litter carbon layer.  It additionally
-requires `respiration.litter_breakdown_rate` and `respiration.frac_litter_respired`.
+requires `respiration.litter_breakdown_rate` and `respiration.litter_respired_fraction`.
 
 ---
 
@@ -262,13 +262,13 @@ override is applied, Pydantic-validated, and discarded — `model.base_params`
 is never mutated.
 
 ```python
-result_high_psn = model(a_max=140.0)
-result_warm     = model(psn_t_opt=28.0)
-result_combined = model(a_max=140.0, psn_t_opt=28.0)
+result_high_psn = model(max_photosynthesis_rate=140.0)
+result_warm     = model(optimum_photosynthesis_temperature=28.0)
+result_combined = model(max_photosynthesis_rate=140.0, optimum_photosynthesis_temperature=28.0)
 ```
 
 Unrecognised parameter names raise `ValueError` immediately.  Invalid values
-(e.g., a negative `a_max`) raise `ValidationError` before the binary is called.
+(e.g., a negative `max_photosynthesis_rate`) raise `ValidationError` before the binary is called.
 
 ### Climate and event overrides
 
@@ -278,7 +278,7 @@ supply a management event sequence:
 ```python
 result_site_b      = model(climate=other_climate)
 result_with_events = model(events=event_sequence)
-result_full        = model(a_max=120.0, climate=other_climate, events=event_sequence)
+result_full        = model(max_photosynthesis_rate=120.0, climate=other_climate, events=event_sequence)
 ```
 
 ### Sensitivity exploration
@@ -289,9 +289,9 @@ result_full        = model(a_max=120.0, climate=other_climate, events=event_sequ
 import pandas as pd
 
 rows = []
-for a_max in [80.0, 100.0, 112.0, 130.0, 150.0]:
-    r = model(a_max=a_max)
-    rows.append({"a_max": a_max, "annual_gpp": r.outputs.variable("gpp").sum()})
+for max_photosynthesis_rate in [80.0, 100.0, 112.0, 130.0, 150.0]:
+    r = model(max_photosynthesis_rate=max_photosynthesis_rate)
+    rows.append({"max_photosynthesis_rate": max_photosynthesis_rate, "annual_gpp": r.outputs.variable("gpp").sum()})
 
 pd.DataFrame(rows)
 ```
@@ -389,8 +389,8 @@ from pysipnet import SIPNET_PARAMS_BY_GROUP
 
 # What parameters are in the photosynthesis group?
 SIPNET_PARAMS_BY_GROUP["photosynthesis"]
-# ['a_max', 'a_max_frac', 'base_fol_resp_frac', 'psn_t_min', 'psn_t_opt',
-#  'd_vpd_slope', 'd_vpd_exp', 'half_sat_par', 'attenuation']
+# ['max_photosynthesis_rate', 'daily_mean_photosynthesis_fraction', 'foliar_respiration_fraction', 'min_photosynthesis_temperature', 'optimum_photosynthesis_temperature',
+#  'vapour_pressure_deficit_slope', 'vapour_pressure_deficit_exponent', 'half_saturation_light', 'light_extinction_coefficient']
 
 # All groups
 list(SIPNET_PARAMS_BY_GROUP.keys())
@@ -411,7 +411,7 @@ whether the value is a per-year rate:
 from pysipnet.parameters.base import get_parameter_specs, ParameterDomain
 
 specs = get_parameter_specs(SIPNETParameters)
-# {"photosynthesis.a_max": ParameterSpec(unit="nmol / (g * s)", domain=POSITIVE, ...), ...}
+# {"photosynthesis.max_photosynthesis_rate": ParameterSpec(sipnet_name="aMax", units="nmol g-1 s-1", constituent="CO2", domain=POSITIVE, ...), ...}
 
 # Parameters requiring a log bijector for unconstrained optimisation
 log_params = {k for k, s in specs.items() if s.domain == ParameterDomain.POSITIVE}

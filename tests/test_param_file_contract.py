@@ -70,15 +70,15 @@ def params_for(minimal_params):
     def _build(flags: ModelFlags):
         data = minimal_params.model_dump()
         if flags.soil_phenol:
-            data["phenology"]["soil_temp_leaf_on"] = 5.0
-            data["phenology"]["gdd_leaf_on"] = None
+            data["phenology"]["leaf_on_soil_temperature"] = 5.0
+            data["phenology"]["leaf_on_growing_degree_days"] = None
         if flags.litter_pool:
             data["respiration"]["litter_breakdown_rate"] = 0.5
-            data["respiration"]["frac_litter_respired"] = 0.5
+            data["respiration"]["litter_respired_fraction"] = 0.5
         if flags.growth_resp:
-            data["respiration"]["growth_resp_frac"] = 0.25
+            data["respiration"]["growth_respiration_fraction"] = 0.25
         if flags.leaf_water:
-            data["water"]["leaf_pool_depth"] = 0.05
+            data["water"]["leaf_water_pool_depth"] = 0.05
         return type(minimal_params).model_validate(data)
 
     return _build

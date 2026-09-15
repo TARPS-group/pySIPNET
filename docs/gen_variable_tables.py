@@ -1,4 +1,4 @@
-"""Generate the output-variable reference page from the registry at docs-build time.
+"""Generate the variable and parameter reference pages from the registries at docs-build time.
 
 Run by the ``gen-files`` mkdocs plugin (see ``mkdocs.yml``). Writing the table
 from :data:`pysipnet.variables.OUTPUT_VARIABLES` means the documentation cannot
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import mkdocs_gen_files
 
+from pysipnet.parameters.model import PARAMETER_SPECS
 from pysipnet.variables import OUTPUT_VARIABLES, VariableKind
 
 KIND_TEXT = {
@@ -58,3 +59,56 @@ for spec in OUTPUT_VARIABLES:
 
 with mkdocs_gen_files.open("reference/output-variables.md", "w") as f:
     f.write("\n".join(lines) + "\n")
+
+
+# ── Parameters ─────────────────────────────────────────────────────────────────
+
+param_lines = [
+    "# Parameters",
+    "",
+    "Every field of `SIPNETParameters`, grouped as in the model, as described by",
+    "each field's [`ParameterSpec`][pysipnet.parameters.base.ParameterSpec]",
+    "(`pysipnet.parameters.model.PARAMETER_SPECS`). This page is generated from",
+    "those specs.",
+    "",
+    "**Names.** Field names follow the same convention as output variables: lower-case",
+    "words, no acronyms. The `SIPNET name` column is what the `.param` file uses; the",
+    "`Aliases` column lists the names pySIPNET used before this convention. Both are",
+    "accepted by `resolve_parameter_name()` and reported in the error when passed to",
+    "`SIPNETModel`, but only the current name is a field.",
+    "",
+    "**Per-year rates.** Parameters marked *per year* are read by SIPNET as annual rates",
+    "and divided by 365 internally; specify them per year.",
+    "",
+    "**Initial conditions** set an output state variable at the start of the run; the",
+    "`Initializes` column names it and, where the relation is not the identity, how.",
+    "",
+]
+current_group = None
+for path, spec in PARAMETER_SPECS.items():
+    group, field = path.split(".", 1)
+    if group != current_group:
+        current_group = group
+        param_lines += [
+            f"## `{group}`",
+            "",
+            "| Field | SIPNET name | Units | Domain | Description | Aliases | Initializes |",
+            "|:------|:------------|:------|:-------|:------------|:--------|:------------|",
+        ]
+    units = spec.formatted_units() + (" (per year)" if spec.per_year else "")
+    aliases = ", ".join(f"`{a}`" for a in spec.aliases)
+    initializes = ", ".join(f"`{v}`" for v in spec.initializes)
+    if spec.initializes_via:
+        initializes += f" via {spec.initializes_via}"
+    param_lines.append(
+        f"| `{field}` | `{spec.sipnet_name}` | {units} | {spec.domain.value} | "
+        f"{spec.description} | {aliases} | {initializes} |"
+    )
+    if (
+        path == list(PARAMETER_SPECS)[-1]
+        or list(PARAMETER_SPECS)[list(PARAMETER_SPECS).index(path) + 1].split(".", 1)[0] != group
+    ):
+        param_lines.append("")
+
+with mkdocs_gen_files.open("reference/parameters.md", "w") as f:
+    f.write("\n".join(param_lines) + "\n")

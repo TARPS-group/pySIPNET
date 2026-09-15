@@ -36,9 +36,9 @@ print(result.outputs.variable("nee").sum())    # annual NEE
 print(result.outputs.variable("gpp").mean())   # mean GPP per timestep
 
 # Quick parameter sensitivity
-for a_max in [80.0, 100.0, 120.0, 140.0]:
-    r = model(a_max=a_max)
-    print(f"a_max={a_max}: NEE={r.outputs.variable('nee').sum():.2f} g C m⁻²")
+for max_photosynthesis_rate in [80.0, 100.0, 120.0, 140.0]:
+    r = model(max_photosynthesis_rate=max_photosynthesis_rate)
+    print(f"max_photosynthesis_rate={max_photosynthesis_rate}: NEE={r.outputs.variable('nee').sum():.2f} g C m⁻²")
 ```
 
 The `SIPNETModel` wrapper (see [Running a Model](running-a-model.md)) is

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from pysipnet.parameters.model import PARAMETER_SPECS
 from pysipnet.variables import OUTPUT_VARIABLES_BY_NAME
 
 if TYPE_CHECKING:
@@ -153,10 +154,11 @@ def _param_table(result: SIPNETResult) -> go.Table:
             label = group_name.replace("_", " ").title()
             first = True
             for pname, pval in group_dict.items():
+                spec = PARAMETER_SPECS.get(f"{group_name}.{pname}")
                 if pval is None:
                     continue
                 group_col.append(f"<b>{label}</b>" if first else "")
-                param_col.append(pname.replace("_", " "))
+                param_col.append(spec.long_label if spec is not None else pname.replace("_", " "))
                 value_col.append(f"{pval:.4g}" if isinstance(pval, float) else str(pval))
                 row_colors.append(fill)
                 first = False
