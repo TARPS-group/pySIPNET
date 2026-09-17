@@ -60,7 +60,7 @@ from typing import TYPE_CHECKING, Any, TypeAlias
 
 import numpy as np
 
-from pysipnet.dataset import TimeAxis, build_time_axis, dataset_from_frame
+from pysipnet.dataset import TimeAxis, build_time_axis, dataset_from_dataframe
 from pysipnet.variables import (
     OUTPUT_VARIABLES_BY_NAME,
     TIME_COORDINATE_NAMES,
@@ -460,7 +460,7 @@ class SIPNETOutput:
 
         if df.empty:
             return xr.Dataset()
-        return dataset_from_frame(
+        return dataset_from_dataframe(
             df,
             self._time_axis(df),
             attributes_for=_attributes_for,

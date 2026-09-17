@@ -278,7 +278,7 @@ def build_time_axis(
     return TimeAxis(coords=coords, n_rows=len(df), step_length_source=source)
 
 
-def dataset_from_frame(
+def dataset_from_dataframe(
     df: pd.DataFrame,
     axis: TimeAxis,
     *,
@@ -330,7 +330,7 @@ def dataframe_to_dataset(
     """Build a Dataset with one ``time`` dimension from a per-timestep DataFrame.
 
     The one-shot form of :func:`build_time_axis` followed by
-    :func:`dataset_from_frame`.  Use the two separately when several Datasets
+    :func:`dataset_from_dataframe`.  Use the two separately when several Datasets
     are built from the same rows, so the time axis is paid for once.
 
     Parameters
@@ -355,6 +355,6 @@ def dataframe_to_dataset(
         return xr.Dataset()
 
     axis = build_time_axis(df, attributes_for=attributes_for, time_step_length=time_step_length)
-    return dataset_from_frame(
+    return dataset_from_dataframe(
         df, axis, attributes_for=attributes_for, source=source, extra_attrs=extra_attrs
     )
