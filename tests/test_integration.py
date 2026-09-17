@@ -367,6 +367,69 @@ class TestOutputIO:
         assert first.provenance.workdir.exists()
         assert second.provenance.workdir.exists()
 
+    def test_a_second_run_will_not_overwrite_the_first_ones_output(
+        self, minimal_params, tmp_path
+    ):
+        """The same collision one level out, where a random suffix is not available.
+
+        The output file is named from the run id because users are told to
+        predict that name. A second run with the same id would replace it, and
+        because a file-backed output is read lazily, the first result would then
+        answer with the second run's numbers while still reporting success.
+        """
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        first = runner.run(minimal_params, _make_climate(n_days=30), run_id="member")
+
+        with pytest.raises(FileExistsError, match="distinct run_id"):
+            runner.run(minimal_params, _make_climate(n_days=20), run_id="member")
+
+        # The refusal must leave the first run's output exactly as it was.
+        assert first.outputs.n_timesteps == 30
+
+    def test_a_refused_run_does_not_execute_sipnet_or_leave_a_workdir(
+        self, minimal_params, tmp_path
+    ):
+        """Refusing before the binary runs is the point: a wasted run is not free."""
+        runner = SIPNETRunner(
+            flags=ModelFlags.standard(),
+            output_dir=tmp_path / "outputs",
+            workdir_base=tmp_path / "work",
+        )
+        runner.run(minimal_params, _make_climate(), run_id="member")
+        before = sorted((tmp_path / "work").iterdir())
+
+        with pytest.raises(FileExistsError):
+            runner.run(minimal_params, _make_climate(), run_id="member")
+        assert sorted((tmp_path / "work").iterdir()) == before
+
+    def test_overwrite_allows_rerunning_one_id(self, minimal_params, tmp_path):
+        """A loop that reruns one member under a fixed id is a legitimate thing to do."""
+        runner = SIPNETRunner(
+            flags=ModelFlags.standard(), output_dir=tmp_path / "outputs", overwrite=True
+        )
+        runner.run(minimal_params, _make_climate(n_days=30), run_id="member")
+        second = runner.run(minimal_params, _make_climate(n_days=20), run_id="member")
+
+        assert second.outputs.n_timesteps == 20
+        assert len(list((tmp_path / "outputs").iterdir())) == 1
+
+    def test_overwrite_can_be_decided_per_call(self, minimal_params, tmp_path):
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        runner.run(minimal_params, _make_climate(), run_id="member")
+
+        result = runner.run(
+            minimal_params, _make_climate(n_days=20), run_id="member", overwrite=True
+        )
+        assert result.outputs.n_timesteps == 20
+
+    def test_distinct_run_ids_never_collide(self, minimal_params, tmp_path):
+        """Including the default, which is a fresh UUID every time."""
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        results = [runner.run(minimal_params, _make_climate()) for _ in range(3)]
+
+        paths = {r.outputs.source_path for r in results}
+        assert len(paths) == 3
+
     def test_the_run_id_still_labels_the_directory(self, minimal_params, tmp_path):
         """Unpredictable, but still recognizable while debugging."""
         runner = SIPNETRunner(flags=ModelFlags.standard(), workdir_base=tmp_path, keep_workdir=True)

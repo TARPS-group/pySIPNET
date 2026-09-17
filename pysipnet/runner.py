@@ -50,7 +50,10 @@ and return a file-backed :class:`~pysipnet.output.SIPNETOutput` instead::
     # No DataFrames in memory yet.
     nee = pd.concat([r.outputs.dataframe(["nee"]) for r in results])
 
-Each run writes ``sipnet_<run_id>.out`` inside ``output_dir``.
+Each run writes ``sipnet_<run_id>.out`` inside ``output_dir``. Two runs sharing
+a ``run_id`` would name the same file, so the second is refused rather than
+allowed to change what the first one's lazily-read result answers with; pass
+``overwrite=True`` when that is what you want.
 """
 
 from __future__ import annotations
@@ -225,6 +228,9 @@ class SIPNETRunner:
         copy.  When ``None`` (default), the output is parsed eagerly into
         memory and no file is retained.  Can be overridden per-call via the
         ``output_dir`` argument to :meth:`run`.
+    overwrite:
+        Whether a run may replace an output file left by an earlier run with
+        the same ``run_id``.  ``False`` (default) refuses; see :meth:`run`.
     cache_dir:
         Directory containing pre-compiled SIPNET binaries (default:
         ``.sipnet_cache/`` at the repo root).
@@ -249,6 +255,7 @@ class SIPNETRunner:
         flags: ModelFlags | None = None,
         *,
         output_dir: Path | str | None = None,
+        overwrite: bool = False,
         climate_staging: ClimateStaging = ClimateStaging.COPY,
         cache_dir: Path | str | None = None,
         workdir_base: Path | str | None = None,
@@ -257,6 +264,7 @@ class SIPNETRunner:
     ) -> None:
         self.flags = flags if flags is not None else ModelFlags.standard()
         self.output_dir = Path(output_dir) if output_dir is not None else None
+        self.overwrite = overwrite
         self.climate_staging = climate_staging
         self.cache_dir = Path(cache_dir) if cache_dir else _DEFAULT_CACHE_DIR
         self.workdir_base = Path(workdir_base) if workdir_base else Path(tempfile.gettempdir())
@@ -287,6 +295,33 @@ class SIPNETRunner:
                 "If you need to keep the working directory, set keep_workdir=True "
                 "and read the output from provenance.workdir directly."
             )
+
+    @staticmethod
+    def _output_path(output_dir: Path, run_id: str) -> Path:
+        """Where this run's output file is kept. The one place that name is formed."""
+        return output_dir / f"sipnet_{run_id}.out"
+
+    def _check_output_path(self, dest: Path, run_id: str, overwrite: bool) -> None:
+        """Refuse to replace an output file another run is still pointing at.
+
+        The output file is named from the run id, so two runs sharing an id
+        name the same file — and unlike the working directory, this name is one
+        users are told to predict, so it cannot be given a random suffix.
+        Replacing it does not just lose the earlier file: a file-backed
+        SIPNETOutput reads lazily, so the first result still holds the path and
+        would answer with the second run's numbers, having reported success.
+        Wrong numbers rather than an error, which is why this is refused rather
+        than warned about.
+        """
+        if not dest.exists() or overwrite:
+            return
+        raise FileExistsError(
+            f"{dest} already exists: an earlier run used run_id={run_id!r} with this "
+            "output_dir. Replacing it would silently change the numbers that run's "
+            "result reads, because a file-backed output is read lazily. Give this run a "
+            "distinct run_id, or pass overwrite=True if the earlier output is finished "
+            "with."
+        )
 
     def _stage_clim_file(self, climate: ClimateDrivers, dest: Path) -> None:
         """Write or link the climate file into the run working directory."""
@@ -319,6 +354,7 @@ class SIPNETRunner:
         run_id: str | None = None,
         events: EventSequence | None = None,
         output_dir: Path | str | None | object = _UNSET,
+        overwrite: bool | object = _UNSET,
         check: bool = True,
     ) -> SIPNETResult:
         """Execute SIPNET and return a parsed result.
@@ -354,6 +390,15 @@ class SIPNETRunner:
 
             The path must not be the same as, or a subdirectory of, the run's
             working directory — this is validated before the run starts.
+        overwrite:
+            Whether this run may replace ``<output_dir>/sipnet_<run_id>.out``
+            if it already exists.  Defaults to the runner-level ``overwrite``,
+            which is ``False``: a second run with the same ``run_id`` is
+            refused before it starts, because the earlier run's result reads
+            that file lazily and would silently answer with this run's numbers.
+            Pass ``True`` when the earlier output is finished with — a loop
+            that reruns one member under a fixed id, say.  Runs with distinct
+            ids never collide, and the default ``run_id`` is a fresh UUID.
 
         Returns
         -------
@@ -365,6 +410,8 @@ class SIPNETRunner:
         ------
         ValueError
             If *output_dir* is inside the run's working directory.
+        FileExistsError
+            If this run's output file already exists and *overwrite* is false.
         FileNotFoundError
             If the SIPNET binary cannot be found.
         subprocess.TimeoutExpired
@@ -399,10 +446,21 @@ class SIPNETRunner:
         self.workdir_base.mkdir(parents=True, exist_ok=True)
         workdir = Path(tempfile.mkdtemp(prefix=f"sipnet_{run_id}_", dir=self.workdir_base))
 
-        # Validate output_dir before any I/O so errors are immediate and clear.
+        effective_overwrite = self.overwrite if overwrite is _UNSET else bool(overwrite)
+
+        # Validate output_dir before any I/O so errors are immediate and clear,
+        # and before the binary runs so a refused run costs nothing but the
+        # working directory, which is removed again on the way out.
         if effective_output_dir is not None:
-            self._check_output_dir(effective_output_dir, workdir)
-            effective_output_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                self._check_output_dir(effective_output_dir, workdir)
+                effective_output_dir.mkdir(parents=True, exist_ok=True)
+                self._check_output_path(
+                    self._output_path(effective_output_dir, run_id), run_id, effective_overwrite
+                )
+            except Exception:
+                shutil.rmtree(workdir, ignore_errors=True)
+                raise
 
         try:
             write_param_file(parameters, flags, workdir / "sipnet.param")
@@ -509,7 +567,7 @@ class SIPNETRunner:
             return climate.pandas["time_step_length"].to_numpy()
 
         if effective_output_dir is not None:
-            dest = effective_output_dir / f"sipnet_{run_id}.out"
+            dest = self._output_path(effective_output_dir, run_id)
             shutil.copy2(out_src, dest)
             return SIPNETOutput.from_path(
                 dest,

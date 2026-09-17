@@ -175,6 +175,21 @@ directory is deleted, `sipnet.out` is copied to
 `<output_dir>/sipnet_<run_id>.out`.  The result holds a file-backed
 `SIPNETOutput` — no DataFrame is created until you explicitly access the data.
 
+Because the name comes from the run id, a second run with the same `run_id` and
+`output_dir` is **refused before it starts**, rather than replacing the file.
+The earlier result reads that path lazily, so overwriting it would silently
+change the numbers that result answers with, long after it reported success.
+Give each run a distinct id — the default is a fresh UUID — or pass
+`overwrite=True` when the earlier output is finished with:
+
+```python
+# A loop that reruns one member under a fixed id, keeping one file on disk:
+runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=Path("out"), overwrite=True)
+
+# ... or decide per call, leaving the runner's default in place:
+result = runner.run(params, climate, run_id="current", overwrite=True)
+```
+
 ```python
 runner = SIPNETRunner(
     flags=ModelFlags.standard(),
@@ -295,6 +310,7 @@ together:
 | What is kept | Only `sipnet.out`, copied to a named location | The entire working directory: param, clim, in, and out files |
 | Primary use | Ensemble post-processing; lazy loading | Debugging; reproducibility audits |
 | File naming | `sipnet_<run_id>.out` in your chosen directory | All files in `sipnet_<run_id>_<random>/` under `workdir_base` |
+| Reusing a `run_id` | Refused unless `overwrite=True` | Always a fresh directory |
 
 ### Summary: choosing an output mode
 
