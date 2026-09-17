@@ -60,11 +60,11 @@ def _run_baseline() -> pd.DataFrame:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # upstream data has a few vpd ≤ 0 rows
         full = read_clim_file(REFERENCE_CLIM, n_columns=14)
-    climate = ClimateDrivers.from_dataframe(full.data.head(_N_TIMESTEPS).copy(), n_columns=14)
+    climate = ClimateDrivers.from_dataframe(full.pandas.head(_N_TIMESTEPS).copy(), n_columns=14)
     params = params_from_sipnet_file(REFERENCE_PARAM)
     result = SIPNETRunner(flags=ModelFlags.standard()).run(params, climate, run_id="golden")
     assert result.provenance.success, result.provenance.stderr
-    return result.outputs.data
+    return result.outputs.pandas
 
 
 def test_output_matches_golden():

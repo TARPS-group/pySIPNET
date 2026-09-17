@@ -92,7 +92,7 @@ class ClimateDrivers:
 
     - :meth:`from_dataframe` — in-memory, with full column and data validation.
     - :meth:`from_file` — reads an existing ``.clim`` file fully into memory.
-    - :meth:`from_path` — file-backed, defers loading until ``.data`` is
+    - :meth:`from_path` — file-backed, defers loading until ``.pandas`` is
       accessed.  Use this in ensemble workflows where the file already exists
       on disk and you want to avoid a redundant read/write cycle.
 
@@ -184,7 +184,7 @@ class ClimateDrivers:
     def from_path(cls, path: str | Path, n_columns: Literal[12, 14] = 14) -> ClimateDrivers:
         """Create a file-backed instance without loading data into memory.
 
-        The file is not read until :attr:`data` is accessed.  Lightweight
+        The file is not read until :attr:`pandas` is accessed.  Lightweight
         validation checks the column count of the first and last rows, and
         caches :attr:`n_timesteps` and :attr:`date_range` from those rows.
 
@@ -216,8 +216,8 @@ class ClimateDrivers:
     # ── Data access ────────────────────────────────────────────────────────────
 
     @property
-    def data(self) -> pd.DataFrame:
-        """The climate time series as a DataFrame.
+    def pandas(self) -> pd.DataFrame:
+        """The climate time series as a :class:`pandas.DataFrame`.
 
         For file-backed instances, the first access reads and caches the full
         file from :attr:`source_path`.  Subsequent accesses return the cached
@@ -230,11 +230,11 @@ class ClimateDrivers:
                 raise ValueError(
                     "This ClimateDrivers has neither loaded data nor a file to read from."
                 )
-            self._data = read_clim_file(self.source_path, n_columns=self.n_columns).data
+            self._data = read_clim_file(self.source_path, n_columns=self.n_columns).pandas
         return self._data
 
     @property
-    def dataset(self) -> xr.Dataset:
+    def xarray(self) -> xr.Dataset:
         """The drivers as an :class:`xarray.Dataset` on the same ``time`` axis as outputs.
 
         ``time`` is the start of each step; ``time_step_end`` and
@@ -244,9 +244,9 @@ class ClimateDrivers:
         from pysipnet.dataset import dataframe_to_dataset
 
         return dataframe_to_dataset(
-            self.data,
+            self.pandas,
             attributes_for=_attributes_for,
-            time_step_length=self.data["time_step_length"].to_numpy(),
+            time_step_length=self.pandas["time_step_length"].to_numpy(),
             source="SIPNET climate drivers, via pySIPNET",
         )
 
@@ -270,7 +270,7 @@ class ClimateDrivers:
         self._check_vpd_wind()
 
     def _check_no_nulls(self) -> None:
-        null_cols = self.data.columns[self.data.isnull().any()].tolist()
+        null_cols = self.pandas.columns[self.pandas.isnull().any()].tolist()
         if null_cols:
             raise ValueError(
                 f"Missing values (NaN) found in climate columns: {null_cols}. "
@@ -278,14 +278,14 @@ class ClimateDrivers:
             )
 
     def _check_positive_length(self) -> None:
-        if (self.data["time_step_length"] <= 0).any():
+        if (self.pandas["time_step_length"] <= 0).any():
             raise ValueError(
                 "All 'time_step_length' values must be > 0 (timestep duration in days)."
             )
 
     def _check_monotonic_time(self) -> None:
         # Construct a monotone scalar: days from an arbitrary epoch
-        d = self.data
+        d = self.pandas
         doy = d["year"] * 366 + d["day_of_year"] + d["hour_of_day"] / 24.0
         if not doy.is_monotonic_increasing:
             raise ValueError(
@@ -296,7 +296,7 @@ class ClimateDrivers:
     def _check_vpd_wind(self) -> None:
         import warnings
 
-        vpd = self.data["vapor_pressure_deficit"]
+        vpd = self.pandas["vapor_pressure_deficit"]
         if (vpd <= 0).any():
             warnings.warn(
                 f"{(vpd <= 0).sum()} timestep(s) have vapor_pressure_deficit ≤ 0 Pa. "
@@ -304,7 +304,7 @@ class ClimateDrivers:
                 "but this may indicate a data issue.",
                 stacklevel=3,
             )
-        wind = self.data["wind_speed"]
+        wind = self.pandas["wind_speed"]
         if (wind <= 0).any():
             warnings.warn(
                 f"{(wind <= 0).sum()} timestep(s) have wind_speed ≤ 0 m s⁻¹. "
@@ -333,7 +333,7 @@ class ClimateDrivers:
             return len(self._data)
         if self._n_timesteps is not None:
             return self._n_timesteps
-        return len(self.data)
+        return len(self.pandas)
 
     @property
     def date_range(self) -> tuple[tuple[int, int], tuple[int, int]]:
@@ -352,8 +352,8 @@ class ClimateDrivers:
             )
         if self._date_range is not None:
             return self._date_range
-        first = self.data.iloc[0]
-        last = self.data.iloc[-1]
+        first = self.pandas.iloc[0]
+        last = self.pandas.iloc[-1]
         return (
             (int(first["year"]), int(first["day_of_year"])),
             (int(last["year"]), int(last["day_of_year"])),

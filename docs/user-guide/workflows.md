@@ -31,7 +31,7 @@ model  = SIPNETModel(runner, base_params=params, base_climate=climate)
 result = model()
 
 # Work with results — all in memory
-df = result.outputs.data
+df = result.outputs.pandas
 print(result.outputs.variable("nee").sum())    # annual NEE
 print(result.outputs.variable("gpp").mean())   # mean GPP per timestep
 
@@ -74,7 +74,7 @@ for path in site_files:
     result = runner.run(params, climate, run_id=Path(path).stem)
 
     # Output is eagerly parsed into memory (default behavior)
-    results[Path(path).stem] = result.outputs.data
+    results[Path(path).stem] = result.outputs.pandas
 
 # All outputs now in a dict of DataFrames — climate files never loaded into Python
 annual_nee = {site: df["net_ecosystem_exchange"].sum() for site, df in results.items()}
@@ -242,7 +242,7 @@ print(result.outputs.source_path)
 # PosixPath('runs/experiment_01/outputs/sipnet_baseline.out')
 
 # Load when needed
-df = result.outputs.data
+df = result.outputs.pandas
 ```
 
 For even stronger reproducibility guarantees, combine this with

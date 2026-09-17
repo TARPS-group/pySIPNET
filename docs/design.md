@@ -72,7 +72,7 @@ A complete run specification (parameters + climate + flags) round-trips through 
 ```python
 config_dict = {
     "params":  params.model_dump(),
-    "climate": climate.data.to_dict(orient="list"),
+    "climate": climate.pandas.to_dict(orient="list"),
     "flags":   flags.model_dump(),
 }
 params2  = SIPNETParameters.model_validate(config_dict["params"])

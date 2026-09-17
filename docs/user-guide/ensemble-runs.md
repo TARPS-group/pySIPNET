@@ -62,7 +62,7 @@ You can call it directly to verify it works before handing it to PyEns:
 
 ```python
 result = model(max_photosynthesis_rate=112.0, base_wood_respiration_rate=0.02)
-print(result.outputs.data[["net_ecosystem_exchange", "gross_primary_production"]].sum())
+print(result.outputs.pandas[["net_ecosystem_exchange", "gross_primary_production"]].sum())
 ```
 
 Any SIPNET parameter name can be passed as a keyword argument.  The

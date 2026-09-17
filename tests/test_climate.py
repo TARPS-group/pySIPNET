@@ -49,18 +49,18 @@ class TestFromDataframe:
     def test_happy_path(self):
         cd = ClimateDrivers.from_dataframe(_make_df())
         assert cd.n_timesteps == 5
-        assert list(cd.data.columns) == CLIMATE_COLUMNS
+        assert list(cd.pandas.columns) == CLIMATE_COLUMNS
 
     def test_extra_columns_ignored(self):
         df = _make_df()
         df["extra"] = 99.0
         cd = ClimateDrivers.from_dataframe(df)
-        assert "extra" not in cd.data.columns
+        assert "extra" not in cd.pandas.columns
 
     def test_column_order_normalised(self):
         df = _make_df()[list(reversed(CLIMATE_COLUMNS))]
         cd = ClimateDrivers.from_dataframe(df)
-        assert list(cd.data.columns) == CLIMATE_COLUMNS
+        assert list(cd.pandas.columns) == CLIMATE_COLUMNS
 
     def test_missing_column_raises(self):
         df = _make_df().drop(columns=["photosynthetically_active_radiation"])
@@ -76,7 +76,7 @@ class TestFromDataframe:
         df = _make_df()
         cd = ClimateDrivers.from_dataframe(df)
         df["air_temperature"] = 999.0
-        assert (cd.data["air_temperature"] != 999.0).all()
+        assert (cd.pandas["air_temperature"] != 999.0).all()
 
 
 # ---------------------------------------------------------------------------
@@ -190,8 +190,8 @@ class TestFileIO:
         cd.to_file(path)
         cd2 = ClimateDrivers.from_file(path, n_columns=14)
         pd.testing.assert_frame_equal(
-            cd.data.reset_index(drop=True),
-            cd2.data.reset_index(drop=True),
+            cd.pandas.reset_index(drop=True),
+            cd2.pandas.reset_index(drop=True),
             check_exact=False,
             rtol=1e-5,
         )
@@ -232,8 +232,8 @@ class TestFileIO:
 
         cd13 = ClimateDrivers.from_file(path13, n_columns=14)
         pd.testing.assert_frame_equal(
-            cd.data.reset_index(drop=True),
-            cd13.data.reset_index(drop=True),
+            cd.pandas.reset_index(drop=True),
+            cd13.pandas.reset_index(drop=True),
             check_exact=False,
             rtol=1e-5,
         )
@@ -250,8 +250,8 @@ class TestFileIO:
         cd.to_file(path)
         cd2 = ClimateDrivers.from_file(path, n_columns=12)
         pd.testing.assert_frame_equal(
-            cd.data.reset_index(drop=True),
-            cd2.data.reset_index(drop=True),
+            cd.pandas.reset_index(drop=True),
+            cd2.pandas.reset_index(drop=True),
             check_exact=False,
             rtol=1e-5,
         )
@@ -325,22 +325,22 @@ class TestFromPath:
         _, path = self._write(tmp_path)
         ref = ClimateDrivers.from_path(path)
         assert ref._data is None
-        _ = ref.data
+        _ = ref.pandas
         assert ref._data is not None
 
     def test_data_cached_after_first_access(self, tmp_path):
         _, path = self._write(tmp_path)
         ref = ClimateDrivers.from_path(path)
-        df1 = ref.data
-        df2 = ref.data
+        df1 = ref.pandas
+        df2 = ref.pandas
         assert df1 is df2
 
     def test_data_matches_original(self, tmp_path):
         cd, path = self._write(tmp_path)
         ref = ClimateDrivers.from_path(path)
         pd.testing.assert_frame_equal(
-            cd.data.reset_index(drop=True),
-            ref.data.reset_index(drop=True),
+            cd.pandas.reset_index(drop=True),
+            ref.pandas.reset_index(drop=True),
             check_exact=False,
             rtol=1e-5,
         )
@@ -473,8 +473,8 @@ class TestClimateRegistry:
             }
         )
         cd = ClimateDrivers.from_dataframe(df)
-        assert list(cd.data.columns) == CLIMATE_COLUMNS
-        pd.testing.assert_frame_equal(cd.data, ClimateDrivers.from_dataframe(_make_df()).data)
+        assert list(cd.pandas.columns) == CLIMATE_COLUMNS
+        pd.testing.assert_frame_equal(cd.pandas, ClimateDrivers.from_dataframe(_make_df()).pandas)
 
     def test_missing_column_error_names_the_registry_name(self):
         with pytest.raises(ValueError, match="air_temperature"):
@@ -482,7 +482,7 @@ class TestClimateRegistry:
 
     def test_dataset_shares_the_output_time_axis(self):
         cd = ClimateDrivers.from_dataframe(_make_df(n_days=3, start_doy=100, year=2020))
-        ds = cd.dataset
+        ds = cd.xarray
         assert dict(ds.sizes) == {"time": 3}
         assert ds["time"].values[0] == np.datetime64("2020-04-09T00:00")
         assert ds["time_step_end"].values[0] == ds["time"].values[1]

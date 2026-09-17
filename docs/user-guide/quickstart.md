@@ -99,7 +99,7 @@ print(result.outputs.variable("gpp").sum())   # annual GPP
 ## 4. Inspect the result
 
 ```python
-ts = result.outputs.data   # pandas DataFrame, one row per timestep
+ts = result.outputs.pandas   # pandas DataFrame, one row per timestep
 print(ts.columns.tolist())
 # ['year', 'day_of_year', 'hour_of_day', 'wood_carbon', ...,
 #  'net_ecosystem_exchange', 'gross_primary_production', ...]

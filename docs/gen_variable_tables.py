@@ -25,7 +25,7 @@ lines = [
     "during the step; a cumulative value runs from the start of the simulation to the",
     "end of the step. The `Time reference` column below says which applies, and the",
     "same text travels on every variable as the `time_reference` attribute of",
-    "`result.outputs.dataset`.",
+    "`result.outputs.xarray`.",
     "",
     "**Precision.** SIPNET prints each column with a fixed number of decimals",
     "(`Decimals`). Treat it as a quantization floor when fitting to output.",

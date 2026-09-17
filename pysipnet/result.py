@@ -56,7 +56,7 @@ class SIPNETResult:
     ----------
     outputs:
         Parsed ``.out`` file as a :class:`~pysipnet.output.SIPNETOutput`.
-        ``result.outputs.data`` is a DataFrame, ``result.outputs.dataset`` an
+        ``result.outputs.pandas`` is a DataFrame, ``result.outputs.xarray`` an
         xarray Dataset with units and descriptions attached, and
         ``result.outputs["nee"]`` one variable by name or alias. Use
         ``result.outputs.load(variables=[...])`` to read only a subset from a

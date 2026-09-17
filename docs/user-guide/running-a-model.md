@@ -254,7 +254,7 @@ Call `model()` with no arguments to run the baseline:
 
 ```python
 result = model()
-print(result.outputs.data[["net_ecosystem_exchange", "gross_primary_production"]].sum())
+print(result.outputs.pandas[["net_ecosystem_exchange", "gross_primary_production"]].sum())
 ```
 
 ### Parameter overrides
@@ -354,8 +354,8 @@ log warning rather than an output column, so a failed check appears in
 ### Three views of the same output
 
 ```python
-df = result.outputs.data                    # pandas DataFrame, one row per timestep
-ds = result.outputs.dataset                 # xarray Dataset, one `time` dimension
+df = result.outputs.pandas                  # pandas DataFrame, one row per timestep
+ds = result.outputs.xarray                  # xarray Dataset, one `time` dimension
 nee = result.outputs["nee"]                 # one variable as a DataArray, by name or alias
 nee_series = result.outputs.variable("nee") # ... or as a pandas Series
 ```
@@ -383,7 +383,7 @@ variable as `spec.aggregation`:
 
 ```python
 annual = (
-    result.outputs.data
+    result.outputs.pandas
     .groupby("year")[["net_ecosystem_exchange", "gross_primary_production", "evapotranspiration"]]
     .sum()
 )
