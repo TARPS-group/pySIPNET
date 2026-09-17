@@ -508,7 +508,10 @@ class TestParameterSpecConventions:
         for path, spec in initial.items():
             assert spec.initializes, f"{path} does not say which state it initializes"
             for name in spec.initializes:
-                assert OUTPUT_VARIABLES_BY_NAME[name].kind is VariableKind.STATE, (path, name)
+                assert OUTPUT_VARIABLES_BY_NAME[name].kind is VariableKind.TIMESTEP_END_STATE, (
+                    path,
+                    name,
+                )
         others = {p: s for p, s in PARAMETER_SPECS.items() if p not in initial}
         assert all(not s.initializes for s in others.values())
 
