@@ -80,7 +80,7 @@ class TestRenderedContent:
             assert key in settings, f"{key} missing from sipnet.in"
 
     def test_flag_values_are_carried_through(self):
-        on = _parse(_render_sipnet_in(ModelFlags.forest(), events_enabled=False))
+        on = _parse(_render_sipnet_in(ModelFlags(litter_pool=True), events_enabled=False))
         off = _parse(_render_sipnet_in(ModelFlags.standard(), events_enabled=False))
         assert on["LITTER_POOL"] == "1"
         assert off["LITTER_POOL"] == "0"
@@ -136,9 +136,9 @@ class TestSipnetAcceptsOurConfig:
         proc = self._run(tmp_path, ModelFlags.standard(), reference_fixture_dir)
         assert proc.returncode == 0, proc.stdout + proc.stderr
 
-    def test_forest_flags_are_accepted(self, tmp_path, reference_fixture_dir):
+    def test_litter_pool_flag_is_accepted(self, tmp_path, reference_fixture_dir):
         """The litter pool could not even be compiled before the v2.1.0 pin."""
-        proc = self._run(tmp_path, ModelFlags.forest(), reference_fixture_dir)
+        proc = self._run(tmp_path, ModelFlags(litter_pool=True), reference_fixture_dir)
         combined = proc.stdout + proc.stderr
         assert proc.returncode == 0, combined
         assert "ignoring input file parameter" not in combined
@@ -154,7 +154,7 @@ class TestSipnetAcceptsOurConfig:
 
         for name in ("sipnet.param", "sipnet.clim"):
             shutil.copy(reference_fixture_dir / name, tmp_path / name)
-        flags = ModelFlags.forest()
+        flags = ModelFlags(litter_pool=True)
         text = _render_sipnet_in(flags, events_enabled=False)
         # Ask SIPNET to write out the configuration it actually resolved.
         with_dump = text.replace("PRINT_HEADER = 1", "PRINT_HEADER = 1\nDUMP_CONFIG = 1")

@@ -12,7 +12,7 @@ Dask, Parsl, Ray, etc.)::
     from concurrent.futures import ProcessPoolExecutor
     from pysipnet.runner import SIPNETRunner
 
-    runner = SIPNETRunner(flags=ModelFlags.forest())
+    runner = SIPNETRunner(flags=ModelFlags.standard())
 
     def run_one(config_dict):
         from pysipnet.parameters.model import SIPNETParameters

@@ -128,7 +128,7 @@ From SIPNET v2.0.0 onward, model options are chosen at run time rather than comp
 
 Separately, four flags are refused because *pySIPNET* cannot serve them: `nitrogen_cycle`, `anaerobic`, `flooding` and `carbon_saturation`. SIPNET supports all four, but each requires parameters `SIPNETParameters` does not define, so a run would fail inside SIPNET with "Did not find required parameter" rather than in Python. `UNSUPPORTED_FLAGS` in `pysipnet/parameters/model.py` records what each one needs; the error message reproduces that list. Removing an entry from that table is what enables the flag once its parameters exist.
 
-`ModelFlags.standard()` and `ModelFlags.forest()` are named starting points, not a closed set — any combination of flags is valid, subject to the restrictions above. An optional `name` field carries a label into the run record without affecting the model.
+`ModelFlags.standard()` is a named starting point, not a closed set — any combination of flags is valid, subject to the restrictions above. It returns exactly the defaults SIPNET compiles in (`gdd`, `snow` and `water_hresp` on, the rest off; see the `CREATE_INT_CONTEXT` calls in `src/common/context.c`), so it is what the binary would do with no flags in `sipnet.in`. An optional `name` field carries a label into the run record without affecting the model.
 
 ## Per-year rate parameters
 

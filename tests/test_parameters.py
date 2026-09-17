@@ -75,9 +75,6 @@ class TestModelFlagsDefaults:
         assert not flags.litter_pool
         assert not flags.growth_resp
 
-    def test_forest_named_constructor(self):
-        assert ModelFlags.forest().litter_pool
-
     def test_bare_constructor_matches_standard_flags(self):
         """ModelFlags() and ModelFlags.standard() differ only by the label."""
         assert ModelFlags().to_config_keys() == ModelFlags.standard().to_config_keys()
@@ -294,7 +291,7 @@ class TestModelFlagsConfigKeys:
 
     def test_reflects_the_flag_values(self):
         assert ModelFlags.standard().to_config_keys()["LITTER_POOL"] == 0
-        assert ModelFlags.forest().to_config_keys()["LITTER_POOL"] == 1
+        assert ModelFlags(litter_pool=True).to_config_keys()["LITTER_POOL"] == 1
 
     def test_label_is_not_a_config_key(self):
         """The name is for humans; SIPNET would reject it as an unknown key."""
@@ -307,9 +304,8 @@ class TestModelFlagsName:
     def test_defaults_to_unset(self):
         assert ModelFlags().name is None
 
-    def test_named_constructors_set_it(self):
+    def test_standard_sets_it(self):
         assert ModelFlags.standard().name == "standard"
-        assert ModelFlags.forest().name == "forest"
 
     def test_can_be_set_directly(self):
         assert ModelFlags(litter_pool=True, name="niwot-forest").name == "niwot-forest"
@@ -354,16 +350,16 @@ class TestModelFlagsAreImmutable:
     def test_flags_are_hashable(self):
         """A useful consequence: they can key a cache of ensemble runs."""
         assert len({ModelFlags.standard(), ModelFlags.standard()}) == 1
-        assert len({ModelFlags.standard(), ModelFlags.forest()}) == 2
+        assert len({ModelFlags.standard(), ModelFlags(litter_pool=True)}) == 2
 
 
 class TestModelFlagsSerialization:
     def test_roundtrips_through_a_dict(self):
-        flags = ModelFlags.forest()
+        flags = ModelFlags(litter_pool=True)
         assert ModelFlags.model_validate(flags.model_dump()) == flags
 
     def test_roundtrips_through_json(self):
-        flags = ModelFlags(litter_pool=True, growth_resp=True, name="forest-growth-resp")
+        flags = ModelFlags(litter_pool=True, growth_resp=True, name="litter-growth-resp")
         assert ModelFlags.model_validate_json(flags.model_dump_json()) == flags
 
     def test_restrictions_are_enforced_on_load(self):
@@ -404,7 +400,7 @@ class TestSIPNETParameters:
         data["respiration"]["litter_breakdown_rate"] = None
         params = SIPNETParameters.model_validate(data)
         with pytest.raises(ValueError, match="litter_breakdown_rate"):
-            params.validate_for_flags(ModelFlags.forest())
+            params.validate_for_flags(ModelFlags(litter_pool=True))
 
     def test_validate_for_flags_standard_ok(self, minimal_params):
         minimal_params.validate_for_flags(ModelFlags.standard())

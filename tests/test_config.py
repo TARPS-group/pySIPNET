@@ -179,15 +179,15 @@ class TestCopyMode:
         assert ev.year == 2020
         assert ev.day == 5
 
-    def test_forest_flags_roundtrip(self, tmp_path, minimal_params, in_memory_climate):
+    def test_litter_pool_flags_roundtrip(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
-            flags=ModelFlags.forest(),
+            flags=ModelFlags(litter_pool=True),
             params=minimal_params,
             climate=in_memory_climate,
         )
         config.save(tmp_path / "run")
         loaded = RunConfig.load(tmp_path / "run")
-        assert loaded.flags == ModelFlags.forest()
+        assert loaded.flags == ModelFlags(litter_pool=True)
 
     def test_overwrites_existing_directory(self, tmp_path, minimal_params, in_memory_climate):
         config = RunConfig(
@@ -364,7 +364,7 @@ class TestFromResult:
             events=[IrrigationEvent(year=2020, day=10, amount=5.0, method=IrrigationMethod.CANOPY)]
         )
         provenance = RunProvenance(
-            flags=ModelFlags.forest(),
+            flags=ModelFlags(litter_pool=True),
             binary_path=Path("/fake/sipnet"),
             run_id="test-xyz",
             workdir=Path("/fake/workdir"),
@@ -377,11 +377,11 @@ class TestFromResult:
             outputs=pd.DataFrame(),
             parameters=minimal_params,
             climate=in_memory_climate,
-            flags=ModelFlags.forest(),
+            flags=ModelFlags(litter_pool=True),
             provenance=provenance,
             events=events,
         )
         config = RunConfig.from_result(result)
-        assert config.flags == ModelFlags.forest()
+        assert config.flags == ModelFlags(litter_pool=True)
         assert config.events is not None
         assert len(config.events) == 1

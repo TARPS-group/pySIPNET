@@ -369,12 +369,16 @@ class TestLitterPool:
         return type(minimal_params).model_validate(data)
 
     def test_run_succeeds(self, litter_params):
-        result = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, _make_climate())
+        result = SIPNETRunner(flags=ModelFlags(litter_pool=True)).run(
+            litter_params, _make_climate()
+        )
         assert result.provenance.success, result.provenance.stderr
 
     def test_soil_respiration_is_not_zero(self, litter_params):
         """The specific regression: rSoil must be computed, not left at zero."""
-        result = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, _make_climate())
+        result = SIPNETRunner(flags=ModelFlags(litter_pool=True)).run(
+            litter_params, _make_climate()
+        )
         r_soil = result.outputs.pandas["soil_respiration"]
         assert (r_soil > 0).any(), (
             "soil respiration is zero for every timestep with the litter pool on, "
@@ -383,7 +387,9 @@ class TestLitterPool:
 
     def test_litter_pool_holds_carbon(self, litter_params):
         """With the pool on, litter carbon should be tracked rather than left at zero."""
-        result = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, _make_climate())
+        result = SIPNETRunner(flags=ModelFlags(litter_pool=True)).run(
+            litter_params, _make_climate()
+        )
         assert (result.outputs.pandas["litter_carbon"] > 0).any()
 
     def test_litter_pool_stays_empty_when_switched_off(self, minimal_params):
@@ -398,7 +404,7 @@ class TestLitterPool:
         agree and every other test here would still pass.
         """
         climate = _make_climate()
-        with_pool = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, climate)
+        with_pool = SIPNETRunner(flags=ModelFlags(litter_pool=True)).run(litter_params, climate)
         without = SIPNETRunner(flags=ModelFlags.standard()).run(litter_params, climate)
         assert not np.allclose(
             with_pool.outputs.variable("nee").to_numpy(),

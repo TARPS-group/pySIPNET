@@ -223,15 +223,24 @@ print(result.provenance.run_id)     # "my_baseline"
 For I/O options — keeping files on disk, lazy output loading, climate staging
 — see [File I/O](file-io.md) and [Common Workflows](workflows.md).
 
-### Named flag sets
+### The default flag set
 
-| Preset | Active flags |
-|:-------|:-------------|
-| `ModelFlags.standard()` | snow, degree-day leaf-out, moisture-sensitive soil respiration |
-| `ModelFlags.forest()` | as above, plus a separate litter carbon pool |
+`ModelFlags.standard()` turns on snow, degree-day leaf-out and moisture-sensitive
+soil respiration, and leaves every other process off.  That is not a pySIPNET
+choice: it is exactly what SIPNET compiles in as its own defaults
+(`CREATE_INT_CONTEXT` in `src/common/context.c` registers `gdd`, `snow` and
+`waterHResp` as on), so it is what the binary does when `sipnet.in` sets no
+flags.  `ModelFlags()` gives the same thing without the label.
 
-Use `ModelFlags.forest()` for sites with a distinct litter carbon layer.  It additionally
-requires `respiration.litter_breakdown_rate` and `respiration.litter_respired_fraction`.
+Any other combination is built directly:
+
+```python
+flags = ModelFlags(litter_pool=True, name="niwot")
+```
+
+Adding `litter_pool` gives plant litter its own carbon pool instead of routing it
+straight into soil carbon, and additionally requires
+`respiration.litter_breakdown_rate` and `respiration.litter_respired_fraction`.
 
 ---
 

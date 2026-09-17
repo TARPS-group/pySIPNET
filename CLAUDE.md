@@ -428,7 +428,7 @@ to SLA as `leafCSpWt = cFracLeaf / SLA`.
 
 `soilRespMoistEffect` is required when `water_hresp` is on (the default).
 `litterBreakdownRate` and `fracLitterRespired` are required when `litter_pool`
-is on — off in `ModelFlags.standard()`, on in `ModelFlags.forest()`.
+is on — off in `ModelFlags.standard()`, which is SIPNET's own default set.
 
 ### Allocation
 `fineRootAllocation`, `woodAllocation`, `fineRootTurnoverRate` (year⁻¹), `coarseRootTurnoverRate` (year⁻¹), `woodTurnoverRate` (year⁻¹)
