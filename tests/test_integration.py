@@ -10,6 +10,7 @@ Build the binary with::
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -367,9 +368,7 @@ class TestOutputIO:
         assert first.provenance.workdir.exists()
         assert second.provenance.workdir.exists()
 
-    def test_a_second_run_will_not_overwrite_the_first_ones_output(
-        self, minimal_params, tmp_path
-    ):
+    def test_a_second_run_will_not_overwrite_the_first_ones_output(self, minimal_params, tmp_path):
         """The same collision one level out, where a random suffix is not available.
 
         The output file is named from the run id because users are told to
@@ -387,7 +386,7 @@ class TestOutputIO:
         assert first.outputs.n_timesteps == 30
 
     def test_a_refused_run_does_not_execute_sipnet_or_leave_a_workdir(
-        self, minimal_params, tmp_path
+        self, minimal_params, tmp_path, monkeypatch
     ):
         """Refusing before the binary runs is the point: a wasted run is not free."""
         runner = SIPNETRunner(
@@ -398,8 +397,15 @@ class TestOutputIO:
         runner.run(minimal_params, _make_climate(), run_id="member")
         before = sorted((tmp_path / "work").iterdir())
 
+        executed = []
+        real_run = subprocess.run
+        monkeypatch.setattr(
+            subprocess, "run", lambda *a, **k: (executed.append(a), real_run(*a, **k))[1]
+        )
+
         with pytest.raises(FileExistsError):
             runner.run(minimal_params, _make_climate(), run_id="member")
+        assert executed == [], "SIPNET ran for a result that was never going to be kept"
         assert sorted((tmp_path / "work").iterdir()) == before
 
     def test_overwrite_allows_rerunning_one_id(self, minimal_params, tmp_path):
@@ -414,16 +420,108 @@ class TestOutputIO:
         assert len(list((tmp_path / "outputs").iterdir())) == 1
 
     def test_overwrite_can_be_decided_per_call(self, minimal_params, tmp_path):
-        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
-        runner.run(minimal_params, _make_climate(), run_id="member")
-
-        result = runner.run(
-            minimal_params, _make_climate(n_days=20), run_id="member", overwrite=True
+        """Both directions: the call decides, whatever the runner's default is."""
+        permissive = SIPNETRunner(
+            flags=ModelFlags.standard(), output_dir=tmp_path / "outputs", overwrite=True
         )
-        assert result.outputs.n_timesteps == 20
+        strict = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
 
-    def test_distinct_run_ids_never_collide(self, minimal_params, tmp_path):
-        """Including the default, which is a fresh UUID every time."""
+        strict.run(minimal_params, _make_climate(), run_id="member")
+        assert (
+            strict.run(
+                minimal_params, _make_climate(n_days=20), run_id="member", overwrite=True
+            ).outputs.n_timesteps
+            == 20
+        )
+        with pytest.raises(FileExistsError):
+            permissive.run(minimal_params, _make_climate(), run_id="member", overwrite=False)
+
+    def test_a_failed_run_does_not_block_the_retry(self, minimal_params, tmp_path):
+        """Nothing is written for a run that failed, so its id is still free."""
+        from pysipnet.climate import ClimateDrivers
+
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        empty = ClimateDrivers.from_dataframe(_make_climate().pandas.head(0).copy())
+
+        failed = runner.run(minimal_params, empty, run_id="member", check=False)
+        assert failed.provenance.success is False
+        assert list((tmp_path / "outputs").iterdir()) == []
+
+        retried = runner.run(minimal_params, _make_climate(), run_id="member")
+        assert retried.provenance.success
+
+    def test_two_concurrent_runs_sharing_an_id_cannot_swap_results(self, minimal_params, tmp_path):
+        """The pre-run check cannot see a run that has not finished yet.
+
+        Both runs pass it, then both copy. Claiming the name and creating the
+        file have to be one operation, or the loser's result reads the winner's
+        numbers while reporting success.
+        """
+        import threading
+
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        finished: dict[str, object] = {}
+        refused: list[str] = []
+        lengths = {"long": 30, "short": 12}
+
+        def go(tag: str) -> None:
+            try:
+                finished[tag] = runner.run(
+                    minimal_params, _make_climate(n_days=lengths[tag]), run_id="member"
+                )
+            except FileExistsError:
+                refused.append(tag)
+
+        threads = [threading.Thread(target=go, args=(tag,)) for tag in lengths]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert len(refused) == 1, "one of the two runs had to be turned away"
+        for tag, result in finished.items():
+            assert result.outputs.n_timesteps == lengths[tag], (
+                f"the {tag} run's result read the other run's numbers"
+            )
+
+    def test_a_dangling_symlink_does_not_let_a_run_write_outside_output_dir(
+        self, minimal_params, tmp_path
+    ):
+        """Path.exists() follows links, so a broken one looks like free space."""
+        output_dir = tmp_path / "outputs"
+        output_dir.mkdir()
+        elsewhere = tmp_path / "elsewhere.out"
+        (output_dir / "sipnet_member.out").symlink_to(elsewhere)
+
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=output_dir)
+        with pytest.raises(FileExistsError):
+            runner.run(minimal_params, _make_climate(), run_id="member")
+        assert not elsewhere.exists()
+
+    def test_a_stored_output_path_survives_a_change_of_directory(
+        self, minimal_params, tmp_path, monkeypatch
+    ):
+        """An ensemble scheduler may chdir per task; a relative path would then move."""
+        (tmp_path / "a").mkdir()
+        (tmp_path / "b").mkdir()
+        monkeypatch.chdir(tmp_path / "a")
+
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir="outputs")
+        result = runner.run(minimal_params, _make_climate(), run_id="member")
+        assert result.outputs.source_path.is_absolute()
+
+        monkeypatch.chdir(tmp_path / "b")
+        with pytest.raises(FileExistsError):
+            runner.run(minimal_params, _make_climate(n_days=20), run_id="member")
+        assert result.outputs.n_timesteps == 30
+
+    def test_distinct_run_ids_get_distinct_files(self, minimal_params, tmp_path):
+        """Including the default, which is a fresh UUID every time.
+
+        Ids that differ only in case are a special case: on a case-insensitive
+        filesystem they name one file, and the run is refused rather than
+        silently sharing it.
+        """
         runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
         results = [runner.run(minimal_params, _make_climate()) for _ in range(3)]
 

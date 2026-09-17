@@ -54,14 +54,19 @@ result = runner.run(params, climate, run_id="baseline_2020")
 # working directory: /scratch/my_runs/sipnet_baseline_2020_1l2wlzvt/
 ```
 
-!!! note "run_id does not have to be unique"
+!!! note "Reusing a run_id is safe for the working directory"
     Every run gets a brand-new directory, because the name ends in a random
-    suffix.  Reusing a `run_id` is therefore safe: two runs sharing one never
-    write to the same place, so concurrent runs cannot overwrite each other's
-    files or read each other's output.
+    suffix.  Two runs sharing a `run_id` never write to the same working
+    directory, so concurrent runs cannot overwrite each other's inputs or read
+    each other's output.
 
     The trade-off is that you cannot predict the directory name in advance.
     Read it from `result.provenance.workdir` instead of constructing it.
+
+    The **output** file is a different matter: its name is predictable by
+    design, so it cannot carry a random suffix, and a second run with the same
+    `run_id` and `output_dir` is refused.  See
+    [Eager vs. lazy output](#eager-vs-lazy-output) below.
 
 ### Climate data: in-memory vs. file-backed
 
@@ -180,7 +185,9 @@ Because the name comes from the run id, a second run with the same `run_id` and
 The earlier result reads that path lazily, so overwriting it would silently
 change the numbers that result answers with, long after it reported success.
 Give each run a distinct id — the default is a fresh UUID — or pass
-`overwrite=True` when the earlier output is finished with:
+`overwrite=True` when the earlier output is finished with.  The refusal is
+based on the file being there, so deleting it releases the name again, along
+with the protection for any result still pointing at it.
 
 ```python
 # A loop that reruns one member under a fixed id, keeping one file on disk:
