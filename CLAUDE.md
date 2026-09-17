@@ -378,13 +378,24 @@ time zone and the convention is whatever the `.clim` used. `run_id` and
 `model_flags` (JSON) travel as attributes too, so an archived prediction says
 which run produced it.
 
-Selections are read from disk at most once per column: `out["nee"]` then
+A selection never re-reads a column already in memory: `out["nee"]` then
 `out["gpp"]` costs two partial reads rather than two full ones, and repeating
-either costs nothing. The one exception is `.pandas`/`.xarray` after a partial
+either costs no read. The one exception is `.pandas`/`.xarray` after a partial
 read, which re-reads the file in full because only the file states the column
-order. Variable-level column selection is a *memory* optimization, not a speed
-one — `usecols` saves about a quarter of the parse time, since the tokenizer
-still scans every field.
+order; `variables` does the same, for the same reason. Variable-level column
+selection is a *memory* optimization, not a speed one — `usecols` saves on the
+order of a fifth of the parse time, since the tokenizer still scans every field.
+`read_output_file` reads through the path rather than slurping the file into a
+string, so peak memory during a parse is pandas' own rather than several times
+the file size.
+
+`build_time_axis` is the other thing worth knowing about the cost: it does not
+depend on which variables were selected, so it is built once per output and
+reused by every view. It uses integer `datetime64` arithmetic rather than a
+string round-trip through `to_datetime`, which is more than an order of
+magnitude faster and identical to the nanosecond. Years outside 1678-2261, and
+non-finite values in any time column, are refused rather than wrapped or cast
+to whatever the platform produces.
 
 Selecting a variable whose `requires_flag` is off (e.g. `litter_carbon` without
 `litter_pool`) **raises**: SIPNET writes it as constant zero, and a likelihood

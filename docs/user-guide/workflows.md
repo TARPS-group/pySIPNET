@@ -161,9 +161,9 @@ combined = pd.concat(frames, ignore_index=True)
 ```
 
 `dataframe([...])` and `dataset([...])` read only the requested variables, and
-keep only those in memory: peak memory is one member's two columns rather than
-one member's full output, let alone the whole ensemble. A column already read is
-never read again, so selecting variables one at a time costs the same as
+what each member holds afterwards is those columns plus the three time
+coordinates — not its full output, let alone the whole ensemble. A column already
+read is never read again, so selecting variables one at a time costs the same as
 selecting them together.
 
 ---

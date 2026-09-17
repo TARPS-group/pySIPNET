@@ -242,14 +242,18 @@ class SIPNETOutput:
         ----------
         variables:
             Variable names or aliases. ``None`` returns everything, exactly as
-            :attr:`pandas` does.
+            :attr:`pandas` does — including handing back the frame this object
+            caches, rather than a copy. A named selection is always a copy.
         """
         if variables is None:
             return self.pandas
         names = self._resolve(variables)
         self._ensure_columns(names)
         assert self._frame is not None
-        return self._frame[[*TIME_COORDINATE_NAMES, *names]]
+        # Asking for a time coordinate by name must not list it twice; they are
+        # always present.
+        selected = [name for name in names if name not in TIME_COORDINATE_NAMES]
+        return self._frame[[*TIME_COORDINATE_NAMES, *selected]]
 
     def dataset(self, variables: Sequence[str] | None = None) -> xr.Dataset:
         """The output, or the named variables of it, as a self-describing Dataset.
@@ -287,7 +291,7 @@ class SIPNETOutput:
         """
         if isinstance(key, str):
             name = self._resolve([key])[0]
-            if self._dataset is not None:
+            if self._dataset is not None and name in self._dataset:
                 return self._dataset[name]
             return self.dataset([key])[name]
         return self.dataset(key)
@@ -297,6 +301,8 @@ class SIPNETOutput:
         """Registry specs for the columns present, in column order.
 
         Columns the registry does not know (from a newer SIPNET) are omitted.
+        Only the file itself lists its columns, so this reads all of them on a
+        file-backed output that has so far read only a selection.
         """
         return tuple(
             OUTPUT_VARIABLES_BY_NAME[c]
@@ -322,9 +328,12 @@ class SIPNETOutput:
     def n_timesteps(self) -> int:
         """Number of output timesteps.
 
-        For file-backed instances this triggers a full data load if not already
-        cached.
+        Any column already in memory answers this, so it does not pull the rest
+        of the file in behind it. On a file-backed output that has read nothing
+        yet, it reads the file.
         """
+        if self._frame is not None:
+            return len(self._frame)
         return len(self.pandas)
 
     def __repr__(self) -> str:
@@ -362,17 +371,19 @@ class SIPNETOutput:
             )
 
     def _ensure_columns(self, names: Sequence[str]) -> None:
-        """Read whichever of *names* is not in memory yet, in a single pass."""
+        """Read whichever of *names* is not in memory yet, in a single pass.
+
+        The time coordinates count as needed whatever was asked for: they
+        identify the rows, so an empty selection still has to read them.
+        """
+        needed = [*TIME_COORDINATE_NAMES, *names]
         have = set(self._frame.columns) if self._frame is not None else set()
-        missing = [name for name in names if name not in have]
+        missing = [name for name in needed if name not in have]
         if not missing:
             return
 
         if self.source_path is None:
-            raise KeyError(
-                f"{missing} are not in this in-memory output, and there is no file to read "
-                "them from. It was built from a DataFrame that does not contain them."
-            )
+            self._report_absent(missing, have)
 
         import pandas as pd
 
@@ -385,12 +396,58 @@ class SIPNETOutput:
             added = [c for c in new.columns if c not in have]
             self._frame = pd.concat([self._frame, new[added]], axis=1)
 
+        # read_output_file returns what the file has, not what was asked for. A
+        # name the registry knows but this file lacks would otherwise leave the
+        # frame short, so every later call would read the file again and fail
+        # somewhere inside pandas.
+        still_missing = [name for name in needed if name not in self._frame.columns]
+        if still_missing:
+            self._report_absent(still_missing, set(self._frame.columns))
+
+    def _report_absent(self, missing: Sequence[str], have: set[Any]) -> None:
+        """Explain why a requested column cannot be produced, and stop.
+
+        The time coordinates are needed for every selection but were not what
+        the caller asked for, so they are named only when nothing else is
+        missing.
+        """
+        asked_for = [name for name in missing if name not in TIME_COORDINATE_NAMES]
+        missing = asked_for or missing
+        if self.source_path is None:
+            if not have:
+                raise KeyError(
+                    f"{list(missing)} cannot be read: this output is empty. SIPNET wrote no "
+                    "rows, which usually means the run failed — check provenance.success and "
+                    "provenance.stderr."
+                )
+            raise KeyError(
+                f"{list(missing)} are not in this in-memory output, and there is no file to "
+                "read them from. It was built from a DataFrame that does not contain them."
+            )
+        if not have:
+            raise KeyError(
+                f"{list(missing)} cannot be read: {self.source_path} is empty. SIPNET wrote no "
+                "rows, which usually means the run failed — check provenance.success and "
+                "provenance.stderr."
+            )
+        if any(not isinstance(column, str) for column in have):
+            raise KeyError(
+                f"{list(missing)} cannot be selected by name: {self.source_path} has no header "
+                "row, so its columns are only known by position. Read it with .pandas and name "
+                "the columns yourself."
+            )
+        raise KeyError(
+            f"{list(missing)} are not in {self.source_path}. The variable registry knows the "
+            "name, but this file does not contain it — a different SIPNET version, or a run "
+            "whose flags left the column out."
+        )
+
     def _time_axis(self, df: pd.DataFrame) -> TimeAxis:
         """The shared time coordinates, built once per output.
 
-        Every view of a run has the same rows, so the axis — a third of the cost
-        of reading the file — is built on the first Dataset and reused by the
-        rest.
+        Every view of a run has the same rows, so the axis does not depend on
+        which variables were selected: it is built on the first Dataset and
+        reused by the rest.
         """
         if self._axis is None:
             self._axis = build_time_axis(

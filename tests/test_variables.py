@@ -542,3 +542,62 @@ def test_memory_backed_output_says_when_a_column_is_simply_absent():
     out = SIPNETOutput.from_dataframe(_frame().drop(columns=["wood_carbon"]))
     with pytest.raises(KeyError, match="no file to read"):
         out["wood_carbon"]
+
+
+def test_timestep_start_refuses_years_it_cannot_represent():
+    """Nanosecond datetimes wrap silently outside 1678-2261; that must not pass."""
+    import pandas as pd
+
+    from pysipnet.dataset import timestep_start
+
+    frame = pd.DataFrame({"year": [2300], "day_of_year": [1], "hour_of_day": [0.0]})
+    with pytest.raises(ValueError, match="wrap silently"):
+        timestep_start(frame)
+
+
+def test_timestep_start_refuses_missing_time_values():
+    """np.rint(nan).astype(int64) is undefined and differs between platforms."""
+    import pandas as pd
+
+    from pysipnet.dataset import timestep_start
+
+    frame = pd.DataFrame(
+        {"year": [2020, 2020], "day_of_year": [1, 2], "hour_of_day": [0.0, np.nan]}
+    )
+    with pytest.raises(ValueError, match="non-finite"):
+        timestep_start(frame)
+
+
+def test_step_lengths_must_increase_the_clock():
+    """Duplicate or backwards timestamps would give bounds that run backwards."""
+    import pandas as pd
+
+    from pysipnet.output import output_dataframe_to_dataset
+
+    repeated = pd.DataFrame(
+        {
+            "year": [2020] * 3,
+            "day_of_year": [1, 1, 2],
+            "hour_of_day": [0.0, 0.0, 0.0],
+            "net_ecosystem_exchange": [1.0, 2.0, 3.0],
+        }
+    )
+    with pytest.raises(ValueError, match="do not increase"):
+        output_dataframe_to_dataset(repeated)
+
+
+def test_supplied_step_lengths_must_be_positive():
+    from pysipnet.output import output_dataframe_to_dataset
+
+    with pytest.raises(ValueError, match="positive duration"):
+        output_dataframe_to_dataset(_frame(), time_step_length=np.array([0.5, 0.5, 0.0, 0.5]))
+
+
+def test_a_frames_own_step_lengths_beat_the_inferred_ones():
+    """The drivers state their lengths; measuring the gaps would discard the last one."""
+    from pysipnet.dataset import dataframe_to_dataset
+
+    frame = _frame().assign(time_step_length=[0.5, 0.5, 0.5, 0.25])
+    ds = dataframe_to_dataset(frame, attributes_for=lambda _: {}, source="test")
+    assert ds.attrs["time_step_length_source"] == "climate drivers"
+    assert ds["time_step_length"].values[-1] == np.timedelta64(6, "h")

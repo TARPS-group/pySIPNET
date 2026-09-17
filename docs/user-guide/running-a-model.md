@@ -356,6 +356,11 @@ put it back for display. See [Design](../design.md) for the convention.
 Every column is always present. A process that is switched off writes zeros
 rather than omitting its column, so the nitrogen and methane columns are there
 but zero unless those processes are on (`requires_flag` on the spec says which).
+Because a column of zeros is indistinguishable from a real result once it
+reaches a likelihood, **selecting such a variable by name raises** — `result.outputs["litter_carbon"]`
+on a run without `litter_pool` tells you which flag to turn on rather than
+handing back the zeros. `.pandas` and `.xarray` still contain the column, being
+a faithful view of the file.
 SIPNET checks its own carbon and nitrogen closure but reports the result as a
 log warning rather than an output column, so a failed check appears in
 `result.provenance.stderr`.
@@ -369,7 +374,7 @@ log warning rather than an output column, so a failed check appears in
     variable spell this out, and the xarray view below carries them as
     attributes.
 
-### Four views of the same output
+### Five views of the same output
 
 ```python
 df  = result.outputs.pandas          # pandas DataFrame, one row per timestep
@@ -396,9 +401,21 @@ ds["net_ecosystem_exchange"].attrs
 ds["time"]              # datetime64, start of each timestep
 ds["time_step_end"]     # datetime64, end of each timestep
 ds["time_step_length"]  # timedelta64
+ds["time_bounds"]       # (time, bounds) — the interval [time, time_step_end)
 
-ds.to_netcdf("run.nc")  # self-describing on disk
+ds.attrs["run_id"]                   # which run produced this
+ds.attrs["time_step_length_source"]  # measured from the drivers, or inferred
+ds.attrs["time_zone"]                # naive; whatever the .clim used
+
+ds.to_netcdf("run.nc")  # self-describing on disk; needs a netCDF backend
+                        # (`pip install h5netcdf`), which pySIPNET does not require
 ```
+
+`time_bounds` is the Climate and Forecast conventions' way of saying which
+interval each value covers, which is what an observation operator needs in order
+to decide how observations line up with model steps. It adds a second dimension,
+`bounds`, so `ds.sizes` reads `{'time': 365, 'bounds': 2}`; use `result.outputs.pandas`
+when you want a flat table.
 
 ### Annual summaries
 

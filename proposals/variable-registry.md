@@ -1,7 +1,13 @@
 # Variable registry for pySIPNET: analysis and proposal
 
-*Status: proposal, 2026-09-15. Everything marked "source" below was read from the
-SIPNET submodule at the pinned commit (`v2.2.0-alpha.1`), not from SIPNET's docs.*
+*Status: proposal, 2026-09-15; implemented. Everything marked "source" below was
+read from the SIPNET submodule at the pinned commit (`v2.2.0-alpha.1`), not from
+SIPNET's docs.*
+
+*Superseded in one respect: the `load(variables=..., as_xarray=...)` surface
+proposed in §6 and §7 was replaced by `dataset()` / `dataframe()` /
+`__getitem__` before it had users. The document is left as written, as the
+record of what was decided at the time.*
 
 ## 1. Problem statement
 

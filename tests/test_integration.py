@@ -156,6 +156,78 @@ class TestEndToEnd:
         assert attrs["run_id"] == "calibration_042" == result.provenance.run_id
         assert json.loads(attrs["model_flags"]) == result.flags.model_dump()
         assert attrs["time_step_length_source"] == "climate drivers"
+        assert attrs["time_zone"].startswith("naive")
+        assert result.outputs.xarray["time"].attrs["time_zone"] == attrs["time_zone"]
+
+    def test_a_file_backed_dataset_records_its_run_too(self, minimal_params, tmp_path):
+        """The provenance has to survive the other construction path as well."""
+        import json
+
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        result = runner.run(minimal_params, _make_climate(), run_id="member_7")
+
+        assert result.outputs.source_path is not None
+        attrs = result.outputs.dataset(["nee"]).attrs
+        assert attrs["run_id"] == "member_7"
+        assert json.loads(attrs["model_flags"])["litter_pool"] is False
+
+    def test_a_file_backed_output_refuses_a_flag_zeroed_variable_without_reading(
+        self, minimal_params, tmp_path
+    ):
+        """The flags alone settle it; the file should not be touched to find out."""
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        result = runner.run(minimal_params, _make_climate())
+
+        with pytest.raises(ValueError, match="litter_pool"):
+            result.outputs.dataframe(["litter_carbon"])
+        with pytest.raises(ValueError, match="litter_pool"):
+            result.outputs.dataset(["litter_carbon"])
+        assert result.outputs._frame is None, "refusing a variable must not read the file"
+
+    def test_selecting_a_time_coordinate_is_not_a_duplicate_column(self, minimal_params, tmp_path):
+        """'time' and 'day' are documented aliases of the time coordinates."""
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        result = runner.run(minimal_params, _make_climate())
+
+        frame = result.outputs.dataframe(["year"])
+        assert list(frame.columns) == ["year", "day_of_year", "hour_of_day"]
+        assert result.outputs["time"].sizes["time"] == 30
+        assert set(result.outputs[["nee", "day"]].data_vars) == {"net_ecosystem_exchange"}
+
+    def test_an_empty_selection_reads_only_the_time_coordinates(self, minimal_params, tmp_path):
+        """A programmatically built variable list can legitimately be empty."""
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        result = runner.run(minimal_params, _make_climate())
+
+        assert list(result.outputs.dataframe([]).columns) == [
+            "year",
+            "day_of_year",
+            "hour_of_day",
+        ]
+        assert result.outputs.dataset([]).sizes["time"] == 30
+
+    def test_a_variable_the_file_does_not_contain_is_reported_once(
+        self, minimal_params, tmp_path, monkeypatch
+    ):
+        """A registry name absent from this file must not re-read the file forever."""
+        import pysipnet.io.output_reader as output_reader
+
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        result = runner.run(minimal_params, _make_climate())
+
+        reads = []
+        real_read = output_reader.read_output_file
+
+        def counting_read(path, variables=None):
+            reads.append(variables)
+            return real_read(path, variables=variables)
+
+        monkeypatch.setattr(output_reader, "read_output_file", counting_read)
+
+        # bcdeltaC is a v2.1.0 column the registry still maps; this file has none.
+        with pytest.raises(KeyError, match="are not in"):
+            result.outputs.dataframe(["bcdeltaC"])
+        assert len(reads) == 1
 
     def test_carbon_balance_identity(self, minimal_params):
         """NEE ≈ Rtot − GPP at each timestep.
@@ -375,17 +447,35 @@ class TestOutputIO:
         monkeypatch.setattr(output_reader, "read_output_file", counting_read)
 
         out = result.outputs
-        out["nee"]
-        out["nee"]
-        out[["nee", "gpp"]]
-        out.dataframe(["soil_respiration", "gpp"])
+        assert out["nee"].sizes["time"] == 30
+        assert out["nee"].sizes["time"] == 30
+        assert set(out[["nee", "gpp"]].data_vars) == {
+            "net_ecosystem_exchange",
+            "gross_primary_production",
+        }
+        assert not out.dataframe(["soil_respiration", "gpp"]).empty
 
         read_columns = [c for call in requested for c in (call or [])]
-        assert read_columns == [
+        assert len(read_columns) == len(set(read_columns)), (
+            f"a column was read more than once: {requested}"
+        )
+        assert set(read_columns) == {
+            "year",
+            "day_of_year",
+            "hour_of_day",
             "net_ecosystem_exchange",
             "gross_primary_production",
             "soil_respiration",
-        ], f"columns were read more than once: {requested}"
+        }
+
+        # The documented exception: a whole-file view re-reads, because only the
+        # file states the order its columns belong in. Selections after it do not.
+        assert len(out.pandas.columns) > 30
+        assert requested[-1] is None
+        before = len(requested)
+        assert out["nee"].sizes["time"] == 30
+        assert not out.dataframe(["gpp", "soil_respiration"]).empty
+        assert len(requested) == before, f"a cached column was re-read: {requested[before:]}"
 
     def test_n_timesteps(self, minimal_params, tmp_path):
         """n_timesteps is correct for both memory-backed and file-backed outputs."""
@@ -621,6 +711,17 @@ class TestFailedRunsRaise:
         )
         assert result.provenance.success is False
         assert result.outputs.pandas.empty
+
+    def test_selecting_from_a_failed_run_points_at_the_failure(
+        self, minimal_params, broken_climate
+    ):
+        """The message a caller sees first should name the cause, not the symptom."""
+        result = SIPNETRunner(flags=ModelFlags.standard()).run(
+            minimal_params, broken_climate, check=False
+        )
+        for select in (lambda: result.outputs["nee"], lambda: result.outputs.dataframe(["nee"])):
+            with pytest.raises(KeyError, match="provenance.stderr"):
+                select()
 
     def test_a_successful_run_is_unaffected(self, minimal_params):
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())

@@ -243,10 +243,16 @@ ds  = result.outputs[["nee", "gpp"]]           # the same thing, indexed
 nee = result.outputs["nee"]                    # one variable, as a DataArray
 ```
 
-A column is read from the file at most once. Selecting NEE and then GPP costs
-the same two reads as selecting both together, and asking for either again
-costs nothing — so a likelihood over several output variables never re-reads
-the file, however the request is spelled.
+A selection never re-reads a column already in memory. Selecting NEE and then
+GPP costs the same two reads as selecting both together, and asking for either
+again costs none — so a likelihood over several output variables never re-reads
+the file, however the request is spelled. The one exception is `.pandas` or
+`.xarray` after a selective read: a whole-file view reads the file again,
+because only the file states the order its columns belong in.
+
+What stays in memory is the columns you have asked for, plus the three time
+coordinates — not the whole output. (Peak memory during a read is another
+matter: pandas needs room to parse.)
 
 On a memory-backed instance no file I/O occurs at all: the selection slices the
 DataFrame already in memory.
