@@ -309,8 +309,8 @@ writer.writerow({
     "iter": i,
     "max_photosynthesis_rate": max_photosynthesis_rate,
     "base_wood_respiration_rate": bvr,
-    "annual_nee": result.outputs.variable("nee").sum(),
-    "annual_gpp": result.outputs.variable("gpp").sum(),
+    "annual_nee": float(result.outputs["nee"].sum()),
+    "annual_gpp": float(result.outputs["gpp"].sum()),
     "log_lik": log_lik,
 })
 ```

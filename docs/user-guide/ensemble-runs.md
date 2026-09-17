@@ -99,7 +99,7 @@ print(result.n_failed)  # 0 if all succeeded
 for record in result:
     coord  = record.coordinate   # e.g. {"max_photosynthesis_rate": 3}  (integer axis index)
     output = record.output       # SIPNETResult
-    print(coord, output.outputs.variable("gpp").sum())
+    print(coord, float(output.outputs["gpp"].sum()))
 ```
 
 ---
@@ -230,7 +230,7 @@ and `coordinates` always correspond.
 for rec in result.succeeded:
     site   = rec.coordinate.get("site", "?")
     member = rec.coordinate.get("member", "?")
-    annual_nee = rec.output.outputs.variable("nee").sum()
+    annual_nee = float(rec.output.outputs["nee"].sum())
     print(f"site={site}, member={member}: NEE={annual_nee:.1f} g C m⁻²")
 ```
 
@@ -250,8 +250,8 @@ rows = []
 for rec in result.succeeded:
     rows.append({
         **rec.coordinate,
-        "annual_nee": rec.output.outputs.variable("nee").sum(),
-        "annual_gpp": rec.output.outputs.variable("gpp").sum(),
+        "annual_nee": float(rec.output.outputs["nee"].sum()),
+        "annual_gpp": float(rec.output.outputs["gpp"].sum()),
     })
 df = pd.DataFrame(rows)
 print(df.groupby("site")[["annual_nee", "annual_gpp"]].mean())

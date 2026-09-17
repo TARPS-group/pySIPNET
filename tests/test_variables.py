@@ -288,22 +288,54 @@ def test_dataset_is_one_dimensional_in_time():
     from pysipnet.output import output_dataframe_to_dataset
 
     ds = output_dataframe_to_dataset(_frame())
-    assert dict(ds.sizes) == {"time": 4}
+    assert dict(ds.sizes) == {"time": 4, "bounds": 2}
     assert ds["time"].values[1] == np.datetime64("2020-01-01T12:00")
     assert ds["net_ecosystem_exchange"].attrs["units"] == "g m-2"
     assert ds["somethingNew"].attrs == {}
-    assert "time_step_end" not in ds.coords
-    assert set(ds.coords) == {"time", "year", "day_of_year", "hour_of_day"}
+    assert ds["net_ecosystem_exchange"].dims == ("time",)
+
+
+def test_dataset_infers_the_step_length_when_it_is_not_given():
+    """Without the drivers the interval is reconstructed, and the Dataset says so."""
+    from pysipnet.output import output_dataframe_to_dataset
+
+    ds = output_dataframe_to_dataset(_frame())
+    assert ds.attrs["time_step_length_source"].startswith("inferred")
+    # Rows are 12 h apart, and the last step repeats the one before it.
+    assert list(ds["time_step_length"].values) == [np.timedelta64(12, "h")] * 4
+    assert ds["time_step_end"].values[-1] == np.datetime64("2020-01-03T00:00")
 
 
 def test_dataset_step_bounds_from_lengths():
     from pysipnet.output import output_dataframe_to_dataset
 
     ds = output_dataframe_to_dataset(_frame(), time_step_length=np.full(4, 0.5))
+    assert ds.attrs["time_step_length_source"] == "climate drivers"
     assert ds["time_step_end"].values[0] == np.datetime64("2020-01-01T12:00")
     assert ds["time_step_length"].values[0] == np.timedelta64(12, "h")
     with pytest.raises(ValueError, match="values but the data has"):
         output_dataframe_to_dataset(_frame(), time_step_length=np.ones(3))
+
+
+def test_dataset_carries_cf_time_bounds():
+    """The interval each row covers, in the form CF-aware tooling looks for."""
+    from pysipnet.output import output_dataframe_to_dataset
+
+    ds = output_dataframe_to_dataset(_frame(), time_step_length=np.full(4, 0.5))
+    assert ds["time"].attrs["bounds"] == "time_bounds"
+    assert ds["time_bounds"].dims == ("time", "bounds")
+    np.testing.assert_array_equal(ds["time_bounds"].values[:, 0], ds["time"].values)
+    np.testing.assert_array_equal(ds["time_bounds"].values[:, 1], ds["time_step_end"].values)
+
+
+def test_dataset_says_when_the_step_length_is_unknowable():
+    """One row gives nothing to measure an interval against."""
+    from pysipnet.output import output_dataframe_to_dataset
+
+    ds = output_dataframe_to_dataset(_frame().head(1))
+    assert ds.attrs["time_step_length_source"] == "unknown"
+    assert "time_step_end" not in ds.coords
+    assert "time_bounds" not in ds.coords
 
 
 def test_dataset_needs_the_time_coordinates():
@@ -318,7 +350,7 @@ def test_output_getitem_and_variables():
 
     out = SIPNETOutput.from_dataframe(_frame())
     assert out["nee"].attrs["long_name"] == "Net ecosystem exchange"
-    assert out.variable("NEE").tolist() == [0.0, 1.0, 2.0, 3.0]
+    assert out["NEE"].values.tolist() == [0.0, 1.0, 2.0, 3.0]
     assert [v.name for v in out.variables] == [
         "year",
         "day_of_year",
@@ -326,8 +358,25 @@ def test_output_getitem_and_variables():
         "net_ecosystem_exchange",
         "wood_carbon",
     ]
-    subset = out.load(variables=["nee"])
+    subset = out.dataframe(["nee"])
     assert list(subset.columns) == ["year", "day_of_year", "hour_of_day", "net_ecosystem_exchange"]
+    assert set(out[["nee", "wood_carbon"]].data_vars) == {"net_ecosystem_exchange", "wood_carbon"}
+
+
+def test_output_refuses_a_variable_the_flags_leave_at_zero():
+    """Selecting a flag-zeroed column by name is a mistake, not a request for zeros."""
+    from pysipnet.output import SIPNETOutput
+    from pysipnet.parameters.model import ModelFlags
+
+    frame = _frame().assign(litter_carbon=0.0)
+    out = SIPNETOutput.from_dataframe(frame, flags=ModelFlags.standard())
+    with pytest.raises(ValueError, match="litter_pool"):
+        out["litter_carbon"]
+
+    # The faithful view of the file still has it, and so does a run that asked for it.
+    assert "litter_carbon" in out.xarray.data_vars
+    with_pool = SIPNETOutput.from_dataframe(frame, flags=ModelFlags(litter_pool=True))
+    assert with_pool["litter_carbon"].sizes["time"] == 4
 
 
 # ---------------------------------------------------------------------------
@@ -446,3 +495,50 @@ def test_british_spellings_resolve_as_aliases():
     )
     assert resolve_climate_variable("vapour_pressure").name == "vapor_pressure"
     assert resolve_parameter_name("vapour_pressure_deficit_slope") == "vapor_pressure_deficit_slope"
+
+
+def test_timestep_start_matches_the_calendar():
+    """Integer datetime64 arithmetic replaces a string round-trip; it must agree with one."""
+    import pandas as pd
+
+    from pysipnet.dataset import timestep_start
+
+    frame = pd.DataFrame(
+        {
+            "year": [2000, 2000, 1999, 2021],
+            "day_of_year": [60, 366, 365, 1],
+            "hour_of_day": [0.0, 23.5, 12.25, 0.0],
+        }
+    )
+    assert list(timestep_start(frame)) == [
+        np.datetime64("2000-02-29T00:00"),  # leap day
+        np.datetime64("2000-12-31T23:30"),  # day 366 of a leap year
+        np.datetime64("1999-12-31T12:15"),  # quarter-hour offsets
+        np.datetime64("2021-01-01T00:00"),
+    ]
+
+
+def test_output_rejects_a_bare_string_where_a_sequence_is_expected():
+    """dataset("nee") would otherwise select the variables 'n', 'e', 'e'."""
+    from pysipnet.output import SIPNETOutput
+
+    out = SIPNETOutput.from_dataframe(_frame())
+    with pytest.raises(TypeError, match="sequence of variable names"):
+        out.dataset("nee")
+
+
+def test_output_reports_an_unknown_variable_name():
+    from pysipnet.output import SIPNETOutput
+
+    out = SIPNETOutput.from_dataframe(_frame())
+    with pytest.raises(KeyError, match="not a SIPNET output variable"):
+        out["nonexistent"]
+
+
+def test_memory_backed_output_says_when_a_column_is_simply_absent():
+    """No file to fall back on, so the message must not suggest a read failed."""
+    from pysipnet.output import SIPNETOutput
+
+    out = SIPNETOutput.from_dataframe(_frame().drop(columns=["wood_carbon"]))
+    with pytest.raises(KeyError, match="no file to read"):
+        out["wood_carbon"]

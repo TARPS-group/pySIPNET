@@ -48,7 +48,7 @@ and return a file-backed :class:`~pysipnet.output.SIPNETOutput` instead::
     )
     results = [runner.run(params_i, climate, run_id=f"m{i}") for i in range(1000)]
     # No DataFrames in memory yet.
-    nee = pd.concat([r.outputs.load(variables=["nee"]) for r in results])
+    nee = pd.concat([r.outputs.dataframe(["nee"]) for r in results])
 
 Each run writes ``sipnet_<run_id>.out`` inside ``output_dir``.
 """
@@ -485,9 +485,14 @@ class SIPNETRunner:
         """Copy or parse the output file and return an appropriate SIPNETOutput.
 
         The timestep lengths come from the climate drivers; SIPNET does not
-        write them, and without them the output cannot say when each step ends.
-        They are handed over as a callable so a file-backed climate is not read
-        just to build a result nobody has asked for the Dataset of.
+        write them, and the Dataset would otherwise have to reconstruct the
+        interval each row covers from the timestamps.  They are handed over as a
+        callable so a file-backed climate is not read just to build a result
+        nobody has asked for the Dataset of.
+
+        The flags travel with the output so that selecting a variable this run
+        wrote as constant zero is refused rather than silently answered, and the
+        run id so that a Dataset saved to disk says which run produced it.
         """
         import shutil
 
@@ -506,6 +511,16 @@ class SIPNETRunner:
         if effective_output_dir is not None:
             dest = effective_output_dir / f"sipnet_{run_id}.out"
             shutil.copy2(out_src, dest)
-            return SIPNETOutput.from_path(dest, time_step_length=step_length)
+            return SIPNETOutput.from_path(
+                dest,
+                time_step_length=step_length,
+                flags=provenance.flags,
+                run_id=run_id,
+            )
 
-        return SIPNETOutput.from_dataframe(read_output_file(out_src), time_step_length=step_length)
+        return SIPNETOutput.from_dataframe(
+            read_output_file(out_src),
+            time_step_length=step_length,
+            flags=provenance.flags,
+            run_id=run_id,
+        )

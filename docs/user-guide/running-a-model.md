@@ -316,7 +316,7 @@ import pandas as pd
 rows = []
 for max_photosynthesis_rate in [80.0, 100.0, 112.0, 130.0, 150.0]:
     r = model(max_photosynthesis_rate=max_photosynthesis_rate)
-    rows.append({"max_photosynthesis_rate": max_photosynthesis_rate, "annual_gpp": r.outputs.variable("gpp").sum()})
+    rows.append({"max_photosynthesis_rate": max_photosynthesis_rate, "annual_gpp": float(r.outputs["gpp"].sum())})
 
 pd.DataFrame(rows)
 ```
@@ -369,14 +369,19 @@ log warning rather than an output column, so a failed check appears in
     variable spell this out, and the xarray view below carries them as
     attributes.
 
-### Three views of the same output
+### Four views of the same output
 
 ```python
-df = result.outputs.pandas                  # pandas DataFrame, one row per timestep
-ds = result.outputs.xarray                  # xarray Dataset, one `time` dimension
-nee = result.outputs["nee"]                 # one variable as a DataArray, by name or alias
-nee_series = result.outputs.variable("nee") # ... or as a pandas Series
+df  = result.outputs.pandas          # pandas DataFrame, one row per timestep
+ds  = result.outputs.xarray          # xarray Dataset, one `time` dimension
+nee = result.outputs["nee"]          # one variable as a DataArray, by name or alias
+both = result.outputs[["nee", "gpp"]]  # several variables as a Dataset
+
+result.outputs.dataframe(["nee", "gpp"])  # the same selection as a DataFrame
 ```
+
+A DataArray still converts to whatever you need: `nee.to_series()` for pandas,
+`nee.to_numpy()` for a bare array.
 
 The Dataset is the representation to use when metadata matters or when
 results will be combined across runs:

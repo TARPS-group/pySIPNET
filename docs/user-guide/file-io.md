@@ -229,20 +229,27 @@ r3 = runner.run(params, climate, output_dir=None)
 ### Variable-selective loading
 
 For large ensemble outputs it is often wasteful to load every column.
-`SIPNETOutput.load(variables=[...])` reads only the named variables from the
-file, without caching the result. Names or aliases both work:
+`dataframe([...])` and `dataset([...])` read only the named variables from the
+file and keep only those in memory. Names or aliases both work:
 
 ```python
-# Load just NEE and GPP — year/day_of_year/hour_of_day are always included:
-subset = result.outputs.load(variables=["nee", "gpp"])
+# Just NEE and GPP — year/day_of_year/hour_of_day are always included:
+subset = result.outputs.dataframe(["nee", "gpp"])
 # DataFrame with columns: year, day_of_year, hour_of_day,
 #                         net_ecosystem_exchange, gross_primary_production
 
-ds = result.outputs.load(variables=["nee"], as_xarray=True)   # Dataset instead
+ds  = result.outputs.dataset(["nee", "gpp"])   # Dataset instead
+ds  = result.outputs[["nee", "gpp"]]           # the same thing, indexed
+nee = result.outputs["nee"]                    # one variable, as a DataArray
 ```
 
-On a memory-backed instance, `load(variables=[...])` slices the in-memory
-DataFrame — no file I/O occurs.
+A column is read from the file at most once. Selecting NEE and then GPP costs
+the same two reads as selecting both together, and asking for either again
+costs nothing — so a likelihood over several output variables never re-reads
+the file, however the request is spelled.
+
+On a memory-backed instance no file I/O occurs at all: the selection slices the
+DataFrame already in memory.
 
 ### Keeping the working directory
 
@@ -290,5 +297,5 @@ together:
 | Interactive exploration, single run | Default (no `output_dir`) — data in memory |
 | Need the raw file for archival | `output_dir=` on runner or `keep_workdir=True` |
 | Large ensemble, full outputs needed | `output_dir=` — lazy-load member by member |
-| Large ensemble, only a few columns needed | `output_dir=` + `result.outputs.load(variables=[...])` |
+| Large ensemble, only a few columns needed | `output_dir=` + `result.outputs.dataframe([...])` |
 | Debugging a failing run | `keep_workdir=True` — inspect all files in `provenance.workdir` |
