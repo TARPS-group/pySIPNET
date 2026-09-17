@@ -22,8 +22,8 @@ from pysipnet import SIPNETRunner, SIPNETModel, ModelFlags, SIPNETParameters, Cl
 # params: SIPNETParameters = ...  (see Running a Model for full construction)
 params: SIPNETParameters = ...
 
-# Load climate directly into memory
-climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
+# Load climate directly into memory ("my_site.clim" stands in for your own file)
+climate = ClimateDrivers.from_file("data/my_site.clim", n_columns=14)
 
 runner = SIPNETRunner(flags=ModelFlags.standard())
 model  = SIPNETModel(runner, base_params=params, base_climate=climate)
@@ -180,7 +180,7 @@ from pysipnet import SIPNETRunner, ModelFlags, ClimateDrivers, ClimateStaging
 param_samples: list[SIPNETParameters] = [...]
 
 # One shared climate file for all members
-climate = ClimateDrivers.from_path("data/era5_site1.clim", n_columns=14)
+climate = ClimateDrivers.from_path("data/my_site.clim", n_columns=14)
 
 runner = SIPNETRunner(
     flags=ModelFlags.standard(),
@@ -223,7 +223,7 @@ runner = SIPNETRunner(
     workdir_base=run_dir / "workdirs",
 )
 
-climate = ClimateDrivers.from_path("data/era5_site1.clim", n_columns=14)
+climate = ClimateDrivers.from_path("data/my_site.clim", n_columns=14)
 result = runner.run(params, climate, run_id="baseline")
 
 # After the run, the directory tree looks like:
@@ -231,7 +231,7 @@ result = runner.run(params, climate, run_id="baseline")
 # ├── workdirs/
 # │   └── sipnet_baseline/
 # │       ├── sipnet.param
-# │       ├── sipnet.clim   ← symlink to era5_site1.clim
+# │       ├── sipnet.clim   ← symlink to my_site.clim
 # │       ├── sipnet.in
 # │       └── sipnet.out
 # └── outputs/

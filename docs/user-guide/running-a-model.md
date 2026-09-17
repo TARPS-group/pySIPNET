@@ -51,10 +51,13 @@ name, units and the conversion SIPNET applies on read are on the
 ```python
 from pysipnet import ClimateDrivers
 
-climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
+climate = ClimateDrivers.from_file("docs/examples/data/niwot_1999_daily.clim", n_columns=14)
 print(climate)
-# ClimateDrivers(n_columns=14, timesteps=29200, range=2012-001 to 2023-365)
+# ClimateDrivers(n_columns=14, timesteps=365, range=1999-001 to 1999-365)
 ```
+
+That file — one year of daily Niwot Ridge forcing — ships with the repository,
+so every example on this page runs as written from the repository root.
 
 `ClimateDrivers.from_file` loads the data into memory.  For ensemble
 workflows with pre-existing files, `ClimateDrivers.from_path` creates a
@@ -81,72 +84,78 @@ from pysipnet.parameters import (
 
 params = SIPNETParameters(
     initial_conditions=InitialConditions(
-        total_wood_carbon=30000.0,    # g C m⁻² — initial aboveground + root C
-        leaf_area_index=0.0,               # m² m⁻² — leaf area index at t=0
-        soil_carbon=10000.0,          # g C m⁻² — initial soil C pool
-        soil_wetness_fraction=0.5,   # fraction of water holding capacity
-        fine_root_fraction=0.05,
-        coarse_root_fraction=0.15,
+        total_wood_carbon=9600.0,     # g C m⁻² — initial aboveground + root C
+        leaf_area_index=4.2,          # m² m⁻² — leaf area index at t=0
+        soil_carbon=16000.0,          # g C m⁻² — initial soil C pool
+        soil_wetness_fraction=0.5,    # fraction of water holding capacity
+        snow_water_equivalent=0.0,    # cm water equivalent
+        fine_root_fraction=0.2,
+        coarse_root_fraction=0.2,
     ),
     photosynthesis=PhotosynthesisParams(
-        max_photosynthesis_rate=112.0,           # nmol CO₂ g⁻¹ leaf s⁻¹
+        max_photosynthesis_rate=8.3,             # nmol CO₂ g⁻¹ leaf s⁻¹
         daily_mean_photosynthesis_fraction=0.76,
         foliar_respiration_fraction=0.1,
-        min_photosynthesis_temperature=2.0,         # °C
-        optimum_photosynthesis_temperature=24.0,        # °C
+        min_photosynthesis_temperature=2.0,      # °C
+        optimum_photosynthesis_temperature=24.0,  # °C
         vapor_pressure_deficit_slope=0.05,
-        vapor_pressure_deficit_exponent=1.0,
-        half_saturation_light=300.0,    # mol photons m⁻² day⁻¹
+        vapor_pressure_deficit_exponent=2.0,
+        half_saturation_light=17.0,   # mol photons m⁻² day⁻¹
         light_extinction_coefficient=0.5,
     ),
     phenology=PhenologyParams(
-        leaf_off_day=270.0,
-        leaf_on_growing_degree_days=100.0,     # °C·day — required when the gdd flag is on
-        leaf_on_growth=50.0,      # g C m⁻²
-        leaf_off_fall_fraction=0.95,
-        leaf_allocation=0.25,
-        leaf_turnover_rate=1.0,  # year⁻¹
+        leaf_off_day=285.0,
+        leaf_on_growing_degree_days=500.0,  # °C·day — required when the gdd flag is on
+        leaf_on_growth=0.0,       # g C m⁻²
+        leaf_off_fall_fraction=0.0,
+        leaf_allocation=0.2,
+        leaf_turnover_rate=0.13,  # year⁻¹
         leaf_on_reallocation_fraction=0.2,  # cap on wood C drawn at leaf-out
     ),
     respiration=RespirationParams(
-        base_wood_respiration_rate=0.02,        # year⁻¹ (SIPNET divides by 365 internally)
+        base_wood_respiration_rate=0.006,      # year⁻¹ (SIPNET divides by 365 internally)
         wood_respiration_q10=2.0,
-        growth_respiration_fraction=0.0,
-        frozen_soil_foliar_respiration_factor=0.5,
-        frozen_soil_threshold=-1.0,
-        base_fine_root_respiration_rate=0.5,   # year⁻¹
-        base_coarse_root_respiration_rate=0.1,
-        fine_root_respiration_q10=2.0,
-        coarse_root_respiration_q10=2.0,
+        growth_respiration_fraction=0.2,
+        frozen_soil_foliar_respiration_factor=0.0,
+        frozen_soil_threshold=0.0,
+        base_fine_root_respiration_rate=0.09,  # year⁻¹
+        base_coarse_root_respiration_rate=0.006,
+        fine_root_respiration_q10=2.6,
+        coarse_root_respiration_q10=2.6,
         base_soil_respiration_rate=0.06,       # year⁻¹
-        soil_respiration_q10=2.0,
-        soil_respiration_moisture_exponent=1.5,
+        soil_respiration_q10=2.9,
+        soil_respiration_moisture_exponent=1.0,
     ),
     allocation=AllocationParams(
-        fine_root_allocation=0.35,
-        wood_allocation=0.30,
-        fine_root_turnover_rate=1.0,
-        coarse_root_turnover_rate=0.1,
-        wood_turnover_rate=0.02,
+        fine_root_allocation=0.4,
+        wood_allocation=0.2,
+        fine_root_turnover_rate=0.137,
+        coarse_root_turnover_rate=0.056,
+        wood_turnover_rate=0.014,
     ),
     water=WaterParams(
-        water_removal_fraction=0.1,
-        frozen_soil_water_fraction=0.1,
-        water_use_efficiency=10.0,
+        water_removal_fraction=0.088,
+        frozen_soil_water_fraction=0.0,
+        water_use_efficiency=10.9,
         soil_water_holding_capacity=12.0,     # cm — soil water holding capacity
         interception_evaporation_fraction=0.1,
         fast_flow_fraction=0.1,
         snow_melt_rate=0.15,    # cm °C⁻¹ day⁻¹ — required when the snow flag is on
-        aerodynamic_resistance_constant=100.0,
-        soil_resistance_intercept=3.0,
-        soil_resistance_slope=2.0,
+        aerodynamic_resistance_constant=36.5,
+        soil_resistance_intercept=8.2,
+        soil_resistance_slope=4.3,
     ),
     leaf=LeafPhysiologyParams(
-        leaf_carbon_per_area=32.0,   # g C m⁻² leaf
+        leaf_carbon_per_area=270.0,  # g C m⁻² leaf
         leaf_carbon_fraction=0.45,
     ),
 )
 ```
+
+These are SIPNET's own nominal Niwot Ridge values, from the parameter file the
+model authors ship (kept here as `tests/fixtures/niwot_reference/sipnet.param`),
+so they go with the climate loaded above.  They are a starting point, not a fit
+to any particular year.
 
 #### Flag-dependent parameters
 
@@ -375,8 +384,9 @@ results will be combined across runs:
 ```python
 ds["net_ecosystem_exchange"].attrs
 # {'units': 'g m-2', 'long_name': 'Net ecosystem exchange',
-#  'time_reference': 'total over the timestep', 'cell_methods': 'time: sum',
-#  'constituent': 'C', 'sign_convention': 'positive is a flux from the ecosystem to the atmosphere', ...}
+#  'kind': 'timestep_total', 'time_reference': 'total over the timestep',
+#  'cell_methods': 'time: sum', 'constituent': 'C',
+#  'sign_convention': 'positive is a flux from the ecosystem to the atmosphere', ...}
 
 ds["time"]              # datetime64, start of each timestep
 ds["time_step_end"]     # datetime64, end of each timestep

@@ -79,9 +79,12 @@ page (`air_temperature`, `vapor_pressure_deficit`, `time_step_length`, ...).
 SIPNET's own column names (`tair`, `vpdSoil`, `length`) and renames them; the
 stored columns are always the full names.
 
+`data/my_site.clim` here and below stands in for your own climate file; the
+[Quickstart](quickstart.md) runs on the Niwot Ridge year this repository ships.
+
 ```python
 # Full data in memory — good for interactive use and data manipulation
-climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
+climate = ClimateDrivers.from_file("data/my_site.clim", n_columns=14)
 climate.pandas      # DataFrame always available
 climate.xarray      # the same on an xarray `time` axis shared with outputs
 climate.validate()  # full validation runs immediately
@@ -95,7 +98,7 @@ original file directly, skipping the read-then-write cycle entirely.
 
 ```python
 # No data loaded — good for ensemble workflows with pre-existing files
-climate = ClimateDrivers.from_path("data/era5_site1.clim", n_columns=14)
+climate = ClimateDrivers.from_path("data/my_site.clim", n_columns=14)
 
 print(climate.n_timesteps)  # available without loading data
 print(climate.date_range)   # also available without loading data
