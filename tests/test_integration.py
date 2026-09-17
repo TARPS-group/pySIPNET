@@ -80,8 +80,8 @@ class TestEndToEnd:
         result = runner.run(minimal_params, climate)
 
         assert result.provenance.success
-        assert len(result.outputs.data) == 30
-        assert result.outputs.data.shape[1] > 10
+        assert len(result.outputs.pandas) == 30
+        assert result.outputs.pandas.shape[1] > 10
 
     def test_key_columns_present(self, minimal_params):
         runner = SIPNETRunner(flags=ModelFlags.standard())
@@ -95,7 +95,7 @@ class TestEndToEnd:
             "net_primary_production",
             "evapotranspiration",
         ):
-            assert col in result.outputs.data.columns, f"Missing column: {col}"
+            assert col in result.outputs.pandas.columns, f"Missing column: {col}"
 
     def test_no_nans_in_output(self, minimal_params):
         runner = SIPNETRunner(flags=ModelFlags.standard())
@@ -103,7 +103,7 @@ class TestEndToEnd:
         result = runner.run(minimal_params, climate)
 
         assert result.provenance.success
-        assert not result.outputs.data.isnull().any().any(), "NaN values found in output"
+        assert not result.outputs.pandas.isnull().any().any(), "NaN values found in output"
 
     def test_variable_lookup_by_alias(self, minimal_params):
         """``outputs["nee"]`` and the full name are the same array, with metadata."""
@@ -132,13 +132,13 @@ class TestEndToEnd:
         climate = _make_climate()
         result = runner.run(minimal_params, climate)
 
-        ds = result.outputs.dataset
+        ds = result.outputs.xarray
         assert dict(ds.sizes) == {"time": 30}
         assert not ds["net_ecosystem_exchange"].isnull().any()
         assert ds["time"].attrs["long_name"] == "Start of timestep"
         expected_end = (
             ds["time"].values
-            + pd.to_timedelta(climate.data["time_step_length"].to_numpy(), unit="D").to_numpy()
+            + pd.to_timedelta(climate.pandas["time_step_length"].to_numpy(), unit="D").to_numpy()
         )
         np.testing.assert_array_equal(ds["time_step_end"].values, expected_end)
         assert ds["wood_carbon"].attrs["time_reference"] == "value at the end of the timestep"
@@ -155,7 +155,7 @@ class TestEndToEnd:
         result = runner.run(minimal_params, climate)
 
         assert result.provenance.success
-        ts = result.outputs.data
+        ts = result.outputs.pandas
         computed_nee = ts["ecosystem_respiration"] - ts["gross_primary_production"]
         np.testing.assert_allclose(
             ts["net_ecosystem_exchange"].values,
@@ -174,8 +174,8 @@ class TestEndToEnd:
         climate2 = read_clim_file(clim_path, n_columns=14)
 
         pd.testing.assert_frame_equal(
-            climate.data.reset_index(drop=True),
-            climate2.data.reset_index(drop=True),
+            climate.pandas.reset_index(drop=True),
+            climate2.pandas.reset_index(drop=True),
             check_exact=False,
             rtol=1e-5,
         )
@@ -212,7 +212,7 @@ class TestOutputIO:
         assert result.outputs.source_path == expected_file
 
     def test_lazy_output_not_loaded_until_accessed(self, minimal_params, tmp_path):
-        """File-backed SIPNETOutput holds no DataFrame until .data is accessed."""
+        """File-backed SIPNETOutput holds no DataFrame until .pandas is accessed."""
         runner = SIPNETRunner(
             flags=ModelFlags.standard(),
             output_dir=tmp_path / "outputs",
@@ -220,7 +220,7 @@ class TestOutputIO:
         result = runner.run(minimal_params, _make_climate())
 
         assert result.outputs._data is None, "Data should not be loaded before first access"
-        df = result.outputs.data
+        df = result.outputs.pandas
         assert df is not None
         assert len(df) == 30
 
@@ -369,13 +369,17 @@ class TestLitterPool:
         return type(minimal_params).model_validate(data)
 
     def test_run_succeeds(self, litter_params):
-        result = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, _make_climate())
+        result = SIPNETRunner(flags=ModelFlags(litter_pool=True)).run(
+            litter_params, _make_climate()
+        )
         assert result.provenance.success, result.provenance.stderr
 
     def test_soil_respiration_is_not_zero(self, litter_params):
         """The specific regression: rSoil must be computed, not left at zero."""
-        result = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, _make_climate())
-        r_soil = result.outputs.data["soil_respiration"]
+        result = SIPNETRunner(flags=ModelFlags(litter_pool=True)).run(
+            litter_params, _make_climate()
+        )
+        r_soil = result.outputs.pandas["soil_respiration"]
         assert (r_soil > 0).any(), (
             "soil respiration is zero for every timestep with the litter pool on, "
             "which is the pre-v2.1.0 defect this test exists to catch"
@@ -383,13 +387,15 @@ class TestLitterPool:
 
     def test_litter_pool_holds_carbon(self, litter_params):
         """With the pool on, litter carbon should be tracked rather than left at zero."""
-        result = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, _make_climate())
-        assert (result.outputs.data["litter_carbon"] > 0).any()
+        result = SIPNETRunner(flags=ModelFlags(litter_pool=True)).run(
+            litter_params, _make_climate()
+        )
+        assert (result.outputs.pandas["litter_carbon"] > 0).any()
 
     def test_litter_pool_stays_empty_when_switched_off(self, minimal_params):
         """The complement: SIPNET writes the column but leaves it at zero."""
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())
-        assert (result.outputs.data["litter_carbon"] == 0).all()
+        assert (result.outputs.pandas["litter_carbon"] == 0).all()
 
     def test_enabling_the_litter_pool_changes_the_answer(self, litter_params):
         """A flag that reaches SIPNET must visibly affect the model.
@@ -398,7 +404,7 @@ class TestLitterPool:
         agree and every other test here would still pass.
         """
         climate = _make_climate()
-        with_pool = SIPNETRunner(flags=ModelFlags.forest()).run(litter_params, climate)
+        with_pool = SIPNETRunner(flags=ModelFlags(litter_pool=True)).run(litter_params, climate)
         without = SIPNETRunner(flags=ModelFlags.standard()).run(litter_params, climate)
         assert not np.allclose(
             with_pool.outputs.variable("nee").to_numpy(),
@@ -455,7 +461,7 @@ class TestMassBalance:
     def test_the_old_output_columns_are_really_gone(self, minimal_params):
         """Documents why this class reads the log rather than the output."""
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())
-        columns = set(result.outputs.data.columns)
+        columns = set(result.outputs.pandas.columns)
         assert "balance_delta_c" not in columns
         assert "balance_delta_n" not in columns
 
@@ -533,7 +539,7 @@ class TestFailedRunsRaise:
         """A climate frame SIPNET refuses: no rows to read."""
         from pysipnet.climate import ClimateDrivers
 
-        return ClimateDrivers.from_dataframe(_make_climate().data.head(0).copy())
+        return ClimateDrivers.from_dataframe(_make_climate().pandas.head(0).copy())
 
     def test_a_failed_run_raises(self, minimal_params, broken_climate):
         from pysipnet.runner import SIPNETRunError
@@ -558,12 +564,12 @@ class TestFailedRunsRaise:
             minimal_params, broken_climate, check=False
         )
         assert result.provenance.success is False
-        assert result.outputs.data.empty
+        assert result.outputs.pandas.empty
 
     def test_a_successful_run_is_unaffected(self, minimal_params):
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())
         assert result.provenance.success
-        assert not result.outputs.data.empty
+        assert not result.outputs.pandas.empty
 
 
 # ---------------------------------------------------------------------------
@@ -615,7 +621,7 @@ class TestSnowFlag:
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, climate)
         assert result.provenance.success
         assert climate._data is None, "building the result must not read the climate file"
-        assert "time_step_end" in result.outputs.dataset.coords
+        assert "time_step_end" in result.outputs.xarray.coords
         assert climate._data is not None, "the Dataset needs the step lengths"
 
     def test_snow_melts_identically_with_the_flag_off_when_the_rate_is_supplied(
@@ -623,7 +629,7 @@ class TestSnowFlag:
     ):
         """With snow_melt_rate written to the file, the flag changes nothing at all."""
         climate = self._freezing_climate(n_days=10)
-        df = climate.data.copy()
+        df = climate.pandas.copy()
         df.loc[5:, "air_temperature"] = 10.0  # five freezing days, then a thaw
         from pysipnet.climate import ClimateDrivers
 

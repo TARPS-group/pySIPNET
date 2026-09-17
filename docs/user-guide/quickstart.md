@@ -11,17 +11,17 @@ SIPNET binary (`make sipnet`).
 
 ## 1. Load climate data
 
-`data/era5_site1.clim` below is a stand-in for your own file — pySIPNET ships
-no climate data at that path.  For something you can run immediately, the
-repository includes one year of Niwot Ridge forcing at
-`docs/examples/data/niwot_1999_daily.clim`.
+This guide runs on data the repository ships: one year of daily Niwot Ridge
+(US-NR1) forcing, aggregated from SIPNET's own example driver.  Paths are
+relative to the repository root; point `from_file` at your own `.clim` file to
+run a different site.
 
 ```python
 from pysipnet import ClimateDrivers
 
-climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
+climate = ClimateDrivers.from_file("docs/examples/data/niwot_1999_daily.clim", n_columns=14)
 print(climate)
-# ClimateDrivers(n_columns=14, timesteps=29200, range=2012-001 to 2023-365)
+# ClimateDrivers(n_columns=14, timesteps=365, range=1999-001 to 1999-365)
 ```
 
 ## 2. Define parameters
@@ -39,49 +39,56 @@ from pysipnet.parameters import (
 
 params = SIPNETParameters(
     initial_conditions=InitialConditions(
-        total_wood_carbon=30000.0, leaf_area_index=0.0, soil_carbon=10000.0,
-        soil_wetness_fraction=0.5, fine_root_fraction=0.05, coarse_root_fraction=0.15,
+        total_wood_carbon=9600.0, leaf_area_index=4.2, soil_carbon=16000.0,
+        soil_wetness_fraction=0.5, snow_water_equivalent=0.0,
+        fine_root_fraction=0.2, coarse_root_fraction=0.2,
     ),
     photosynthesis=PhotosynthesisParams(
-        max_photosynthesis_rate=112.0, daily_mean_photosynthesis_fraction=0.76, foliar_respiration_fraction=0.1,
+        max_photosynthesis_rate=8.3, daily_mean_photosynthesis_fraction=0.76,
+        foliar_respiration_fraction=0.1,
         min_photosynthesis_temperature=2.0, optimum_photosynthesis_temperature=24.0,
-        vapor_pressure_deficit_slope=0.05, vapor_pressure_deficit_exponent=1.0,
-        half_saturation_light=300.0, light_extinction_coefficient=0.5,
+        vapor_pressure_deficit_slope=0.05, vapor_pressure_deficit_exponent=2.0,
+        half_saturation_light=17.0, light_extinction_coefficient=0.5,
     ),
     phenology=PhenologyParams(
-        leaf_off_day=270.0, leaf_on_growing_degree_days=100.0,
-        leaf_on_growth=50.0, leaf_off_fall_fraction=0.95,
-        leaf_allocation=0.25, leaf_turnover_rate=1.0, leaf_on_reallocation_fraction=0.2,
+        leaf_off_day=285.0, leaf_on_growing_degree_days=500.0,
+        leaf_on_growth=0.0, leaf_off_fall_fraction=0.0,
+        leaf_allocation=0.2, leaf_turnover_rate=0.13, leaf_on_reallocation_fraction=0.2,
     ),
     respiration=RespirationParams(
-        base_wood_respiration_rate=0.02, wood_respiration_q10=2.0, growth_respiration_fraction=0.0,
-        frozen_soil_foliar_respiration_factor=0.5, frozen_soil_threshold=-1.0,
-        base_fine_root_respiration_rate=0.5, base_coarse_root_respiration_rate=0.1,
-        fine_root_respiration_q10=2.0, coarse_root_respiration_q10=2.0,
-        base_soil_respiration_rate=0.06, soil_respiration_q10=2.0, soil_respiration_moisture_exponent=1.5,
+        base_wood_respiration_rate=0.006, wood_respiration_q10=2.0, growth_respiration_fraction=0.2,
+        frozen_soil_foliar_respiration_factor=0.0, frozen_soil_threshold=0.0,
+        base_fine_root_respiration_rate=0.09, base_coarse_root_respiration_rate=0.006,
+        fine_root_respiration_q10=2.6, coarse_root_respiration_q10=2.6,
+        base_soil_respiration_rate=0.06, soil_respiration_q10=2.9,
+        soil_respiration_moisture_exponent=1.0,
     ),
     allocation=AllocationParams(
-        fine_root_allocation=0.35, wood_allocation=0.30,
-        fine_root_turnover_rate=1.0, coarse_root_turnover_rate=0.1,
-        wood_turnover_rate=0.02,
+        fine_root_allocation=0.4, wood_allocation=0.2,
+        fine_root_turnover_rate=0.137, coarse_root_turnover_rate=0.056,
+        wood_turnover_rate=0.014,
     ),
     water=WaterParams(
-        water_removal_fraction=0.1, frozen_soil_water_fraction=0.1, water_use_efficiency=10.0,
+        water_removal_fraction=0.088, frozen_soil_water_fraction=0.0, water_use_efficiency=10.9,
         soil_water_holding_capacity=12.0,
         interception_evaporation_fraction=0.1, fast_flow_fraction=0.1,
-        snow_melt_rate=0.15, aerodynamic_resistance_constant=100.0, soil_resistance_intercept=3.0, soil_resistance_slope=2.0,
+        snow_melt_rate=0.15, aerodynamic_resistance_constant=36.5,
+        soil_resistance_intercept=8.2, soil_resistance_slope=4.3,
     ),
-    leaf=LeafPhysiologyParams(leaf_carbon_per_area=32.0, leaf_carbon_fraction=0.45),
+    leaf=LeafPhysiologyParams(leaf_carbon_per_area=270.0, leaf_carbon_fraction=0.45),
 )
 ```
 
-!!! note "These values are illustrative"
-    The numbers above are plausible placeholders chosen to show the structure,
-    not parameters calibrated for any real site.  Run them against real
-    forcing and you will get a physically meaningless answer.  For a worked
-    example with parameters matched to its site, see the
-    [MCMC calibration notebook](../examples/mcmc_calibration.ipynb), which uses
-    the Niwot Ridge data included in the repository.
+!!! note "These values are nominal, not calibrated"
+    The numbers above are SIPNET's own nominal Niwot Ridge values, taken from
+    the parameter file the model authors ship (kept in this repository at
+    `tests/fixtures/niwot_reference/sipnet.param`), so they match the climate
+    loaded in step 1.  They are a sensible starting point, not a fit: nothing
+    here was calibrated against observations for 1999, and the annual totals
+    below should be read as "the model ran", not as an estimate of this site's
+    carbon balance.  For what calibration involves, see the
+    [MCMC calibration notebook](../examples/mcmc_calibration.ipynb), which
+    fits two of these parameters to the same year.
 
 ## 3. Run SIPNET
 
@@ -91,18 +98,18 @@ from pysipnet import SIPNETRunner, ModelFlags
 runner = SIPNETRunner(flags=ModelFlags.standard())
 result = runner.run(params, climate)
 
-print(result.provenance.success)   # True
-print(result.outputs.variable("nee").sum())   # annual NEE (g C m⁻²)
-print(result.outputs.variable("gpp").sum())   # annual GPP
+print(result.provenance.success)              # True
+print(result.outputs.variable("nee").sum())   # 558.009 — annual NEE (g C m⁻², +ve = source)
+print(result.outputs.variable("gpp").sum())   # 686.052 — annual GPP
 ```
 
 ## 4. Inspect the result
 
 ```python
-ts = result.outputs.data   # pandas DataFrame, one row per timestep
+ts = result.outputs.pandas   # pandas DataFrame, one row per timestep
 print(ts.columns.tolist())
-# ['year', 'day_of_year', 'hour_of_day', 'wood_carbon', ...,
-#  'net_ecosystem_exchange', 'gross_primary_production', ...]
+# ['year', 'day_of_year', 'hour_of_day', 'wood_carbon', 'leaf_carbon', ...,
+#  'net_ecosystem_exchange', 'gross_primary_production', ...]  # 35 columns
 
 import matplotlib.pyplot as plt
 ts.plot(x="day_of_year", y=["net_ecosystem_exchange", "gross_primary_production"])

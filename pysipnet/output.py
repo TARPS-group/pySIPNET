@@ -3,9 +3,9 @@
 :class:`SIPNETOutput` holds the parsed ``sipnet.out`` file either in memory
 (eager) or as a reference to a file on disk (lazy), and exposes it two ways:
 
-- :attr:`SIPNETOutput.data` — a flat :class:`pandas.DataFrame`, one row per
+- :attr:`SIPNETOutput.pandas` — a flat :class:`pandas.DataFrame`, one row per
   timestep, columns named as in :mod:`pysipnet.variables`.
-- :attr:`SIPNETOutput.dataset` — an :class:`xarray.Dataset` with a single
+- :attr:`SIPNETOutput.xarray` — an :class:`xarray.Dataset` with a single
   ``time`` dimension, a datetime coordinate, and every variable carrying its
   units, description and time reference as attributes. This is the
   representation to stack across ensemble members or write to netCDF.
@@ -14,7 +14,7 @@ The two construction modes are:
 
 - :meth:`SIPNETOutput.from_dataframe` — memory-backed; data immediately available.
 - :meth:`SIPNETOutput.from_path` — file-backed; the file is not read until
-  :attr:`data` or :attr:`dataset` is first accessed. The file is verified to
+  :attr:`pandas` or :attr:`xarray` is first accessed. The file is verified to
   exist at construction time so that a missing file is caught immediately.
 
 The file-backed mode is the natural choice when :class:`~pysipnet.runner.SIPNETRunner`
@@ -72,8 +72,8 @@ class SIPNETOutput:
     time_step_length:
         Length of each timestep in days, one value per row, taken from the
         climate drivers, or a zero-argument callable returning that array so a
-        file-backed climate is not read until :attr:`dataset` needs it.
-        Optional; when given, :attr:`dataset` carries ``time_step_end`` and
+        file-backed climate is not read until :attr:`xarray` needs it.
+        Optional; when given, :attr:`xarray` carries ``time_step_end`` and
         ``time_step_length`` coordinates.
     """
 
@@ -101,7 +101,7 @@ class SIPNETOutput:
     ) -> SIPNETOutput:
         """Create a file-backed instance without reading the output into memory.
 
-        The file is not parsed until :attr:`data` or :attr:`dataset` is
+        The file is not parsed until :attr:`pandas` or :attr:`xarray` is
         accessed, but its existence is verified immediately so that a missing
         or prematurely deleted file is detected at construction.
 
@@ -143,8 +143,8 @@ class SIPNETOutput:
     # ── Data access ────────────────────────────────────────────────────────────
 
     @property
-    def data(self) -> pd.DataFrame:
-        """The full output as a DataFrame, one row per timestep.
+    def pandas(self) -> pd.DataFrame:
+        """The full output as a :class:`pandas.DataFrame`, one row per timestep.
 
         For file-backed instances the first access reads and caches the file;
         later accesses are free. Column names are the registry names in
@@ -171,14 +171,14 @@ class SIPNETOutput:
         return self._time_step_length
 
     @property
-    def dataset(self) -> xr.Dataset:
+    def xarray(self) -> xr.Dataset:
         """The full output as an :class:`xarray.Dataset` with a ``time`` dimension.
 
-        Built from :attr:`data` on first access and cached. See
+        Built from :attr:`pandas` on first access and cached. See
         :func:`output_dataframe_to_dataset` for the layout.
         """
         if self._dataset is None:
-            self._dataset = output_dataframe_to_dataset(self.data, self.time_step_length)
+            self._dataset = output_dataframe_to_dataset(self.pandas, self.time_step_length)
         return self._dataset
 
     def __getitem__(self, name: str) -> xr.DataArray:
@@ -188,11 +188,11 @@ class SIPNETOutput:
         ``output["net_ecosystem_exchange"]`` all return the same array, with
         units, description and time reference in ``.attrs``.
         """
-        return self.dataset[resolve_output_variable(name).name]
+        return self.xarray[resolve_output_variable(name).name]
 
     def variable(self, name: str) -> pd.Series:
         """One variable as a :class:`pandas.Series`, by name or alias."""
-        return self.data[resolve_output_variable(name).name]
+        return self.pandas[resolve_output_variable(name).name]
 
     @property
     def variables(self) -> tuple[VariableSpec, ...]:
@@ -201,7 +201,9 @@ class SIPNETOutput:
         Columns the registry does not know (from a newer SIPNET) are omitted.
         """
         return tuple(
-            OUTPUT_VARIABLES_BY_NAME[c] for c in self.data.columns if c in OUTPUT_VARIABLES_BY_NAME
+            OUTPUT_VARIABLES_BY_NAME[c]
+            for c in self.pandas.columns
+            if c in OUTPUT_VARIABLES_BY_NAME
         )
 
     def _require_source(self) -> Path:
@@ -220,7 +222,7 @@ class SIPNETOutput:
     ) -> pd.DataFrame | xr.Dataset:
         """Explicitly load output, optionally restricting to a subset of variables.
 
-        Unlike :attr:`data`, this method does **not** cache its result when
+        Unlike :attr:`pandas`, this method does **not** cache its result when
         *variables* is given: each call reads the file afresh so that only the
         requested columns are held in memory. This is the pattern for
         memory-constrained ensemble post-processing::
@@ -234,12 +236,12 @@ class SIPNETOutput:
         ----------
         variables:
             Variable names or aliases to return. ``None`` returns everything and
-            behaves like :attr:`data` (or :attr:`dataset`).
+            behaves like :attr:`pandas` (or :attr:`xarray`).
         as_xarray:
             Return an :class:`xarray.Dataset` instead of a DataFrame.
         """
         if variables is None:
-            return self.dataset if as_xarray else self.data
+            return self.xarray if as_xarray else self.pandas
 
         requested = resolve_output_variable_names(variables)
 
@@ -264,13 +266,13 @@ class SIPNETOutput:
         For file-backed instances this triggers a full data load if not already
         cached.
         """
-        return len(self.data)
+        return len(self.pandas)
 
     def __repr__(self) -> str:
         if self.source_path is not None:
             loaded = "loaded" if self._data is not None else "not yet loaded"
             return f"SIPNETOutput(source_path={str(self.source_path)!r}, {loaded})"
-        return f"SIPNETOutput(in_memory, timesteps={len(self.data)})"
+        return f"SIPNETOutput(in_memory, timesteps={len(self.pandas)})"
 
 
 # ── DataFrame → Dataset ────────────────────────────────────────────────────────

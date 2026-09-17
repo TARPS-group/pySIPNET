@@ -102,11 +102,11 @@ Options are set per run, through
 ```python
 from pysipnet import ModelFlags, SIPNETRunner
 
-runner = SIPNETRunner(flags=ModelFlags.forest())          # named starting point
+runner = SIPNETRunner(flags=ModelFlags.standard())          # SIPNET's own defaults
 runner = SIPNETRunner(flags=ModelFlags(litter_pool=True))  # or build your own
 ```
 
-`ModelFlags.standard()` and `ModelFlags.forest()` are conveniences, not a
+`ModelFlags.standard()` is a name for the defaults SIPNET compiles in, not a
 closed list — any valid combination of flags works without rebuilding.
 
 ## 4. Verify the installation

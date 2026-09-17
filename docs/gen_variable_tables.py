@@ -10,16 +10,7 @@ from __future__ import annotations
 import mkdocs_gen_files
 
 from pysipnet.parameters.model import PARAMETER_SPECS
-from pysipnet.variables import CLIMATE_VARIABLES, OUTPUT_VARIABLES, VariableKind
-
-KIND_TEXT = {
-    VariableKind.COORDINATE: "coordinate",
-    VariableKind.STATE: "state (end of step)",
-    VariableKind.FLUX: "flux (total over step)",
-    VariableKind.RATE: "rate (per day)",
-    VariableKind.MEAN: "mean over step",
-    VariableKind.CUMULATIVE: "cumulative",
-}
+from pysipnet.variables import CLIMATE_VARIABLES, OUTPUT_VARIABLES
 
 lines = [
     "# Output variables",
@@ -29,12 +20,12 @@ lines = [
     "generated from the registry.",
     "",
     "**Time convention.** Each row is labeled with the *start* of its timestep",
-    "(`year`, `day_of_year`, `hour_of_day`). A *state* is the pool at the *end* of",
-    "that step; a *flux* is the total *over* the step; the one *rate* column is a",
-    "per-day rate during the step; a *cumulative* value runs from the start of the",
-    "simulation to the end of the step. The `Kind` column below says which applies,",
-    "and the same text travels on every variable as the `time_reference` attribute",
-    "of `result.outputs.dataset`.",
+    "(`year`, `day_of_year`, `hour_of_day`). A pool is reported at the *end* of that",
+    "step; a flux is the total *over* the step; the one rate column is a per-day rate",
+    "during the step; a cumulative value runs from the start of the simulation to the",
+    "end of the step. The `Time reference` column below says which applies, and the",
+    "same text travels on every variable as the `time_reference` attribute of",
+    "`result.outputs.xarray`.",
     "",
     "**Precision.** SIPNET prints each column with a fixed number of decimals",
     "(`Decimals`). Treat it as a quantization floor when fitting to output.",
@@ -42,8 +33,8 @@ lines = [
     '**Aliases.** `result.outputs["nee"]` and `load(variables=["nee"])` accept the',
     "aliases listed as well as the full names; column names are always the full names.",
     "",
-    "| Name | SIPNET column | Kind | Units | Decimals | Requires flag | Aliases | Description |",
-    "|:-----|:--------------|:-----|:------|:---------|:--------------|:--------|:------------|",
+    "| Name | SIPNET column | Time reference | Units | Decimals | Requires flag | Aliases | Description |",
+    "|:-----|:--------------|:---------------|:------|:---------|:--------------|:--------|:------------|",
 ]
 for spec in OUTPUT_VARIABLES:
     aliases = ", ".join(f"`{a}`" for a in spec.aliases) or ""
@@ -53,7 +44,7 @@ for spec in OUTPUT_VARIABLES:
     if spec.sign_convention:
         description += f" Sign: {spec.sign_convention}."
     lines.append(
-        f"| `{spec.name}` | `{spec.sipnet_name}` | {KIND_TEXT[spec.kind]} | "
+        f"| `{spec.name}` | `{spec.sipnet_name}` | {spec.time_reference} | "
         f"{spec.formatted_units()} | {decimals} | {flag} | {aliases} | {description} |"
     )
 
@@ -136,8 +127,8 @@ clim_lines = [
     "use these aliases (the short names pySIPNET used previously, or SIPNET's",
     "column names) and renames them; stored columns always use the full names.",
     "",
-    "| Name | SIPNET column | Kind | Units | SIPNET converts to | Aliases | Description |",
-    "|:-----|:--------------|:-----|:------|:-------------------|:--------|:------------|",
+    "| Name | SIPNET column | Time reference | Units | SIPNET converts to | Aliases | Description |",
+    "|:-----|:--------------|:---------------|:------|:-------------------|:--------|:------------|",
 ]
 for spec in CLIMATE_VARIABLES:
     aliases = ", ".join(f"`{a}`" for a in spec.aliases)
@@ -147,7 +138,7 @@ for spec in CLIMATE_VARIABLES:
         if spec.internal_units:
             converts = f"{spec.internal_units}: {converts}" if converts else spec.internal_units
     clim_lines.append(
-        f"| `{spec.name}` | `{spec.sipnet_name}` | {KIND_TEXT[spec.kind]} | "
+        f"| `{spec.name}` | `{spec.sipnet_name}` | {spec.time_reference} | "
         f"{spec.formatted_units()} | {converts} | {aliases} | {spec.description} |"
     )
 

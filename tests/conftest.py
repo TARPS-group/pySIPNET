@@ -4,9 +4,6 @@ from pathlib import Path
 
 import pytest
 
-DATA_DIR = Path(__file__).parent.parent / "data"
-SAMPLE_CLIM_V1 = DATA_DIR / "era5_site1.clim"
-
 
 @pytest.fixture(scope="session")
 def sipnet_source_params() -> set[str]:
@@ -49,23 +46,12 @@ def reference_fixture_dir() -> Path:
 def reference_clim_path() -> Path:
     """Path to the committed reference climate file.
 
-    Prefer this over :func:`sample_clim_path` for anything that must run in
-    CI: it lives under ``tests/fixtures/`` and is tracked by git, whereas
-    ``data/`` is gitignored and absent from a fresh clone.
+    Lives under ``tests/fixtures/`` and is tracked by git, so it is there in
+    CI and after a fresh clone. Any test needing climate input should use
+    this rather than reaching into the gitignored ``data/`` directory, which
+    only exists on the machine that put it there.
     """
     return Path(__file__).parent / "fixtures" / "niwot_reference" / "sipnet.clim"
-
-
-@pytest.fixture
-def sample_clim_path() -> Path:
-    """Path to the sample climate file in the gitignored ``data/`` directory.
-
-    Skips when absent, which is the normal state in CI and after a fresh
-    clone. Use :func:`reference_clim_path` for tests that must always run.
-    """
-    if not SAMPLE_CLIM_V1.exists():
-        pytest.skip(f"Sample climate data not present at {SAMPLE_CLIM_V1} (data/ is gitignored)")
-    return SAMPLE_CLIM_V1
 
 
 @pytest.fixture

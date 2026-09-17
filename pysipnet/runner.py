@@ -12,7 +12,7 @@ Dask, Parsl, Ray, etc.)::
     from concurrent.futures import ProcessPoolExecutor
     from pysipnet.runner import SIPNETRunner
 
-    runner = SIPNETRunner(flags=ModelFlags.forest())
+    runner = SIPNETRunner(flags=ModelFlags.standard())
 
     def run_one(config_dict):
         from pysipnet.parameters.model import SIPNETParameters
@@ -20,7 +20,7 @@ Dask, Parsl, Ray, etc.)::
         import pandas as pd
         params  = SIPNETParameters.model_validate(config_dict["params"])
         climate = ClimateDrivers.from_dataframe(pd.DataFrame(config_dict["climate"]))
-        return runner.run(params, climate).outputs.data.to_dict()
+        return runner.run(params, climate).outputs.pandas.to_dict()
 
     with ProcessPoolExecutor() as pool:
         results = list(pool.map(run_one, ensemble_configs))
@@ -501,7 +501,7 @@ class SIPNETRunner:
             return SIPNETOutput.from_dataframe(pd.DataFrame())
 
         def step_length() -> np.ndarray:
-            return climate.data["time_step_length"].to_numpy()
+            return climate.pandas["time_step_length"].to_numpy()
 
         if effective_output_dir is not None:
             dest = effective_output_dir / f"sipnet_{run_id}.out"

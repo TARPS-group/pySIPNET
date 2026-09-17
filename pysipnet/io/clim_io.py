@@ -197,7 +197,7 @@ def read_clim_file(path: Path, n_columns: Literal[12, 14] = 14) -> ClimateDriver
 
 
 def _write_14_column(climate: ClimateDrivers, path: Path) -> None:
-    df = climate.data
+    df = climate.pandas
     rows: list[str] = []
     for _, row in df.iterrows():
         parts = [
@@ -221,7 +221,7 @@ def _write_14_column(climate: ClimateDrivers, path: Path) -> None:
 
 
 def _write_12_column(climate: ClimateDrivers, path: Path) -> None:
-    df = climate.data
+    df = climate.pandas
     rows: list[str] = []
     for _, row in df.iterrows():
         parts = [

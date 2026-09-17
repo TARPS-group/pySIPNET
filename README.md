@@ -44,7 +44,7 @@ result = model()                    # baseline run
 result = model(max_photosynthesis_rate=140.0)         # override a single parameter
 result = model(climate=other_site)  # swap climate drivers
 
-print(result.outputs.data[["net_ecosystem_exchange", "gross_primary_production"]].sum())
+print(result.outputs.pandas[["net_ecosystem_exchange", "gross_primary_production"]].sum())
 ```
 
 ## Documentation

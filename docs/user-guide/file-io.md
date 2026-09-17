@@ -79,11 +79,14 @@ page (`air_temperature`, `vapor_pressure_deficit`, `time_step_length`, ...).
 SIPNET's own column names (`tair`, `vpdSoil`, `length`) and renames them; the
 stored columns are always the full names.
 
+`data/my_site.clim` here and below stands in for your own climate file; the
+[Quickstart](quickstart.md) runs on the Niwot Ridge year this repository ships.
+
 ```python
 # Full data in memory — good for interactive use and data manipulation
-climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
-climate.data        # DataFrame always available
-climate.dataset     # the same on an xarray `time` axis shared with outputs
+climate = ClimateDrivers.from_file("data/my_site.clim", n_columns=14)
+climate.pandas      # DataFrame always available
+climate.xarray      # the same on an xarray `time` axis shared with outputs
 climate.validate()  # full validation runs immediately
 ```
 
@@ -95,13 +98,13 @@ original file directly, skipping the read-then-write cycle entirely.
 
 ```python
 # No data loaded — good for ensemble workflows with pre-existing files
-climate = ClimateDrivers.from_path("data/era5_site1.clim", n_columns=14)
+climate = ClimateDrivers.from_path("data/my_site.clim", n_columns=14)
 
 print(climate.n_timesteps)  # available without loading data
 print(climate.date_range)   # also available without loading data
 ```
 
-Accessing `climate.data` triggers a full load and caches the result.
+Accessing `climate.pandas` triggers a full load and caches the result.
 
 !!! warning "Chronological ordering assumption"
     `from_path` validates the column count of the first and last rows but
@@ -162,8 +165,8 @@ runner = SIPNETRunner(flags=ModelFlags.standard())
 result = runner.run(params, climate)
 
 # Data is already in memory:
-df = result.outputs.data          # pandas DataFrame
-ds = result.outputs.dataset       # xarray Dataset with units and descriptions
+df = result.outputs.pandas    # pandas DataFrame
+ds = result.outputs.xarray    # xarray Dataset with units and descriptions
 nee = result.outputs["nee"]       # one variable, by name or alias
 ```
 
@@ -184,11 +187,11 @@ print(result.outputs.source_path)
 # PosixPath('run_outputs/sipnet_baseline.out')
 
 # Trigger load on demand:
-df = result.outputs.data
+df = result.outputs.pandas
 ```
 
 The runner records the timestep lengths from the climate drivers on the
-`SIPNETOutput`, so `result.outputs.dataset` knows when each step ends even
+`SIPNETOutput`, so `result.outputs.xarray` knows when each step ends even
 when the output is read from disk later.
 
 ### output_dir: runner-level and per-call

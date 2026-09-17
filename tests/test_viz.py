@@ -198,7 +198,7 @@ class TestDashboardOnARealResult:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             full = read_clim_file(reference, n_columns=14)
-        climate = ClimateDrivers.from_dataframe(full.data.head(40).copy(), n_columns=14)
+        climate = ClimateDrivers.from_dataframe(full.pandas.head(40).copy(), n_columns=14)
 
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, climate)
         figure = dashboard(result)

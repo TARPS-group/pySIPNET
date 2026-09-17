@@ -107,7 +107,7 @@ only the absolute path and a SHA-256 hash of the source file:
 ```python
 from pysipnet import ClimateDrivers, ModelFlags, RunConfig
 
-climate = ClimateDrivers.from_path("data/era5_site1.clim")
+climate = ClimateDrivers.from_path("data/my_site.clim")
 config = RunConfig(flags=ModelFlags.standard(), params=params, climate=climate)
 config.save("context/", reference_only=True)
 ```
@@ -252,7 +252,7 @@ to avoid copying the climate file for every evaluation.
 ```python
 from pysipnet import ClimateDrivers, ModelFlags, RunConfig, SIPNETModel, SIPNETRunner
 
-climate = ClimateDrivers.from_path("data/era5_site1.clim")
+climate = ClimateDrivers.from_path("data/my_site.clim")
 context = RunConfig(flags=ModelFlags.standard(), params=base_params, climate=climate)
 runner  = SIPNETRunner(flags=context.flags)
 model   = SIPNETModel(runner, base_params=context.params, base_climate=context.climate)

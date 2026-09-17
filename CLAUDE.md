@@ -240,7 +240,7 @@ registry names in `CLIMATE_VARIABLES` (`pysipnet/variables.py`):
 the file units and SIPNET's internal conversion below as `units` /
 `internal_units` / `internal_conversion`. `ClimateDrivers.from_dataframe`
 accepts the old short names and SIPNET's names as aliases and renames them;
-`ClimateDrivers.dataset` gives the same 1-D `time` layout as outputs. The
+`ClimateDrivers.xarray` gives the same 1-D `time` layout as outputs. The
 docs page `reference/climate-drivers.md` is generated from the registry.
 
 | Col (12) | Col (14) | Name | File units | Internal conversion |
@@ -360,7 +360,7 @@ Units are UDUNITS strings (`"g m-2"`, `"cm d-1"`, `"1"`) validated at import by
 `"H2O"`), never in the string, because Pint reads `g C` as gram·coulomb without
 error.
 
-`SIPNETOutput` exposes `.data` (DataFrame), `.dataset` (xarray, one `time`
+`SIPNETOutput` exposes `.pandas` (DataFrame), `.xarray` (xarray Dataset, one `time`
 dimension = step start, plus `time_step_end` / `time_step_length` coordinates
 from the climate's `time_step_length` column, attributes from
 `VariableSpec.xarray_attributes()`), `["nee"]` (DataArray by name or alias) and
@@ -428,7 +428,7 @@ to SLA as `leafCSpWt = cFracLeaf / SLA`.
 
 `soilRespMoistEffect` is required when `water_hresp` is on (the default).
 `litterBreakdownRate` and `fracLitterRespired` are required when `litter_pool`
-is on — off in `ModelFlags.standard()`, on in `ModelFlags.forest()`.
+is on — off in `ModelFlags.standard()`, which is SIPNET's own default set.
 
 ### Allocation
 `fineRootAllocation`, `woodAllocation`, `fineRootTurnoverRate` (year⁻¹), `coarseRootTurnoverRate` (year⁻¹), `woodTurnoverRate` (year⁻¹)

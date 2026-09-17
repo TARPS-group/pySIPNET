@@ -36,7 +36,7 @@ requires_binary = pytest.mark.skipif(
 # reasonably ask for, and each requires a different set of parameters.
 FLAG_CASES = [
     pytest.param(ModelFlags.standard(), id="standard"),
-    pytest.param(ModelFlags.forest(), id="forest"),
+    pytest.param(ModelFlags(litter_pool=True), id="litter_pool"),
     pytest.param(ModelFlags(gdd=False, soil_phenol=True), id="soil-temperature-phenology"),
     pytest.param(ModelFlags(growth_resp=True), id="explicit-growth-respiration"),
     pytest.param(ModelFlags(snow=False), id="no-snow"),

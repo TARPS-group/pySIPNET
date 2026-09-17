@@ -136,7 +136,7 @@ class TestWrapperFidelity:
 
             shutil.rmtree(workdir, ignore_errors=True)
 
-        wrapper = result.outputs.data
+        wrapper = result.outputs.pandas
         assert list(wrapper.columns) == list(direct.columns)
         pd.testing.assert_frame_equal(
             wrapper.reset_index(drop=True),
@@ -161,7 +161,7 @@ class TestWrapperFidelity:
         runner = SIPNETRunner(flags=ModelFlags.standard())
         result = runner.run(params, climate, run_id="fidelity_reference")
         assert result.provenance.success, result.provenance.stderr
-        wrapper = result.outputs.data
+        wrapper = result.outputs.pandas
 
         assert list(wrapper.columns) == list(native.columns)
         assert len(wrapper) == len(native)

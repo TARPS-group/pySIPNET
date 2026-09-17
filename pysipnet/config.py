@@ -164,7 +164,7 @@ class RunConfig:
         For configs saved with ``reference_only=False`` (the default), the
         climate is loaded lazily via
         :meth:`~pysipnet.climate.ClimateDrivers.from_path` — no data is read
-        from disk until :attr:`~pysipnet.climate.ClimateDrivers.data` is first
+        from disk until :attr:`~pysipnet.climate.ClimateDrivers.pandas` is first
         accessed.
 
         Parameters

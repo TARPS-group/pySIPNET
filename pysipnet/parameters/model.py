@@ -172,11 +172,15 @@ class ModelFlags(BaseModel):
     supply, so the flags belong in the saved record of a run rather than being
     passed in ad hoc.
 
-    Named starting points
-    ---------------------
-    :meth:`standard` and :meth:`forest` return the two configurations pySIPNET
-    has always shipped. Any other combination is equally valid — build one
-    directly with keyword arguments.
+    Defaults
+    --------
+    Every field's default is the default SIPNET itself compiles in, read from
+    the ``CREATE_INT_CONTEXT`` calls in ``src/common/context.c`` at the pinned
+    commit: ``gdd``, ``snow`` and ``water_hresp`` on, everything else off. A
+    bare ``ModelFlags()`` therefore runs SIPNET exactly as the binary would
+    with no flags in ``sipnet.in``. :meth:`standard` is the same thing under a
+    name, for run records that read better. Any other combination is equally
+    valid — build one directly with keyword arguments.
 
     Not every flag can be used
     --------------------------
@@ -290,7 +294,7 @@ class ModelFlags(BaseModel):
     """Optional label for this configuration, for run records and plots.
 
     Purely descriptive: it is never written to ``sipnet.in`` and never affects
-    the model. :meth:`standard` and :meth:`forest` set it for you.
+    the model. :meth:`standard` sets it for you.
 
     Note that it does take part in equality, so a labeled configuration is
     not equal to an identical unlabeled one. Compare
@@ -380,7 +384,7 @@ class ModelFlags(BaseModel):
 
         Example::
 
-            >>> ModelFlags.forest().to_config_keys()["LITTER_POOL"]
+            >>> ModelFlags(litter_pool=True).to_config_keys()["LITTER_POOL"]
             1
         """
         return {
@@ -399,22 +403,19 @@ class ModelFlags(BaseModel):
 
     @classmethod
     def standard(cls) -> ModelFlags:
-        """Snow, degree-day leaf-out, and moisture-sensitive soil respiration.
+        """SIPNET's own defaults: snow, degree-day leaf-out, moist soil respiration.
 
-        The sensible default for most sites, and what you get from
-        ``ModelFlags()``.
+        Identical to ``ModelFlags()`` apart from carrying ``name="standard"``,
+        and identical to what SIPNET does when ``sipnet.in`` sets no flags at
+        all: ``src/common/context.c`` at the pinned commit registers ``gdd``,
+        ``snow`` and ``waterHResp`` as ``ARG_ON`` and every other feature flag
+        as ``ARG_OFF``.
+
+        "Standard" is pySIPNET's word, not SIPNET's — upstream documents these
+        as defaults and has no name for the set. It is not an ecological
+        recommendation for any particular site.
         """
         return cls(name="standard")
-
-    @classmethod
-    def forest(cls) -> ModelFlags:
-        """:meth:`standard` plus a separate litter carbon pool.
-
-        Suited to sites where litter accumulates and decomposes on a
-        noticeably different timescale from soil carbon, such as boreal or
-        deciduous forest.
-        """
-        return cls(litter_pool=True, name="forest")
 
 
 # ── Sub-models ─────────────────────────────────────────────────────────────────

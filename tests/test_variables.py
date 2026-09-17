@@ -133,7 +133,7 @@ def test_spec_is_complete(spec: VariableSpec):
     assert spec.description.strip()
     assert spec.long_label.strip()
     assert spec.group
-    if spec.kind is VariableKind.COORDINATE:
+    if spec.kind is VariableKind.TIMESTEP_START_COORDINATE:
         assert spec.aggregation is Aggregation.NONE
     else:
         assert spec.output_decimals is not None, "every numeric column has a printf precision"

@@ -32,24 +32,28 @@ from pysipnet.parameters import (
 
 params = SIPNETParameters(
     initial_conditions=InitialConditions(
-        total_wood_carbon=30000, leaf_area_index=0.0, soil_carbon=10000,
-        soil_wetness_fraction=0.5, fine_root_fraction=0.05, coarse_root_fraction=0.15,
+        total_wood_carbon=9600.0, leaf_area_index=4.2, soil_carbon=16000.0,
+        soil_wetness_fraction=0.5, fine_root_fraction=0.2, coarse_root_fraction=0.2,
     ),
     photosynthesis=PhotosynthesisParams(
-        max_photosynthesis_rate=112.0, daily_mean_photosynthesis_fraction=0.76, foliar_respiration_fraction=0.1,
+        max_photosynthesis_rate=8.3, daily_mean_photosynthesis_fraction=0.76, foliar_respiration_fraction=0.1,
         min_photosynthesis_temperature=2.0, optimum_photosynthesis_temperature=24.0,
-        vapor_pressure_deficit_slope=0.05, vapor_pressure_deficit_exponent=1.0,
-        half_saturation_light=300.0, light_extinction_coefficient=0.5,
+        vapor_pressure_deficit_slope=0.05, vapor_pressure_deficit_exponent=2.0,
+        half_saturation_light=17.0, light_extinction_coefficient=0.5,
     ),
     # ... and the five remaining groups
 )
 
-climate = ClimateDrivers.from_file("data/era5_site1.clim", n_columns=14)
+climate = ClimateDrivers.from_file("data/my_site.clim", n_columns=14)
 runner  = SIPNETRunner(flags=ModelFlags.standard())
 result  = runner.run(params, climate)
 
 print(result.outputs["nee"])   # net_ecosystem_exchange, with units attached
 ```
+
+`data/my_site.clim` stands in for your own climate file.  For something that
+runs as written, the [Quickstart](user-guide/quickstart.md) uses the year of
+Niwot Ridge forcing this repository ships.
 
 ## Getting started
 

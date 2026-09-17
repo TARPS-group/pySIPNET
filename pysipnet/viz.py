@@ -239,15 +239,15 @@ def dashboard(
             "Install with: pip install pysipnet[viz]"
         ) from exc
 
-    # result.outputs is a SIPNETOutput wrapper; the DataFrame is .data.
-    ts = result.outputs.data
+    # result.outputs is a SIPNETOutput wrapper; the DataFrame is .pandas.
+    ts = result.outputs.pandas
     if ts.empty:
         raise ValueError(
             "result.outputs is empty — the SIPNET run may have failed "
             f"(returncode={result.provenance.returncode})."
         )
 
-    clim = result.climate.data
+    clim = result.climate.pandas
 
     x_ts = ts["year"] + (ts["day_of_year"] - 1) / 365
     x_clim = clim["year"] + (clim["day_of_year"] - 1) / 365

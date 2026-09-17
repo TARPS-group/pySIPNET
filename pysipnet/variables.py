@@ -23,11 +23,12 @@ Time convention
 ---------------
 SIPNET labels each row with the **start** of the timestep (``year``,
 ``day_of_year``, ``hour_of_day``), but pools are written **after** the step
-has been applied, so a ``STATE`` value is the pool at the *end* of the step.
-``FLUX`` values are integrals over the step, ``MEAN`` values are means over
-it, the single ``RATE`` value is a per-day rate for the step, and
-``CUMULATIVE`` values run from the start of the simulation to the end of the
-step (and continue across a restart, which carries them in the checkpoint).
+has been applied, so a ``TIMESTEP_END_STATE`` value is the pool at the *end* of
+the step. ``TIMESTEP_TOTAL`` values are accumulated over the step,
+``TIMESTEP_MEAN`` values are means over it, the single ``DAILY_RATE`` value is a
+per-day rate for the step, and ``CUMULATIVE`` values run from the start of the
+simulation to the end of the step (and continue across a restart, which carries
+them in the checkpoint).
 Each spec's :attr:`VariableSpec.time_reference` states this in words, and the
 same text travels as an attribute on the xarray representation so a user never
 has to look it up.
@@ -66,19 +67,19 @@ NAME_PATTERN = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
 class VariableKind(StrEnum):
     """What a value in a column represents, relative to the timestep it is labeled with."""
 
-    COORDINATE = "coordinate"
+    TIMESTEP_START_COORDINATE = "timestep_start_coordinate"
     """Identifies the row: the start of the timestep."""
 
-    STATE = "state"
+    TIMESTEP_END_STATE = "timestep_end_state"
     """A pool, reported at the end of the timestep."""
 
-    FLUX = "flux"
-    """A transfer integrated over the timestep."""
+    TIMESTEP_TOTAL = "timestep_total"
+    """A quantity accumulated over the timestep: a flux integrated over it, or its duration."""
 
-    RATE = "rate"
+    DAILY_RATE = "daily_rate"
     """A per-day transfer rate that applied during the timestep."""
 
-    MEAN = "mean"
+    TIMESTEP_MEAN = "timestep_mean"
     """A quantity averaged over the timestep."""
 
     CUMULATIVE = "cumulative"
@@ -95,30 +96,30 @@ class Aggregation(StrEnum):
 
 
 _AGGREGATION_FOR_KIND: dict[VariableKind, Aggregation] = {
-    VariableKind.COORDINATE: Aggregation.NONE,
-    VariableKind.STATE: Aggregation.MEAN,
-    VariableKind.FLUX: Aggregation.SUM,
-    VariableKind.RATE: Aggregation.MEAN,
-    VariableKind.MEAN: Aggregation.MEAN,
+    VariableKind.TIMESTEP_START_COORDINATE: Aggregation.NONE,
+    VariableKind.TIMESTEP_END_STATE: Aggregation.MEAN,
+    VariableKind.TIMESTEP_TOTAL: Aggregation.SUM,
+    VariableKind.DAILY_RATE: Aggregation.MEAN,
+    VariableKind.TIMESTEP_MEAN: Aggregation.MEAN,
     VariableKind.CUMULATIVE: Aggregation.LAST,
 }
 
 _TIME_REFERENCE_FOR_KIND: dict[VariableKind, str] = {
-    VariableKind.COORDINATE: "start of the timestep",
-    VariableKind.STATE: "value at the end of the timestep",
-    VariableKind.FLUX: "total over the timestep",
-    VariableKind.RATE: "per-day rate during the timestep",
-    VariableKind.MEAN: "mean over the timestep",
+    VariableKind.TIMESTEP_START_COORDINATE: "start of the timestep",
+    VariableKind.TIMESTEP_END_STATE: "value at the end of the timestep",
+    VariableKind.TIMESTEP_TOTAL: "total over the timestep",
+    VariableKind.DAILY_RATE: "per-day rate during the timestep",
+    VariableKind.TIMESTEP_MEAN: "mean over the timestep",
     VariableKind.CUMULATIVE: "running total from the start of the run to the end of the timestep",
 }
 
 # ``cell_methods`` vocabulary from the Climate and Forecast (CF) conventions.
 _CELL_METHODS_FOR_KIND: dict[VariableKind, str | None] = {
-    VariableKind.COORDINATE: None,
-    VariableKind.STATE: "time: point",
-    VariableKind.FLUX: "time: sum",
-    VariableKind.RATE: "time: mean",
-    VariableKind.MEAN: "time: mean",
+    VariableKind.TIMESTEP_START_COORDINATE: None,
+    VariableKind.TIMESTEP_END_STATE: "time: point",
+    VariableKind.TIMESTEP_TOTAL: "time: sum",
+    VariableKind.DAILY_RATE: "time: mean",
+    VariableKind.TIMESTEP_MEAN: "time: mean",
     VariableKind.CUMULATIVE: "time: sum",
 }
 
@@ -134,7 +135,7 @@ class VariableSpec:
     """The exact header token SIPNET writes."""
 
     kind: VariableKind
-    """Pool, flux, rate, mean, cumulative total or coordinate."""
+    """What the value is relative to its timestep; see :class:`VariableKind`."""
 
     units: str
     """UDUNITS-style unit string, physical units only (see :mod:`pysipnet.units`)."""
@@ -250,7 +251,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="year",
         sipnet_name="year",
-        kind=VariableKind.COORDINATE,
+        kind=VariableKind.TIMESTEP_START_COORDINATE,
         units="1",
         description="Calendar year at the start of the timestep.",
         long_label="Year",
@@ -259,7 +260,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="day_of_year",
         sipnet_name="day",
-        kind=VariableKind.COORDINATE,
+        kind=VariableKind.TIMESTEP_START_COORDINATE,
         units="1",
         description="Day of year at the start of the timestep; 1 is January 1st.",
         long_label="Day of year",
@@ -270,7 +271,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="hour_of_day",
         sipnet_name="time",
-        kind=VariableKind.COORDINATE,
+        kind=VariableKind.TIMESTEP_START_COORDINATE,
         units="h",
         description="Hours after midnight at the start of the timestep; may be fractional.",
         long_label="Hour of day",
@@ -281,7 +282,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="wood_carbon",
         sipnet_name="plantWoodC",
-        kind=VariableKind.STATE,
+        kind=VariableKind.TIMESTEP_END_STATE,
         **_GC,
         description=(
             "Total wood carbon: the structural wood pool plus the storage-lag term "
@@ -297,7 +298,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="leaf_carbon",
         sipnet_name="plantLeafC",
-        kind=VariableKind.STATE,
+        kind=VariableKind.TIMESTEP_END_STATE,
         **_GC,
         description=(
             "Carbon in leaves. Leaf area index is leaf_carbon divided by the "
@@ -312,7 +313,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="wood_growth",
         sipnet_name="woodCreation",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GC,
         description="Carbon allocated to the wood pool over the timestep.",
         long_label="Wood growth",
@@ -323,7 +324,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="soil_carbon",
         sipnet_name="soil",
-        kind=VariableKind.STATE,
+        kind=VariableKind.TIMESTEP_END_STATE,
         **_GC,
         description="Carbon in the single soil organic matter pool.",
         long_label="Soil carbon",
@@ -335,7 +336,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="coarse_root_carbon",
         sipnet_name="coarseRootC",
-        kind=VariableKind.STATE,
+        kind=VariableKind.TIMESTEP_END_STATE,
         **_GC,
         description="Carbon in coarse roots.",
         long_label="Coarse root carbon",
@@ -347,7 +348,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="fine_root_carbon",
         sipnet_name="fineRootC",
-        kind=VariableKind.STATE,
+        kind=VariableKind.TIMESTEP_END_STATE,
         **_GC,
         description="Carbon in fine roots.",
         long_label="Fine root carbon",
@@ -359,7 +360,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="litter_carbon",
         sipnet_name="litter",
-        kind=VariableKind.STATE,
+        kind=VariableKind.TIMESTEP_END_STATE,
         **_GC,
         description="Carbon in the litter pool. Constant zero unless the litter pool is on.",
         long_label="Litter carbon",
@@ -372,7 +373,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="soil_water",
         sipnet_name="soilWater",
-        kind=VariableKind.STATE,
+        kind=VariableKind.TIMESTEP_END_STATE,
         units="cm",
         constituent="H2O",
         description="Plant-available soil water, as a depth of liquid water.",
@@ -384,7 +385,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="soil_wetness_fraction",
         sipnet_name="soilWetnessFrac",
-        kind=VariableKind.MEAN,
+        kind=VariableKind.TIMESTEP_MEAN,
         units="1",
         description=(
             "Soil water as a fraction of water holding capacity, averaged over the "
@@ -399,7 +400,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="snow_water_equivalent",
         sipnet_name="snow",
-        kind=VariableKind.STATE,
+        kind=VariableKind.TIMESTEP_END_STATE,
         units="cm",
         constituent="H2O",
         description="Snowpack as a depth of liquid water equivalent. Simulated whether or not "
@@ -415,7 +416,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="net_primary_production",
         sipnet_name="npp",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GC,
         description="Gross primary production minus autotrophic respiration over the timestep.",
         long_label="Net primary production",
@@ -427,7 +428,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="net_ecosystem_exchange",
         sipnet_name="nee",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GC,
         description=(
             "Net carbon flux between ecosystem and atmosphere over the timestep: "
@@ -460,7 +461,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="gross_primary_production",
         sipnet_name="gpp",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GC,
         description="Gross photosynthesis over the timestep.",
         long_label="Gross primary production",
@@ -472,7 +473,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="above_ground_respiration",
         sipnet_name="rAboveground",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GC,
         description=(
             "Foliar and wood maintenance respiration over the timestep, plus growth "
@@ -486,7 +487,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="soil_respiration",
         sipnet_name="rSoil",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GC,
         description=(
             "Respiration from below ground over the timestep: root respiration plus "
@@ -501,7 +502,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="root_respiration",
         sipnet_name="rRoot",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GC,
         description="Fine plus coarse root respiration over the timestep.",
         long_label="Root respiration",
@@ -512,7 +513,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="autotrophic_respiration",
         sipnet_name="ra",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GC,
         description="Plant respiration over the timestep: above-ground plus root respiration.",
         long_label="Autotrophic respiration",
@@ -524,7 +525,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="heterotrophic_respiration",
         sipnet_name="rh",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GC,
         description="Microbial respiration from the soil and litter pools over the timestep.",
         long_label="Heterotrophic respiration",
@@ -536,7 +537,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="ecosystem_respiration",
         sipnet_name="rtot",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GC,
         description="Total respiration over the timestep: autotrophic plus heterotrophic.",
         long_label="Ecosystem respiration",
@@ -548,7 +549,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="evapotranspiration",
         sipnet_name="evapotranspiration",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         units="cm",
         constituent="H2O",
         description=(
@@ -564,7 +565,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="transpiration_rate",
         sipnet_name="fluxestranspiration",
-        kind=VariableKind.RATE,
+        kind=VariableKind.DAILY_RATE,
         units="cm d-1",
         constituent="H2O",
         description=(
@@ -580,7 +581,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="mineral_nitrogen",
         sipnet_name="minN",
-        kind=VariableKind.STATE,
+        kind=VariableKind.TIMESTEP_END_STATE,
         **_GN,
         description="Soil mineral nitrogen pool (soil and litter share one pool).",
         long_label="Mineral nitrogen",
@@ -592,7 +593,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="soil_organic_nitrogen",
         sipnet_name="soilOrgN",
-        kind=VariableKind.STATE,
+        kind=VariableKind.TIMESTEP_END_STATE,
         **_GN,
         description="Nitrogen in soil organic matter.",
         long_label="Soil organic nitrogen",
@@ -604,7 +605,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="litter_nitrogen",
         sipnet_name="litterN",
-        kind=VariableKind.STATE,
+        kind=VariableKind.TIMESTEP_END_STATE,
         **_GN,
         description="Nitrogen in the litter pool.",
         long_label="Litter nitrogen",
@@ -616,7 +617,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="plant_nitrogen_storage",
         sipnet_name="plantStorageN",
-        kind=VariableKind.STATE,
+        kind=VariableKind.TIMESTEP_END_STATE,
         **_GN,
         description=(
             "Nitrogen held in plant storage, filled by resorption at leaf-off and drawn "
@@ -631,7 +632,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="nitrogen_volatilization",
         sipnet_name="n2o",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GN,
         description=(
             "Mineral nitrogen lost to the atmosphere by volatilization over the "
@@ -646,7 +647,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="nitrogen_leaching",
         sipnet_name="nLeaching",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GN,
         description="Mineral nitrogen lost by leaching over the timestep.",
         long_label="Nitrogen leaching",
@@ -658,7 +659,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="nitrogen_fixation",
         sipnet_name="nFixation",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GN,
         description="Plant nitrogen demand met by fixation over the timestep.",
         long_label="Nitrogen fixation",
@@ -670,7 +671,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="nitrogen_uptake",
         sipnet_name="nUptake",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GN,
         description="Plant nitrogen demand met by uptake from the mineral pool over the timestep.",
         long_label="Nitrogen uptake",
@@ -682,7 +683,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="methane_production",
         sipnet_name="ch4",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         **_GC,
         description=(
             "Methane produced from the soil and litter pools over the timestep, "
@@ -698,7 +699,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
     _spec(
         name="wood_storage_carbon",
         sipnet_name="nppStorage",
-        kind=VariableKind.STATE,
+        kind=VariableKind.TIMESTEP_END_STATE,
         **_GC,
         description=(
             "Storage-lag component of wood_carbon: the difference between carbon gained "
@@ -715,7 +716,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
 """Every column SIPNET writes at the pinned version, in the order it writes them."""
 
 TIME_COORDINATE_NAMES: tuple[str, ...] = tuple(
-    v.name for v in OUTPUT_VARIABLES if v.kind == VariableKind.COORDINATE
+    v.name for v in OUTPUT_VARIABLES if v.kind == VariableKind.TIMESTEP_START_COORDINATE
 )
 """``("year", "day_of_year", "hour_of_day")``: the columns that identify a row."""
 
@@ -773,7 +774,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
     _climate(
         name="year",
         sipnet_name="year",
-        kind=VariableKind.COORDINATE,
+        kind=VariableKind.TIMESTEP_START_COORDINATE,
         units="1",
         description="Calendar year at the start of the timestep.",
         long_label="Year",
@@ -782,7 +783,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
     _climate(
         name="day_of_year",
         sipnet_name="day",
-        kind=VariableKind.COORDINATE,
+        kind=VariableKind.TIMESTEP_START_COORDINATE,
         units="1",
         description="Day of year at the start of the timestep; 1 is January 1st.",
         long_label="Day of year",
@@ -793,7 +794,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
     _climate(
         name="hour_of_day",
         sipnet_name="time",
-        kind=VariableKind.COORDINATE,
+        kind=VariableKind.TIMESTEP_START_COORDINATE,
         units="h",
         description="Hours after midnight at the start of the timestep; may be fractional.",
         long_label="Hour of day",
@@ -803,7 +804,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
     _climate(
         name="time_step_length",
         sipnet_name="length",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         units="d",
         description="Duration of the timestep in days. SIPNET also accepts a negative value "
         "meaning seconds; pySIPNET writes days only.",
@@ -814,7 +815,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
     _climate(
         name="air_temperature",
         sipnet_name="tair",
-        kind=VariableKind.MEAN,
+        kind=VariableKind.TIMESTEP_MEAN,
         units="degC",
         description="Mean air temperature over the timestep.",
         long_label="Air temperature",
@@ -824,7 +825,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
     _climate(
         name="soil_temperature",
         sipnet_name="tsoil",
-        kind=VariableKind.MEAN,
+        kind=VariableKind.TIMESTEP_MEAN,
         units="degC",
         description="Mean soil temperature over the timestep.",
         long_label="Soil temperature",
@@ -834,7 +835,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
     _climate(
         name="photosynthetically_active_radiation",
         sipnet_name="par",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         units="mol m-2",
         constituent="photons",
         description="Photosynthetically active radiation summed over the timestep, as moles "
@@ -851,7 +852,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
     _climate(
         name="precipitation",
         sipnet_name="precip",
-        kind=VariableKind.FLUX,
+        kind=VariableKind.TIMESTEP_TOTAL,
         units="mm",
         constituent="H2O",
         description="Total precipitation over the timestep as a depth of liquid water "
@@ -865,7 +866,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
     _climate(
         name="vapor_pressure_deficit",
         sipnet_name="vpd",
-        kind=VariableKind.MEAN,
+        kind=VariableKind.TIMESTEP_MEAN,
         units="Pa",
         description="Mean vapor pressure deficit of the air over the timestep. SIPNET clamps "
         "values below a tiny positive number up to it.",
@@ -879,7 +880,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
     _climate(
         name="soil_vapor_pressure_deficit",
         sipnet_name="vpdSoil",
-        kind=VariableKind.MEAN,
+        kind=VariableKind.TIMESTEP_MEAN,
         units="Pa",
         description="Mean vapor pressure deficit between the soil and the air over the "
         "timestep, using saturation vapor pressure at the soil temperature.",
@@ -892,7 +893,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
     _climate(
         name="vapor_pressure",
         sipnet_name="vPress",
-        kind=VariableKind.MEAN,
+        kind=VariableKind.TIMESTEP_MEAN,
         units="Pa",
         description="Mean vapor pressure in the canopy airspace over the timestep.",
         long_label="Vapor pressure",
@@ -904,7 +905,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
     _climate(
         name="wind_speed",
         sipnet_name="wspd",
-        kind=VariableKind.MEAN,
+        kind=VariableKind.TIMESTEP_MEAN,
         units="m s-1",
         description="Mean wind speed over the timestep. SIPNET clamps values below a tiny "
         "positive number up to it.",
