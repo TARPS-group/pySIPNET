@@ -40,10 +40,12 @@ Time convention
 ---------------
 SIPNET labels each row with the **start** of its timestep.  Pools are reported
 at the **end** of the step, fluxes are totals **over** the step.  The Dataset
-makes this explicit: the ``time`` coordinate is the step start and says so in
-its attributes, ``time_step_end``, ``time_step_length`` and a CF
-``time_bounds`` variable give the interval each row covers, and every data
-variable has a ``time_reference`` attribute in words.
+therefore puts its ``time`` coordinate at the step **end**, the one instant at
+which every variable's CF ``cell_methods`` is literally true; ``time_step_start``,
+``time_step_length`` and a CF ``time_bounds`` variable give the interval each
+row covers, and every data variable has ``kind`` and ``time_reference``
+attributes in words.  See :mod:`pysipnet.dataset` for the reasoning, and
+:func:`pysipnet.resample.resample` for combining steps into coarser ones.
 
 Flag-dependent variables
 ------------------------
@@ -278,11 +280,11 @@ class SIPNETOutput:
         -------
         xarray.Dataset or pandas.DataFrame
             The Dataset has one dimension, ``time``, whose coordinate is the
-            **start** of each timestep as ``datetime64``; ``year``,
-            ``day_of_year`` and ``hour_of_day`` as auxiliary coordinates on it;
-            ``time_step_length``, ``time_step_end`` and a CF ``time_bounds``
-            variable describing the interval each row covers; and one data
-            variable per selected column, carrying the attributes from
+            **end** of each timestep as ``datetime64``; ``time_step_start``,
+            ``time_step_length`` and a CF ``time_bounds`` variable describing
+            the interval each row covers; ``year``, ``day_of_year`` and
+            ``hour_of_day`` as SIPNET labeled the row, i.e. the start; and one
+            data variable per selected column, carrying the attributes from
             :meth:`~pysipnet.variables.VariableSpec.xarray_attributes`. Columns
             the registry does not know become variables with no attributes.
         """

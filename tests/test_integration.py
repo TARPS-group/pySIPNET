@@ -137,12 +137,12 @@ class TestEndToEnd:
         assert dict(ds.sizes) == {"time": 30, "bounds": 2}
         assert ds["net_ecosystem_exchange"].dims == ("time",)
         assert not ds["net_ecosystem_exchange"].isnull().any()
-        assert ds["time"].attrs["long_name"] == "Start of timestep"
+        assert ds["time"].attrs["long_name"] == "End of timestep"
         expected_end = (
-            ds["time"].values
+            ds["time_step_start"].values
             + pd.to_timedelta(climate.pandas["time_step_length"].to_numpy(), unit="D").to_numpy()
         )
-        np.testing.assert_array_equal(ds["time_step_end"].values, expected_end)
+        np.testing.assert_array_equal(ds["time"].values, expected_end)
         assert ds["wood_carbon"].attrs["time_reference"] == "value at the end of the timestep"
         assert ds["net_ecosystem_exchange"].attrs["time_reference"] == "total over the timestep"
 
@@ -575,7 +575,7 @@ class TestOutputIO:
 
         ds = result.outputs[["nee"]]
         assert set(ds.data_vars) == {"net_ecosystem_exchange"}
-        assert "time_step_end" in ds.coords
+        assert "time_step_start" in ds.coords
 
     def test_getitem_with_a_list_gives_a_dataset(self, minimal_params, tmp_path):
         runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
@@ -942,7 +942,7 @@ class TestSnowFlag:
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, climate)
         assert result.provenance.success
         assert climate._data is None, "building the result must not read the climate file"
-        assert "time_step_end" in result.outputs.xarray.coords
+        assert "time_step_start" in result.outputs.xarray.coords
         assert climate._data is not None, "the Dataset needs the step lengths"
 
     def test_snow_melts_identically_with_the_flag_off_when_the_rate_is_supplied(

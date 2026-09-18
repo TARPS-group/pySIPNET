@@ -10,7 +10,11 @@ from __future__ import annotations
 import mkdocs_gen_files
 
 from pysipnet.parameters.model import PARAMETER_SPECS
-from pysipnet.variables import CLIMATE_VARIABLES, OUTPUT_VARIABLES
+from pysipnet.variables import (
+    CLIMATE_VARIABLES,
+    OUTPUT_VARIABLES,
+    RESAMPLING_METHODS_FOR_KIND,
+)
 
 lines = [
     "# Output variables",
@@ -19,13 +23,15 @@ lines = [
     "[`pysipnet.variables.OUTPUT_VARIABLES`][pysipnet.variables]. This page is",
     "generated from the registry.",
     "",
-    "**Time convention.** Each row is labeled with the *start* of its timestep",
+    "**Time convention.** SIPNET labels each row with the *start* of its timestep",
     "(`year`, `day_of_year`, `hour_of_day`). A pool is reported at the *end* of that",
     "step; a flux is the total *over* the step; the one rate column is a per-day rate",
     "during the step; a cumulative value runs from the start of the simulation to the",
     "end of the step. The `Time reference` column below says which applies, and the",
     "same text travels on every variable as the `time_reference` attribute of",
-    "`result.outputs.xarray`.",
+    "`result.outputs.xarray`, whose `time` coordinate is the *end* of the step so that",
+    "the CF `cell_methods` attribute is literally true. `Resample` lists the methods",
+    "[`resample`][pysipnet.resample.resample] accepts for the variable.",
     "",
     "**Precision.** SIPNET prints each column with a fixed number of decimals",
     "(`Decimals`). Treat it as a quantization floor when fitting to output.",
@@ -37,18 +43,20 @@ lines = [
     '**Aliases.** `result.outputs["nee"]` and `result.outputs.select(["nee"])` accept',
     "the aliases listed as well as the full names; column names are always the full names.",
     "",
-    "| Name | SIPNET column | Time reference | Units | Decimals | Requires flag | Aliases | Description |",
-    "|:-----|:--------------|:---------------|:------|:---------|:--------------|:--------|:------------|",
+    "| Name | SIPNET column | Time reference | Resample | Units | Decimals | Requires flag "
+    "| Aliases | Description |",
+    "|:-----|:--------------|:---------------|:---------|:------|:---------|:--------------|:--------|:------------|",
 ]
 for spec in OUTPUT_VARIABLES:
     aliases = ", ".join(f"`{a}`" for a in spec.aliases) or ""
     decimals = "" if spec.output_decimals is None else str(spec.output_decimals)
     flag = f"`{spec.requires_flag}`" if spec.requires_flag else ""
+    methods = ", ".join(f"`{m}`" for m in sorted(RESAMPLING_METHODS_FOR_KIND[spec.kind]))
     description = spec.description
     if spec.sign_convention:
         description += f" Sign: {spec.sign_convention}."
     lines.append(
-        f"| `{spec.name}` | `{spec.sipnet_name}` | {spec.time_reference} | "
+        f"| `{spec.name}` | `{spec.sipnet_name}` | {spec.time_reference} | {methods} | "
         f"{spec.formatted_units()} | {decimals} | {flag} | {aliases} | {description} |"
     )
 
