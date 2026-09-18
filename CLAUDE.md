@@ -400,7 +400,9 @@ length, and an invalid pairing raises with the reason and the valid menu.
 `RESAMPLED_KIND` gives the result's kind (a pool averaged is a
 `timestep_mean`), and the result's `kind`/`cell_methods`/`time_reference`
 attributes are rewritten accordingly. The old `aggregation` attribute and
-`Aggregation` enum are gone. Step lengths come from the climate's `time_step_length`
+`Aggregation` enum are gone.
+
+Step lengths come from the climate's `time_step_length`
 column; when the output has no climate attached they are **inferred** from
 consecutive timestamps (exact except for the last step, which repeats its
 predecessor), and `time_step_length_source` in the Dataset's attributes says

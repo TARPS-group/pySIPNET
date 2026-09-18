@@ -651,6 +651,29 @@ def test_step_lengths_must_increase_the_clock():
     )
     with pytest.raises(ValueError, match="do not increase"):
         build_output_dataset(repeated)
+    # Supplying the lengths does not excuse the timestamps.
+    with pytest.raises(ValueError, match="do not increase"):
+        build_output_dataset(repeated, time_step_length=np.array([0.5, 0.5, 1.0]))
+
+
+def test_a_sub_minute_step_still_snaps_forward():
+    """Snapping can only move an end onto a later start, so the interval stays positive."""
+    import pandas as pd
+
+    from pysipnet.output import build_output_dataset
+
+    frame = pd.DataFrame(
+        {
+            "year": [2020] * 2,
+            "day_of_year": [1, 1],
+            "hour_of_day": [0.0, 0.01],  # 36 s apart
+            "net_ecosystem_exchange": [1.0, 2.0],
+        }
+    )
+    # 0.0001 d is 8.6 s, 27 s short of the next start: within the snap tolerance.
+    ds = build_output_dataset(frame, time_step_length=np.array([0.0001, 0.5]))
+    assert ds["time"].values[0] == ds["time_step_start"].values[1]
+    assert (ds["time"].values > ds["time_step_start"].values).all()
 
 
 def test_supplied_step_lengths_must_be_positive():

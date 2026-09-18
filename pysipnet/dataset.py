@@ -184,6 +184,19 @@ def _days_to_timedelta(days: np.ndarray) -> np.ndarray:
     return np.rint(values * _NS_PER_DAY).astype("int64").view("timedelta64[ns]")
 
 
+def _gaps_in_days(start: np.ndarray) -> np.ndarray:
+    """Differences between consecutive starts, refusing any that do not move forward."""
+    gaps = np.diff(start).astype("timedelta64[ns]").astype("int64") / _NS_PER_DAY
+    if (gaps <= 0).any():
+        row = int(np.argmax(gaps <= 0))
+        raise ValueError(
+            f"Timestamps do not increase at row {row + 1}: the step starting there is "
+            f"{gaps[row]} days after the one before it. Rows must be in strictly ascending "
+            "time order for the interval each one covers to mean anything."
+        )
+    return gaps
+
+
 def _infer_step_length(start: np.ndarray) -> np.ndarray | None:
     """Step lengths in days from consecutive starts, or ``None`` if undeterminable.
 
@@ -196,14 +209,7 @@ def _infer_step_length(start: np.ndarray) -> np.ndarray | None:
     """
     if len(start) < 2:
         return None
-    gaps = np.diff(start).astype("timedelta64[ns]").astype("int64") / _NS_PER_DAY
-    if (gaps <= 0).any():
-        row = int(np.argmax(gaps <= 0))
-        raise ValueError(
-            f"Timestamps do not increase at row {row + 1}: the step length inferred there "
-            f"is {gaps[row]} days. Rows must be in strictly ascending time order for the "
-            "interval each one covers to be reconstructed."
-        )
+    gaps = _gaps_in_days(start)
     return np.concatenate([gaps, gaps[-1:]])
 
 
@@ -215,6 +221,13 @@ def _step_end(start: np.ndarray, length: np.ndarray) -> np.ndarray:
         off = np.abs((next_start - end[:-1]).astype("timedelta64[ns]"))
         snap = off <= _BOUNDARY_SNAP
         end[:-1] = np.where(snap, next_start, end[:-1])
+    if len(start) and (end <= start).any():
+        row = int(np.argmax(end <= start))
+        raise ValueError(
+            f"Row {row} ends at or before it starts ({end[row]} vs {start[row]}): its declared "
+            "step length is shorter than a minute and the next row starts before it ends, so "
+            "there is no interval for it to cover."
+        )
     return end
 
 
@@ -334,6 +347,8 @@ def build_time_axis(
                 "which a run's climate drivers provide."
             )
     else:
+        if len(start) > 1:
+            _gaps_in_days(start)
         length = _finite(np.asarray(time_step_length, dtype=float), "time_step_length")
         source = STEP_LENGTH_FROM_DRIVERS
         if len(length) != len(df):

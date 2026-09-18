@@ -53,6 +53,7 @@ from pysipnet.variables import (
     RESAMPLED_KIND,
     RESAMPLING_METHODS_FOR_KIND,
     TIME_REFERENCE_FOR_KIND,
+    ResamplingMethod,
     VariableKind,
 )
 
@@ -118,15 +119,20 @@ _WHY_NOT: dict[tuple[VariableKind, str], str] = {
 
 
 @overload
-def resample(data: xr.Dataset, freq: str, *, how: str | Mapping[str, str]) -> xr.Dataset: ...
+def resample(
+    data: xr.Dataset, freq: str, *, how: ResamplingMethod | Mapping[str, ResamplingMethod]
+) -> xr.Dataset: ...
 
 
 @overload
-def resample(data: xr.DataArray, freq: str, *, how: str) -> xr.DataArray: ...
+def resample(data: xr.DataArray, freq: str, *, how: ResamplingMethod) -> xr.DataArray: ...
 
 
 def resample(
-    data: xr.Dataset | xr.DataArray, freq: str, *, how: str | Mapping[str, str]
+    data: xr.Dataset | xr.DataArray,
+    freq: str,
+    *,
+    how: ResamplingMethod | Mapping[str, ResamplingMethod],
 ) -> xr.Dataset | xr.DataArray:
     """Combine consecutive timesteps into coarser ones, by an explicit method.
 
