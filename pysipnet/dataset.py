@@ -286,11 +286,13 @@ def dataset_from_dataframe(
     source: str,
     extra_attrs: dict[str, Any] | None = None,
 ) -> xr.Dataset:
-    """Assemble a Dataset from a frame's data columns and an already-built axis.
+    """Assemble a Dataset from a frame's data columns and an already-built *axis*.
 
-    Every column that is not part of the time axis becomes a data variable, so
-    passing a frame holding only some variables gives a Dataset holding only
-    those — the whole point of building the axis separately.
+    The half of :func:`build_xarray_dataset` that does not depend on the time
+    columns: pass an axis built once by :func:`build_time_axis` and this adds
+    the data variables to it. Every column that is not part of the axis becomes
+    a data variable, so a frame holding only some variables gives a Dataset
+    holding only those — the whole point of building the axis separately.
     """
     import xarray as xr
 
@@ -319,7 +321,7 @@ def dataset_from_dataframe(
     return xr.Dataset(data_vars, coords=axis.coords, attrs=attrs)
 
 
-def dataframe_to_dataset(
+def build_xarray_dataset(
     df: pd.DataFrame,
     *,
     attributes_for: Callable[[str], dict[str, Any]],
@@ -329,9 +331,10 @@ def dataframe_to_dataset(
 ) -> xr.Dataset:
     """Build a Dataset with one ``time`` dimension from a per-timestep DataFrame.
 
-    The one-shot form of :func:`build_time_axis` followed by
-    :func:`dataset_from_dataframe`.  Use the two separately when several Datasets
-    are built from the same rows, so the time axis is paid for once.
+    The whole job in one call: :func:`build_time_axis` followed by
+    :func:`dataset_from_dataframe`.  Call those two separately when several
+    Datasets are built from the same rows, so the time axis is paid for once —
+    which is what :class:`~pysipnet.output.SIPNETOutput` does.
 
     Parameters
     ----------

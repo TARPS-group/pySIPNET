@@ -498,12 +498,12 @@ def output_dataframe_to_dataset(
     """Turn a parsed output DataFrame into a self-describing :class:`xarray.Dataset`.
 
     The free-function form of :meth:`SIPNETOutput.dataset`, for a frame that did
-    not come from a :class:`SIPNETOutput`. See :func:`pysipnet.dataset.dataframe_to_dataset`
+    not come from a :class:`SIPNETOutput`. See :func:`pysipnet.dataset.build_xarray_dataset`
     for the layout.
     """
-    from pysipnet.dataset import dataframe_to_dataset
+    from pysipnet.dataset import build_xarray_dataset
 
-    return dataframe_to_dataset(
+    return build_xarray_dataset(
         df,
         attributes_for=_attributes_for,
         time_step_length=time_step_length,

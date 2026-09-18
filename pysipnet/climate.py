@@ -241,9 +241,9 @@ class ClimateDrivers:
         ``time_step_length`` are coordinates; every variable carries its units,
         description and time reference from :data:`pysipnet.variables.CLIMATE_VARIABLES`.
         """
-        from pysipnet.dataset import dataframe_to_dataset
+        from pysipnet.dataset import build_xarray_dataset
 
-        return dataframe_to_dataset(
+        return build_xarray_dataset(
             self.pandas,
             attributes_for=_attributes_for,
             time_step_length=self.pandas["time_step_length"].to_numpy(),

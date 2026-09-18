@@ -595,9 +595,9 @@ def test_supplied_step_lengths_must_be_positive():
 
 def test_a_frames_own_step_lengths_beat_the_inferred_ones():
     """The drivers state their lengths; measuring the gaps would discard the last one."""
-    from pysipnet.dataset import dataframe_to_dataset
+    from pysipnet.dataset import build_xarray_dataset
 
     frame = _frame().assign(time_step_length=[0.5, 0.5, 0.5, 0.25])
-    ds = dataframe_to_dataset(frame, attributes_for=lambda _: {}, source="test")
+    ds = build_xarray_dataset(frame, attributes_for=lambda _: {}, source="test")
     assert ds.attrs["time_step_length_source"] == "climate drivers"
     assert ds["time_step_length"].values[-1] == np.timedelta64(6, "h")
