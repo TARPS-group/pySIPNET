@@ -8,8 +8,7 @@ time:
 - ``output["nee"]`` — one variable as a :class:`xarray.DataArray`, carrying its
   units, its time coordinate and the interval each value covers.
 - ``output[["nee", "gpp"]]`` — several variables as a Dataset.
-- :meth:`SIPNETOutput.dataset` / :meth:`SIPNETOutput.dataframe` — the same
-  selection, spelled out, in either library.
+- :meth:`SIPNETOutput.dataframe` — the same selection, in pandas.
 - :attr:`SIPNETOutput.xarray` / :attr:`SIPNETOutput.pandas` — everything.
 
 Every one of these accepts aliases (``"nee"``, ``"NEE"``,
@@ -226,7 +225,7 @@ class SIPNETOutput:
         """The full output as an :class:`xarray.Dataset` with a ``time`` dimension.
 
         Built from :attr:`pandas` on first access and cached. See
-        :meth:`dataset` for the layout.
+        ``output[[...]]`` for the layout.
         """
         if self._dataset is None:
             self._dataset = self._build_dataset(self.pandas)
@@ -255,32 +254,6 @@ class SIPNETOutput:
         selected = [name for name in names if name not in TIME_COORDINATE_NAMES]
         return self._frame[[*TIME_COORDINATE_NAMES, *selected]]
 
-    def dataset(self, variables: Sequence[str] | None = None) -> xr.Dataset:
-        """The output, or the named variables of it, as a self-describing Dataset.
-
-        Layout:
-
-        - one dimension, ``time``, whose coordinate is the **start** of each
-          timestep as ``datetime64``;
-        - ``year``, ``day_of_year`` and ``hour_of_day`` kept as auxiliary
-          coordinates on ``time``;
-        - ``time_step_length``, ``time_step_end`` and a CF ``time_bounds``
-          variable describing the interval each row covers;
-        - one data variable per selected column, with the attributes from
-          :meth:`~pysipnet.variables.VariableSpec.xarray_attributes`.
-
-        Columns the registry does not know become variables with no attributes.
-
-        Parameters
-        ----------
-        variables:
-            Variable names or aliases. ``None`` returns everything, exactly as
-            :attr:`xarray` does.
-        """
-        if variables is None:
-            return self.xarray
-        return self._build_dataset(self.dataframe(variables))
-
     def __getitem__(self, key: str | Sequence[str]) -> xr.DataArray | xr.Dataset:
         """One variable as a DataArray, or several as a Dataset, by name or alias.
 
@@ -288,13 +261,22 @@ class SIPNETOutput:
         ``output["net_ecosystem_exchange"]`` all return the same array, with
         units, description and time reference in ``.attrs``.
         ``output[["nee", "gpp"]]`` returns both in one Dataset, read in one go.
+
+        The Dataset has one dimension, ``time``, whose coordinate is the
+        **start** of each timestep as ``datetime64``; ``year``, ``day_of_year``
+        and ``hour_of_day`` as auxiliary coordinates on it; ``time_step_length``,
+        ``time_step_end`` and a CF ``time_bounds`` variable describing the
+        interval each row covers; and one data variable per selected column,
+        carrying the attributes from
+        :meth:`~pysipnet.variables.VariableSpec.xarray_attributes`. Columns the
+        registry does not know become variables with no attributes.
         """
         if isinstance(key, str):
             name = self._resolve([key])[0]
             if self._dataset is not None and name in self._dataset:
                 return self._dataset[name]
-            return self.dataset([key])[name]
-        return self.dataset(key)
+            return self._build_dataset(self.dataframe([key]))[name]
+        return self._build_dataset(self.dataframe(key))
 
     @property
     def variables(self) -> tuple[VariableSpec, ...]:
@@ -497,9 +479,9 @@ def output_dataframe_to_dataset(
 ) -> xr.Dataset:
     """Turn a parsed output DataFrame into a self-describing :class:`xarray.Dataset`.
 
-    The free-function form of :meth:`SIPNETOutput.dataset`, for a frame that did
-    not come from a :class:`SIPNETOutput`. See :func:`pysipnet.dataset.build_xarray_dataset`
-    for the layout.
+    For a frame that did not come from a :class:`SIPNETOutput`, which would
+    otherwise give it a Dataset through ``output[[...]]``. See
+    :func:`pysipnet.dataset.build_xarray_dataset` for the layout.
     """
     from pysipnet.dataset import build_xarray_dataset
 

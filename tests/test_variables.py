@@ -518,13 +518,27 @@ def test_timestep_start_matches_the_calendar():
     ]
 
 
+def test_there_is_no_dataset_method():
+    """`dataset` was a property until d7bd6a8; a method of that name is a trap.
+
+    Old code writing `outputs.dataset` would get a bound method — truthy, no
+    error — instead of the Dataset it expected. `out[[...]]` is the spelling,
+    and it is exactly what a `dataset([...])` method would have returned.
+    """
+    from pysipnet.output import SIPNETOutput
+
+    out = SIPNETOutput.from_dataframe(_frame())
+    assert not hasattr(out, "dataset")
+    assert set(out[["nee"]].data_vars) == {"net_ecosystem_exchange"}
+
+
 def test_output_rejects_a_bare_string_where_a_sequence_is_expected():
     """dataset("nee") would otherwise select the variables 'n', 'e', 'e'."""
     from pysipnet.output import SIPNETOutput
 
     out = SIPNETOutput.from_dataframe(_frame())
     with pytest.raises(TypeError, match="sequence of variable names"):
-        out.dataset("nee")
+        out.dataframe("nee")
 
 
 def test_output_reports_an_unknown_variable_name():

@@ -251,8 +251,8 @@ r3 = runner.run(params, climate, output_dir=None)
 ### Variable-selective loading
 
 For large ensemble outputs it is often wasteful to load every column.
-`dataframe([...])` and `dataset([...])` read only the named variables from the
-file and keep only those in memory. Names or aliases both work:
+`result.outputs[[...]]` and `dataframe([...])` read only the named variables
+from the file and keep only those in memory. Names or aliases both work:
 
 ```python
 # Just NEE and GPP — year/day_of_year/hour_of_day are always included:
@@ -260,8 +260,7 @@ subset = result.outputs.dataframe(["nee", "gpp"])
 # DataFrame with columns: year, day_of_year, hour_of_day,
 #                         net_ecosystem_exchange, gross_primary_production
 
-ds  = result.outputs.dataset(["nee", "gpp"])   # Dataset instead
-ds  = result.outputs[["nee", "gpp"]]           # the same thing, indexed
+ds  = result.outputs[["nee", "gpp"]]           # the same selection as a Dataset
 nee = result.outputs["nee"]                    # one variable, as a DataArray
 ```
 

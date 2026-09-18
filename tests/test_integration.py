@@ -168,7 +168,7 @@ class TestEndToEnd:
         result = runner.run(minimal_params, _make_climate(), run_id="member_7")
 
         assert result.outputs.source_path is not None
-        attrs = result.outputs.dataset(["nee"]).attrs
+        attrs = result.outputs[["nee"]].attrs
         assert attrs["run_id"] == "member_7"
         assert json.loads(attrs["model_flags"])["litter_pool"] is False
 
@@ -182,7 +182,7 @@ class TestEndToEnd:
         with pytest.raises(ValueError, match="litter_pool"):
             result.outputs.dataframe(["litter_carbon"])
         with pytest.raises(ValueError, match="litter_pool"):
-            result.outputs.dataset(["litter_carbon"])
+            result.outputs[["litter_carbon"]]
         assert result.outputs._frame is None, "refusing a variable must not read the file"
 
     def test_selecting_a_time_coordinate_is_not_a_duplicate_column(self, minimal_params, tmp_path):
@@ -205,7 +205,7 @@ class TestEndToEnd:
             "day_of_year",
             "hour_of_day",
         ]
-        assert result.outputs.dataset([]).sizes["time"] == 30
+        assert result.outputs[[]].sizes["time"] == 30
 
     def test_a_variable_the_file_does_not_contain_is_reported_once(
         self, minimal_params, tmp_path, monkeypatch
@@ -573,7 +573,7 @@ class TestOutputIO:
         runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
         result = runner.run(minimal_params, _make_climate())
 
-        ds = result.outputs.dataset(["nee"])
+        ds = result.outputs[["nee"]]
         assert set(ds.data_vars) == {"net_ecosystem_exchange"}
         assert "time_step_end" in ds.coords
 
