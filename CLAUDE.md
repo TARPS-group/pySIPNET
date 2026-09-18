@@ -351,8 +351,8 @@ and that SIPNET's own docs get wrong or omit:
 
 Column names follow the convention **lower-case words, underscores, no
 acronyms** (`net_ecosystem_exchange`, not `nee`). Short forms and the old
-pySIPNET names are aliases that `resolve_output_variable()` and
-`SIPNETOutput.load(variables=...)` accept; they are never column names. The
+pySIPNET names are aliases that `resolve_output_variable()` and every
+`SIPNETOutput` selection accept; they are never column names. The
 time coordinates are `year`, `day_of_year`, `hour_of_day`.
 
 Units are UDUNITS strings (`"g m-2"`, `"cm d-1"`, `"1"`) validated at import by
@@ -360,11 +360,47 @@ Units are UDUNITS strings (`"g m-2"`, `"cm d-1"`, `"1"`) validated at import by
 `"H2O"`), never in the string, because Pint reads `g C` as gram·coulomb without
 error.
 
-`SIPNETOutput` exposes `.pandas` (DataFrame), `.xarray` (xarray Dataset, one `time`
-dimension = step start, plus `time_step_end` / `time_step_length` coordinates
-from the climate's `time_step_length` column, attributes from
-`VariableSpec.xarray_attributes()`), `["nee"]` (DataArray by name or alias) and
-`.variable("nee")` (Series). xarray is a required dependency.
+`SIPNETOutput` exposes `.pandas` (DataFrame), `.xarray` (xarray Dataset, one
+`time` dimension = step start), `["nee"]` (DataArray by name or alias),
+`[["nee", "gpp"]]` (Dataset), and `.dataset(...)` / `.dataframe(...)` for the
+same selection spelled out. xarray is a required dependency.
+
+The Dataset states the interval each row covers: `time_step_end`,
+`time_step_length` and a CF `time_bounds` variable named by `time`'s `bounds`
+attribute, so the half-open `[time, time_step_end)` is machine-readable — which
+is what an observation operator needs in order to decide which steps an
+observation spans. Step lengths come from the climate's `time_step_length`
+column; when the output has no climate attached they are **inferred** from
+consecutive timestamps (exact except for the last step, which repeats its
+predecessor), and `time_step_length_source` in the Dataset's attributes says
+which happened. `time_zone` records that the axis is naive, since SIPNET has no
+time zone and the convention is whatever the `.clim` used. `run_id` and
+`model_flags` (JSON) travel as attributes too, so an archived prediction says
+which run produced it.
+
+A selection never re-reads a column already in memory: `out["nee"]` then
+`out["gpp"]` costs two partial reads rather than two full ones, and repeating
+either costs no read. The one exception is `.pandas`/`.xarray` after a partial
+read, which re-reads the file in full because only the file states the column
+order; `variables` does the same, for the same reason. Variable-level column
+selection is a *memory* optimization, not a speed one — `usecols` saves on the
+order of a fifth of the parse time, since the tokenizer still scans every field.
+`read_output_file` reads through the path rather than slurping the file into a
+string, so peak memory during a parse is pandas' own rather than several times
+the file size.
+
+`build_time_axis` is the other thing worth knowing about the cost: it does not
+depend on which variables were selected, so it is built once per output and
+reused by every view. It uses integer `datetime64` arithmetic rather than a
+string round-trip through `to_datetime`, which is more than an order of
+magnitude faster and identical to the nanosecond. Years outside 1678-2261, and
+non-finite values in any time column, are refused rather than wrapped or cast
+to whatever the platform produces.
+
+Selecting a variable whose `requires_flag` is off (e.g. `litter_carbon` without
+`litter_pool`) **raises**: SIPNET writes it as constant zero, and a likelihood
+would consume those zeros without complaint. `.pandas` and `.xarray` still
+contain the column, being a faithful view of the file.
 
 Columns present at other versions: `woodCreation`, `nppStorage`, the
 nitrogen group, `ch4` and `plantStorageN` are new at this pin; `bcdeltaC` and

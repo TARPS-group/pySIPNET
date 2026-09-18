@@ -54,14 +54,19 @@ result = runner.run(params, climate, run_id="baseline_2020")
 # working directory: /scratch/my_runs/sipnet_baseline_2020_1l2wlzvt/
 ```
 
-!!! note "run_id does not have to be unique"
+!!! note "Reusing a run_id is safe for the working directory"
     Every run gets a brand-new directory, because the name ends in a random
-    suffix.  Reusing a `run_id` is therefore safe: two runs sharing one never
-    write to the same place, so concurrent runs cannot overwrite each other's
-    files or read each other's output.
+    suffix.  Two runs sharing a `run_id` never write to the same working
+    directory, so concurrent runs cannot overwrite each other's inputs or read
+    each other's output.
 
     The trade-off is that you cannot predict the directory name in advance.
     Read it from `result.provenance.workdir` instead of constructing it.
+
+    The **output** file is a different matter: its name is predictable by
+    design, so it cannot carry a random suffix, and a second run with the same
+    `run_id` and `output_dir` is refused.  See
+    [Eager vs. lazy output](#eager-vs-lazy-output) below.
 
 ### Climate data: in-memory vs. file-backed
 
@@ -175,6 +180,23 @@ directory is deleted, `sipnet.out` is copied to
 `<output_dir>/sipnet_<run_id>.out`.  The result holds a file-backed
 `SIPNETOutput` — no DataFrame is created until you explicitly access the data.
 
+Because the name comes from the run id, a second run with the same `run_id` and
+`output_dir` is **refused before it starts**, rather than replacing the file.
+The earlier result reads that path lazily, so overwriting it would silently
+change the numbers that result answers with, long after it reported success.
+Give each run a distinct id — the default is a fresh UUID — or pass
+`overwrite=True` when the earlier output is finished with.  The refusal is
+based on the file being there, so deleting it releases the name again, along
+with the protection for any result still pointing at it.
+
+```python
+# A loop that reruns one member under a fixed id, keeping one file on disk:
+runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=Path("out"), overwrite=True)
+
+# ... or decide per call, leaving the runner's default in place:
+result = runner.run(params, climate, run_id="current", overwrite=True)
+```
+
 ```python
 runner = SIPNETRunner(
     flags=ModelFlags.standard(),
@@ -229,20 +251,33 @@ r3 = runner.run(params, climate, output_dir=None)
 ### Variable-selective loading
 
 For large ensemble outputs it is often wasteful to load every column.
-`SIPNETOutput.load(variables=[...])` reads only the named variables from the
-file, without caching the result. Names or aliases both work:
+`dataframe([...])` and `dataset([...])` read only the named variables from the
+file and keep only those in memory. Names or aliases both work:
 
 ```python
-# Load just NEE and GPP — year/day_of_year/hour_of_day are always included:
-subset = result.outputs.load(variables=["nee", "gpp"])
+# Just NEE and GPP — year/day_of_year/hour_of_day are always included:
+subset = result.outputs.dataframe(["nee", "gpp"])
 # DataFrame with columns: year, day_of_year, hour_of_day,
 #                         net_ecosystem_exchange, gross_primary_production
 
-ds = result.outputs.load(variables=["nee"], as_xarray=True)   # Dataset instead
+ds  = result.outputs.dataset(["nee", "gpp"])   # Dataset instead
+ds  = result.outputs[["nee", "gpp"]]           # the same thing, indexed
+nee = result.outputs["nee"]                    # one variable, as a DataArray
 ```
 
-On a memory-backed instance, `load(variables=[...])` slices the in-memory
-DataFrame — no file I/O occurs.
+A selection never re-reads a column already in memory. Selecting NEE and then
+GPP costs the same two reads as selecting both together, and asking for either
+again costs none — so a likelihood over several output variables never re-reads
+the file, however the request is spelled. The one exception is `.pandas` or
+`.xarray` after a selective read: a whole-file view reads the file again,
+because only the file states the order its columns belong in.
+
+What stays in memory is the columns you have asked for, plus the three time
+coordinates — not the whole output. (Peak memory during a read is another
+matter: pandas needs room to parse.)
+
+On a memory-backed instance no file I/O occurs at all: the selection slices the
+DataFrame already in memory.
 
 ### Keeping the working directory
 
@@ -282,6 +317,7 @@ together:
 | What is kept | Only `sipnet.out`, copied to a named location | The entire working directory: param, clim, in, and out files |
 | Primary use | Ensemble post-processing; lazy loading | Debugging; reproducibility audits |
 | File naming | `sipnet_<run_id>.out` in your chosen directory | All files in `sipnet_<run_id>_<random>/` under `workdir_base` |
+| Reusing a `run_id` | Refused unless `overwrite=True` | Always a fresh directory |
 
 ### Summary: choosing an output mode
 
@@ -290,5 +326,5 @@ together:
 | Interactive exploration, single run | Default (no `output_dir`) — data in memory |
 | Need the raw file for archival | `output_dir=` on runner or `keep_workdir=True` |
 | Large ensemble, full outputs needed | `output_dir=` — lazy-load member by member |
-| Large ensemble, only a few columns needed | `output_dir=` + `result.outputs.load(variables=[...])` |
+| Large ensemble, only a few columns needed | `output_dir=` + `result.outputs.dataframe([...])` |
 | Debugging a failing run | `keep_workdir=True` — inspect all files in `provenance.workdir` |

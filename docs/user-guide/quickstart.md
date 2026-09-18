@@ -99,8 +99,8 @@ runner = SIPNETRunner(flags=ModelFlags.standard())
 result = runner.run(params, climate)
 
 print(result.provenance.success)              # True
-print(result.outputs.variable("nee").sum())   # 558.009 — annual NEE (g C m⁻², +ve = source)
-print(result.outputs.variable("gpp").sum())   # 686.052 — annual GPP
+print(float(result.outputs["nee"].sum()))    # 558.009 — annual NEE (g C m⁻², +ve = source)
+print(float(result.outputs["gpp"].sum()))    # 686.052 — annual GPP
 ```
 
 ## 4. Inspect the result

@@ -32,13 +32,13 @@ result = model()
 
 # Work with results — all in memory
 df = result.outputs.pandas
-print(result.outputs.variable("nee").sum())    # annual NEE
-print(result.outputs.variable("gpp").mean())   # mean GPP per timestep
+print(float(result.outputs["nee"].sum()))      # annual NEE
+print(float(result.outputs["gpp"].mean()))     # mean GPP per timestep
 
 # Quick parameter sensitivity
 for max_photosynthesis_rate in [80.0, 100.0, 120.0, 140.0]:
     r = model(max_photosynthesis_rate=max_photosynthesis_rate)
-    print(f"max_photosynthesis_rate={max_photosynthesis_rate}: NEE={r.outputs.variable('nee').sum():.2f} g C m⁻²")
+    print(f"max_photosynthesis_rate={max_photosynthesis_rate}: NEE={float(r.outputs['nee'].sum()):.2f} g C m⁻²")
 ```
 
 The `SIPNETModel` wrapper (see [Running a Model](running-a-model.md)) is
@@ -117,12 +117,11 @@ print(results[0].outputs.source_path)
 # PosixPath('ensemble_outputs/sipnet_member_0000.out')
 
 # Load all outputs on demand — one at a time to keep memory low
-import pandas as pd
+import xarray as xr
 
-nee_all = pd.concat(
-    [r.outputs.variable("nee") for r in results],
-    axis=1,
-    keys=[r.provenance.run_id for r in results],
+nee_all = xr.concat(
+    [r.outputs["nee"] for r in results],
+    dim=xr.DataArray([r.provenance.run_id for r in results], dims="member", name="member"),
 )
 ```
 
@@ -153,7 +152,7 @@ results = [
 
 # Read only NEE and GPP from each output file — the time coordinates are always included
 frames = [
-    r.outputs.load(variables=["nee", "gpp"]).assign(run_id=r.provenance.run_id)
+    r.outputs.dataframe(["nee", "gpp"]).assign(run_id=r.provenance.run_id)
     for r in results
 ]
 combined = pd.concat(frames, ignore_index=True)
@@ -161,9 +160,11 @@ combined = pd.concat(frames, ignore_index=True)
 #   net_ecosystem_exchange, gross_primary_production, run_id
 ```
 
-`load(variables=[...])` reads only the requested variables from disk each time it
-is called — it does not cache the result.  This keeps peak memory at one
-member's worth of data rather than the full ensemble.
+`dataframe([...])` and `dataset([...])` read only the requested variables, and
+what each member holds afterwards is those columns plus the three time
+coordinates — not its full output, let alone the whole ensemble. A column already
+read is never read again, so selecting variables one at a time costs the same as
+selecting them together.
 
 ---
 

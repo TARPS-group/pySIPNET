@@ -316,7 +316,7 @@ import pandas as pd
 rows = []
 for max_photosynthesis_rate in [80.0, 100.0, 112.0, 130.0, 150.0]:
     r = model(max_photosynthesis_rate=max_photosynthesis_rate)
-    rows.append({"max_photosynthesis_rate": max_photosynthesis_rate, "annual_gpp": r.outputs.variable("gpp").sum()})
+    rows.append({"max_photosynthesis_rate": max_photosynthesis_rate, "annual_gpp": float(r.outputs["gpp"].sum())})
 
 pd.DataFrame(rows)
 ```
@@ -356,6 +356,11 @@ put it back for display. See [Design](../design.md) for the convention.
 Every column is always present. A process that is switched off writes zeros
 rather than omitting its column, so the nitrogen and methane columns are there
 but zero unless those processes are on (`requires_flag` on the spec says which).
+Because a column of zeros is indistinguishable from a real result once it
+reaches a likelihood, **selecting such a variable by name raises** — `result.outputs["litter_carbon"]`
+on a run without `litter_pool` tells you which flag to turn on rather than
+handing back the zeros. `.pandas` and `.xarray` still contain the column, being
+a faithful view of the file.
 SIPNET checks its own carbon and nitrogen closure but reports the result as a
 log warning rather than an output column, so a failed check appears in
 `result.provenance.stderr`.
@@ -369,14 +374,19 @@ log warning rather than an output column, so a failed check appears in
     variable spell this out, and the xarray view below carries them as
     attributes.
 
-### Three views of the same output
+### Five views of the same output
 
 ```python
-df = result.outputs.pandas                  # pandas DataFrame, one row per timestep
-ds = result.outputs.xarray                  # xarray Dataset, one `time` dimension
-nee = result.outputs["nee"]                 # one variable as a DataArray, by name or alias
-nee_series = result.outputs.variable("nee") # ... or as a pandas Series
+df  = result.outputs.pandas          # pandas DataFrame, one row per timestep
+ds  = result.outputs.xarray          # xarray Dataset, one `time` dimension
+nee = result.outputs["nee"]          # one variable as a DataArray, by name or alias
+both = result.outputs[["nee", "gpp"]]  # several variables as a Dataset
+
+result.outputs.dataframe(["nee", "gpp"])  # the same selection as a DataFrame
 ```
+
+A DataArray still converts to whatever you need: `nee.to_series()` for pandas,
+`nee.to_numpy()` for a bare array.
 
 The Dataset is the representation to use when metadata matters or when
 results will be combined across runs:
@@ -391,9 +401,21 @@ ds["net_ecosystem_exchange"].attrs
 ds["time"]              # datetime64, start of each timestep
 ds["time_step_end"]     # datetime64, end of each timestep
 ds["time_step_length"]  # timedelta64
+ds["time_bounds"]       # (time, bounds) — the interval [time, time_step_end)
 
-ds.to_netcdf("run.nc")  # self-describing on disk
+ds.attrs["run_id"]                   # which run produced this
+ds.attrs["time_step_length_source"]  # measured from the drivers, or inferred
+ds.attrs["time_zone"]                # naive; whatever the .clim used
+
+ds.to_netcdf("run.nc")  # self-describing on disk; needs a netCDF backend
+                        # (`pip install h5netcdf`), which pySIPNET does not require
 ```
+
+`time_bounds` is the Climate and Forecast conventions' way of saying which
+interval each value covers, which is what an observation operator needs in order
+to decide how observations line up with model steps. It adds a second dimension,
+`bounds`, so `ds.sizes` reads `{'time': 365, 'bounds': 2}`; use `result.outputs.pandas`
+when you want a flat table.
 
 ### Annual summaries
 

@@ -10,6 +10,7 @@ Build the binary with::
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -116,7 +117,7 @@ class TestEndToEnd:
         assert by_alias.attrs["units"] == "g m-2"
         assert by_alias.attrs["constituent"] == "C"
         np.testing.assert_array_equal(by_alias.values, by_name.values)
-        assert len(result.outputs.variable("gpp")) == 30
+        assert result.outputs["gpp"].sizes["time"] == 30
 
     def test_gpp_non_negative(self, minimal_params):
         runner = SIPNETRunner(flags=ModelFlags.standard())
@@ -124,7 +125,7 @@ class TestEndToEnd:
         result = runner.run(minimal_params, climate)
 
         assert result.provenance.success
-        assert (result.outputs.variable("gpp") >= 0).all(), "GPP should be non-negative"
+        assert bool((result.outputs["gpp"] >= 0).all()), "GPP should be non-negative"
 
     def test_dataset_has_one_time_dimension_with_step_bounds(self, minimal_params):
         """The xarray view is 1-D in time, dense, and knows when each step ends."""
@@ -133,7 +134,8 @@ class TestEndToEnd:
         result = runner.run(minimal_params, climate)
 
         ds = result.outputs.xarray
-        assert dict(ds.sizes) == {"time": 30}
+        assert dict(ds.sizes) == {"time": 30, "bounds": 2}
+        assert ds["net_ecosystem_exchange"].dims == ("time",)
         assert not ds["net_ecosystem_exchange"].isnull().any()
         assert ds["time"].attrs["long_name"] == "Start of timestep"
         expected_end = (
@@ -143,6 +145,90 @@ class TestEndToEnd:
         np.testing.assert_array_equal(ds["time_step_end"].values, expected_end)
         assert ds["wood_carbon"].attrs["time_reference"] == "value at the end of the timestep"
         assert ds["net_ecosystem_exchange"].attrs["time_reference"] == "total over the timestep"
+
+    def test_dataset_records_which_run_produced_it(self, minimal_params):
+        """A prediction saved to disk should say which run and which flags made it."""
+        import json
+
+        runner = SIPNETRunner(flags=ModelFlags.standard())
+        result = runner.run(minimal_params, _make_climate(), run_id="calibration_042")
+
+        attrs = result.outputs.xarray.attrs
+        assert attrs["run_id"] == "calibration_042" == result.provenance.run_id
+        assert json.loads(attrs["model_flags"]) == result.flags.model_dump()
+        assert attrs["time_step_length_source"] == "climate drivers"
+        assert attrs["time_zone"].startswith("naive")
+        assert result.outputs.xarray["time"].attrs["time_zone"] == attrs["time_zone"]
+
+    def test_a_file_backed_dataset_records_its_run_too(self, minimal_params, tmp_path):
+        """The provenance has to survive the other construction path as well."""
+        import json
+
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        result = runner.run(minimal_params, _make_climate(), run_id="member_7")
+
+        assert result.outputs.source_path is not None
+        attrs = result.outputs.dataset(["nee"]).attrs
+        assert attrs["run_id"] == "member_7"
+        assert json.loads(attrs["model_flags"])["litter_pool"] is False
+
+    def test_a_file_backed_output_refuses_a_flag_zeroed_variable_without_reading(
+        self, minimal_params, tmp_path
+    ):
+        """The flags alone settle it; the file should not be touched to find out."""
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        result = runner.run(minimal_params, _make_climate())
+
+        with pytest.raises(ValueError, match="litter_pool"):
+            result.outputs.dataframe(["litter_carbon"])
+        with pytest.raises(ValueError, match="litter_pool"):
+            result.outputs.dataset(["litter_carbon"])
+        assert result.outputs._frame is None, "refusing a variable must not read the file"
+
+    def test_selecting_a_time_coordinate_is_not_a_duplicate_column(self, minimal_params, tmp_path):
+        """'time' and 'day' are documented aliases of the time coordinates."""
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        result = runner.run(minimal_params, _make_climate())
+
+        frame = result.outputs.dataframe(["year"])
+        assert list(frame.columns) == ["year", "day_of_year", "hour_of_day"]
+        assert result.outputs["time"].sizes["time"] == 30
+        assert set(result.outputs[["nee", "day"]].data_vars) == {"net_ecosystem_exchange"}
+
+    def test_an_empty_selection_reads_only_the_time_coordinates(self, minimal_params, tmp_path):
+        """A programmatically built variable list can legitimately be empty."""
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        result = runner.run(minimal_params, _make_climate())
+
+        assert list(result.outputs.dataframe([]).columns) == [
+            "year",
+            "day_of_year",
+            "hour_of_day",
+        ]
+        assert result.outputs.dataset([]).sizes["time"] == 30
+
+    def test_a_variable_the_file_does_not_contain_is_reported_once(
+        self, minimal_params, tmp_path, monkeypatch
+    ):
+        """A registry name absent from this file must not re-read the file forever."""
+        import pysipnet.io.output_reader as output_reader
+
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        result = runner.run(minimal_params, _make_climate())
+
+        reads = []
+        real_read = output_reader.read_output_file
+
+        def counting_read(path, variables=None):
+            reads.append(variables)
+            return real_read(path, variables=variables)
+
+        monkeypatch.setattr(output_reader, "read_output_file", counting_read)
+
+        # bcdeltaC is a v2.1.0 column the registry still maps; this file has none.
+        with pytest.raises(KeyError, match="are not in"):
+            result.outputs.dataframe(["bcdeltaC"])
+        assert len(reads) == 1
 
     def test_carbon_balance_identity(self, minimal_params):
         """NEE ≈ Rtot − GPP at each timestep.
@@ -196,7 +282,7 @@ class TestOutputIO:
 
         assert isinstance(result.outputs, SIPNETOutput)
         assert result.outputs.source_path is None
-        assert result.outputs._data is not None
+        assert result.outputs._frame is not None
 
     def test_output_dir_creates_file(self, minimal_params, tmp_path):
         """Runner-level output_dir copies sipnet.out before workdir cleanup."""
@@ -219,7 +305,7 @@ class TestOutputIO:
         )
         result = runner.run(minimal_params, _make_climate())
 
-        assert result.outputs._data is None, "Data should not be loaded before first access"
+        assert result.outputs._frame is None, "Data should not be loaded before first access"
         df = result.outputs.pandas
         assert df is not None
         assert len(df) == 30
@@ -282,6 +368,166 @@ class TestOutputIO:
         assert first.provenance.workdir.exists()
         assert second.provenance.workdir.exists()
 
+    def test_a_second_run_will_not_overwrite_the_first_ones_output(self, minimal_params, tmp_path):
+        """The same collision one level out, where a random suffix is not available.
+
+        The output file is named from the run id because users are told to
+        predict that name. A second run with the same id would replace it, and
+        because a file-backed output is read lazily, the first result would then
+        answer with the second run's numbers while still reporting success.
+        """
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        first = runner.run(minimal_params, _make_climate(n_days=30), run_id="member")
+
+        with pytest.raises(FileExistsError, match="distinct run_id"):
+            runner.run(minimal_params, _make_climate(n_days=20), run_id="member")
+
+        # The refusal must leave the first run's output exactly as it was.
+        assert first.outputs.n_timesteps == 30
+
+    def test_a_refused_run_does_not_execute_sipnet_or_leave_a_workdir(
+        self, minimal_params, tmp_path, monkeypatch
+    ):
+        """Refusing before the binary runs is the point: a wasted run is not free."""
+        runner = SIPNETRunner(
+            flags=ModelFlags.standard(),
+            output_dir=tmp_path / "outputs",
+            workdir_base=tmp_path / "work",
+        )
+        runner.run(minimal_params, _make_climate(), run_id="member")
+        before = sorted((tmp_path / "work").iterdir())
+
+        executed = []
+        real_run = subprocess.run
+        monkeypatch.setattr(
+            subprocess, "run", lambda *a, **k: (executed.append(a), real_run(*a, **k))[1]
+        )
+
+        with pytest.raises(FileExistsError):
+            runner.run(minimal_params, _make_climate(), run_id="member")
+        assert executed == [], "SIPNET ran for a result that was never going to be kept"
+        assert sorted((tmp_path / "work").iterdir()) == before
+
+    def test_overwrite_allows_rerunning_one_id(self, minimal_params, tmp_path):
+        """A loop that reruns one member under a fixed id is a legitimate thing to do."""
+        runner = SIPNETRunner(
+            flags=ModelFlags.standard(), output_dir=tmp_path / "outputs", overwrite=True
+        )
+        runner.run(minimal_params, _make_climate(n_days=30), run_id="member")
+        second = runner.run(minimal_params, _make_climate(n_days=20), run_id="member")
+
+        assert second.outputs.n_timesteps == 20
+        assert len(list((tmp_path / "outputs").iterdir())) == 1
+
+    def test_overwrite_can_be_decided_per_call(self, minimal_params, tmp_path):
+        """Both directions: the call decides, whatever the runner's default is."""
+        permissive = SIPNETRunner(
+            flags=ModelFlags.standard(), output_dir=tmp_path / "outputs", overwrite=True
+        )
+        strict = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+
+        strict.run(minimal_params, _make_climate(), run_id="member")
+        assert (
+            strict.run(
+                minimal_params, _make_climate(n_days=20), run_id="member", overwrite=True
+            ).outputs.n_timesteps
+            == 20
+        )
+        with pytest.raises(FileExistsError):
+            permissive.run(minimal_params, _make_climate(), run_id="member", overwrite=False)
+
+    def test_a_failed_run_does_not_block_the_retry(self, minimal_params, tmp_path):
+        """Nothing is written for a run that failed, so its id is still free."""
+        from pysipnet.climate import ClimateDrivers
+
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        empty = ClimateDrivers.from_dataframe(_make_climate().pandas.head(0).copy())
+
+        failed = runner.run(minimal_params, empty, run_id="member", check=False)
+        assert failed.provenance.success is False
+        assert list((tmp_path / "outputs").iterdir()) == []
+
+        retried = runner.run(minimal_params, _make_climate(), run_id="member")
+        assert retried.provenance.success
+
+    def test_two_concurrent_runs_sharing_an_id_cannot_swap_results(self, minimal_params, tmp_path):
+        """The pre-run check cannot see a run that has not finished yet.
+
+        Both runs pass it, then both copy. Claiming the name and creating the
+        file have to be one operation, or the loser's result reads the winner's
+        numbers while reporting success.
+        """
+        import threading
+
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        finished: dict[str, object] = {}
+        refused: list[str] = []
+        lengths = {"long": 30, "short": 12}
+
+        def go(tag: str) -> None:
+            try:
+                finished[tag] = runner.run(
+                    minimal_params, _make_climate(n_days=lengths[tag]), run_id="member"
+                )
+            except FileExistsError:
+                refused.append(tag)
+
+        threads = [threading.Thread(target=go, args=(tag,)) for tag in lengths]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert len(refused) == 1, "one of the two runs had to be turned away"
+        for tag, result in finished.items():
+            assert result.outputs.n_timesteps == lengths[tag], (
+                f"the {tag} run's result read the other run's numbers"
+            )
+
+    def test_a_dangling_symlink_does_not_let_a_run_write_outside_output_dir(
+        self, minimal_params, tmp_path
+    ):
+        """Path.exists() follows links, so a broken one looks like free space."""
+        output_dir = tmp_path / "outputs"
+        output_dir.mkdir()
+        elsewhere = tmp_path / "elsewhere.out"
+        (output_dir / "sipnet_member.out").symlink_to(elsewhere)
+
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=output_dir)
+        with pytest.raises(FileExistsError):
+            runner.run(minimal_params, _make_climate(), run_id="member")
+        assert not elsewhere.exists()
+
+    def test_a_stored_output_path_survives_a_change_of_directory(
+        self, minimal_params, tmp_path, monkeypatch
+    ):
+        """An ensemble scheduler may chdir per task; a relative path would then move."""
+        (tmp_path / "a").mkdir()
+        (tmp_path / "b").mkdir()
+        monkeypatch.chdir(tmp_path / "a")
+
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir="outputs")
+        result = runner.run(minimal_params, _make_climate(), run_id="member")
+        assert result.outputs.source_path.is_absolute()
+
+        monkeypatch.chdir(tmp_path / "b")
+        with pytest.raises(FileExistsError):
+            runner.run(minimal_params, _make_climate(n_days=20), run_id="member")
+        assert result.outputs.n_timesteps == 30
+
+    def test_distinct_run_ids_get_distinct_files(self, minimal_params, tmp_path):
+        """Including the default, which is a fresh UUID every time.
+
+        Ids that differ only in case are a special case: on a case-insensitive
+        filesystem they name one file, and the run is refused rather than
+        silently sharing it.
+        """
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        results = [runner.run(minimal_params, _make_climate()) for _ in range(3)]
+
+        paths = {r.outputs.source_path for r in results}
+        assert len(paths) == 3
+
     def test_the_run_id_still_labels_the_directory(self, minimal_params, tmp_path):
         """Unpredictable, but still recognizable while debugging."""
         runner = SIPNETRunner(flags=ModelFlags.standard(), workdir_base=tmp_path, keep_workdir=True)
@@ -295,41 +541,102 @@ class TestOutputIO:
             runner.run(minimal_params, _make_climate(), run_id="../../escape")
 
     def test_column_selection_returns_subset(self, minimal_params, tmp_path):
-        """load(variables=...) returns only the requested variables plus time coords."""
+        """dataframe(...) returns only the requested variables plus time coords."""
         runner = SIPNETRunner(
             flags=ModelFlags.standard(),
             output_dir=tmp_path / "outputs",
         )
         result = runner.run(minimal_params, _make_climate())
 
-        subset = result.outputs.load(variables=["nee", "gpp"])
-        assert set(subset.columns) == {
+        subset = result.outputs.dataframe(["nee", "gpp"])
+        assert list(subset.columns) == [
             "year",
             "day_of_year",
             "hour_of_day",
             "net_ecosystem_exchange",
             "gross_primary_production",
-        }
+        ]
         assert len(subset) == 30
 
     def test_column_selection_memory_backed(self, minimal_params):
-        """load(variables=...) works on memory-backed instances too."""
+        """dataframe(...) works on memory-backed instances too."""
         runner = SIPNETRunner(flags=ModelFlags.standard())
         result = runner.run(minimal_params, _make_climate())
 
-        subset = result.outputs.load(variables=["nee"])
+        subset = result.outputs.dataframe(["nee"])
         assert "net_ecosystem_exchange" in subset.columns
         assert "year" in subset.columns
         assert "wood_carbon" not in subset.columns
 
     def test_variable_selection_as_xarray(self, minimal_params, tmp_path):
-        """load(as_xarray=True) reads only the requested variables into a Dataset."""
+        """dataset(...) reads only the requested variables into a Dataset."""
         runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
         result = runner.run(minimal_params, _make_climate())
 
-        ds = result.outputs.load(variables=["nee"], as_xarray=True)
+        ds = result.outputs.dataset(["nee"])
         assert set(ds.data_vars) == {"net_ecosystem_exchange"}
         assert "time_step_end" in ds.coords
+
+    def test_getitem_with_a_list_gives_a_dataset(self, minimal_params, tmp_path):
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        result = runner.run(minimal_params, _make_climate())
+
+        ds = result.outputs[["nee", "gpp"]]
+        assert set(ds.data_vars) == {"net_ecosystem_exchange", "gross_primary_production"}
+        np.testing.assert_array_equal(
+            ds["net_ecosystem_exchange"].to_numpy(), result.outputs["nee"].to_numpy()
+        )
+
+    def test_every_column_is_read_at_most_once(self, minimal_params, tmp_path, monkeypatch):
+        """A likelihood over several variables must not re-read the file per variable.
+
+        This is the guarantee that matters for calibration loops, and it cannot
+        be observed from the returned values — only by counting reads.
+        """
+        import pysipnet.io.output_reader as output_reader
+
+        runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
+        result = runner.run(minimal_params, _make_climate())
+
+        requested: list[list[str] | None] = []
+        real_read = output_reader.read_output_file
+
+        def counting_read(path, variables=None):
+            requested.append(variables)
+            return real_read(path, variables=variables)
+
+        monkeypatch.setattr(output_reader, "read_output_file", counting_read)
+
+        out = result.outputs
+        assert out["nee"].sizes["time"] == 30
+        assert out["nee"].sizes["time"] == 30
+        assert set(out[["nee", "gpp"]].data_vars) == {
+            "net_ecosystem_exchange",
+            "gross_primary_production",
+        }
+        assert not out.dataframe(["soil_respiration", "gpp"]).empty
+
+        read_columns = [c for call in requested for c in (call or [])]
+        assert len(read_columns) == len(set(read_columns)), (
+            f"a column was read more than once: {requested}"
+        )
+        assert set(read_columns) == {
+            "year",
+            "day_of_year",
+            "hour_of_day",
+            "net_ecosystem_exchange",
+            "gross_primary_production",
+            "soil_respiration",
+        }
+
+        # The documented exception: a whole-file view re-reads, because only the
+        # file states the order its columns belong in. Selections after it do not.
+        assert len(out.pandas.columns) > 30
+        assert requested[-1] is None
+        before = len(requested)
+        assert out["nee"].sizes["time"] == 30
+        assert not out.dataframe(["gpp", "soil_respiration"]).empty
+        assert len(requested) == before, f"a cached column was re-read: {requested[before:]}"
 
     def test_n_timesteps(self, minimal_params, tmp_path):
         """n_timesteps is correct for both memory-backed and file-backed outputs."""
@@ -407,8 +714,8 @@ class TestLitterPool:
         with_pool = SIPNETRunner(flags=ModelFlags(litter_pool=True)).run(litter_params, climate)
         without = SIPNETRunner(flags=ModelFlags.standard()).run(litter_params, climate)
         assert not np.allclose(
-            with_pool.outputs.variable("nee").to_numpy(),
-            without.outputs.variable("nee").to_numpy(),
+            with_pool.outputs["nee"].to_numpy(),
+            without.outputs["nee"].to_numpy(),
         ), "turning the litter pool on made no difference to NEE"
 
 
@@ -512,8 +819,8 @@ class TestRunnerAppliesEvents:
         with_events = runner.run(minimal_params, climate, events=tillage)
         without = runner.run(minimal_params, climate)
         assert not np.allclose(
-            with_events.outputs.variable("nee").to_numpy(),
-            without.outputs.variable("nee").to_numpy(),
+            with_events.outputs["nee"].to_numpy(),
+            without.outputs["nee"].to_numpy(),
         ), "applying a tillage event made no difference to NEE"
 
     def test_no_events_means_events_are_switched_off(self, minimal_params):
@@ -565,6 +872,17 @@ class TestFailedRunsRaise:
         )
         assert result.provenance.success is False
         assert result.outputs.pandas.empty
+
+    def test_selecting_from_a_failed_run_points_at_the_failure(
+        self, minimal_params, broken_climate
+    ):
+        """The message a caller sees first should name the cause, not the symptom."""
+        result = SIPNETRunner(flags=ModelFlags.standard()).run(
+            minimal_params, broken_climate, check=False
+        )
+        for select in (lambda: result.outputs["nee"], lambda: result.outputs.dataframe(["nee"])):
+            with pytest.raises(KeyError, match="provenance.stderr"):
+                select()
 
     def test_a_successful_run_is_unaffected(self, minimal_params):
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, _make_climate())
@@ -636,10 +954,10 @@ class TestSnowFlag:
         thaw = ClimateDrivers.from_dataframe(df)
         on = SIPNETRunner(flags=ModelFlags(snow=True)).run(minimal_params, thaw)
         off = SIPNETRunner(flags=ModelFlags(snow=False)).run(minimal_params, thaw)
-        swe = off.outputs.variable("snow_water_equivalent")
-        assert swe.max() > swe.iloc[-1], "the thaw should melt some snow with the flag off"
+        swe = off.outputs["snow_water_equivalent"]
+        assert swe.max() > swe[-1], "the thaw should melt some snow with the flag off"
         np.testing.assert_array_equal(
-            on.outputs.variable("snow_water_equivalent").to_numpy(), swe.to_numpy()
+            on.outputs["snow_water_equivalent"].to_numpy(), swe.to_numpy()
         )
 
     def test_snowpack_accumulates_with_the_flag_off(self, minimal_params):
@@ -647,8 +965,8 @@ class TestSnowFlag:
         on = SIPNETRunner(flags=ModelFlags(snow=True)).run(minimal_params, climate)
         off = SIPNETRunner(flags=ModelFlags(snow=False)).run(minimal_params, climate)
 
-        swe_off = off.outputs.variable("snow_water_equivalent")
-        assert swe_off.iloc[-1] > swe_off.iloc[0] > 0, "snow should accumulate below 0 °C"
+        swe_off = off.outputs["snow_water_equivalent"]
+        assert swe_off[-1] > swe_off[0] > 0, "snow should accumulate below 0 °C"
         np.testing.assert_array_equal(
-            on.outputs.variable("snow_water_equivalent").to_numpy(), swe_off.to_numpy()
+            on.outputs["snow_water_equivalent"].to_numpy(), swe_off.to_numpy()
         )

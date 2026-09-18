@@ -58,9 +58,11 @@ class SIPNETResult:
         Parsed ``.out`` file as a :class:`~pysipnet.output.SIPNETOutput`.
         ``result.outputs.pandas`` is a DataFrame, ``result.outputs.xarray`` an
         xarray Dataset with units and descriptions attached, and
-        ``result.outputs["nee"]`` one variable by name or alias. Use
-        ``result.outputs.load(variables=[...])`` to read only a subset from a
-        file-backed instance.
+        ``result.outputs["nee"]`` one variable by name or alias as an xarray
+        DataArray, and ``result.outputs[["nee", "gpp"]]`` several as a Dataset.
+        A file-backed instance reads each column at most once, so selecting
+        several variables — separately or together — costs one pass over the
+        file.
     parameters:
         The :class:`~pysipnet.parameters.model.SIPNETParameters` used for
         this run.

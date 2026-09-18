@@ -32,7 +32,6 @@ a column added upstream should be modeled, not silently passed through, and
 from __future__ import annotations
 
 import warnings
-from io import StringIO
 from pathlib import Path
 
 import pandas as pd
@@ -85,7 +84,7 @@ def _split_header(lines: list[str]) -> tuple[list[str] | None, int]:
     parse as a number means the line is a header.
     """
     if lines[0].startswith("Notes:"):
-        return lines[1].split(), 2
+        return (lines[1].split() if len(lines) > 1 else []), 2
 
     first_field = lines[0].split()[0] if lines[0].split() else ""
     try:
@@ -115,12 +114,16 @@ def read_output_file(path: Path, variables: list[str] | None = None) -> pd.DataF
     pandas.DataFrame
         One row per timestep. Empty if the file is empty.
     """
-    lines = path.read_text().splitlines()
-    if not lines:
+    # Only the first two lines decide the layout, and pandas reads the rest from
+    # the path itself. Slurping the file into a string and re-joining it would
+    # hold several times its size in memory at once, which in an ensemble is
+    # paid once per member.
+    with path.open() as handle:
+        head = [line for line in (handle.readline() for _ in range(2)) if line]
+    if not head:
         return pd.DataFrame()
 
-    sipnet_cols, data_start = _split_header(lines)
-    data_text = "\n".join(lines[data_start:])
+    sipnet_cols, data_start = _split_header(head)
 
     if sipnet_cols is None:
         # No header row: fall back to positional integer column labels, since
@@ -135,10 +138,15 @@ def read_output_file(path: Path, variables: list[str] | None = None) -> pd.DataF
         else:
             usecols = None
 
-    return pd.read_csv(
-        StringIO(data_text),
-        sep=r"\s+",
-        header=None,
-        names=python_cols,
-        usecols=usecols,
-    )
+    try:
+        return pd.read_csv(
+            path,
+            sep=r"\s+",
+            header=None,
+            names=python_cols,
+            usecols=usecols,
+            skiprows=data_start,
+        )
+    except pd.errors.EmptyDataError:
+        # A header with no rows under it: the columns are known, the run is not.
+        return pd.DataFrame(columns=usecols if usecols is not None else python_cols)
