@@ -180,7 +180,7 @@ class TestEndToEnd:
         result = runner.run(minimal_params, _make_climate())
 
         with pytest.raises(ValueError, match="litter_pool"):
-            result.outputs.dataframe(["litter_carbon"])
+            result.outputs.select(["litter_carbon"], format="pandas")
         with pytest.raises(ValueError, match="litter_pool"):
             result.outputs[["litter_carbon"]]
         assert result.outputs._frame is None, "refusing a variable must not read the file"
@@ -190,7 +190,7 @@ class TestEndToEnd:
         runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
         result = runner.run(minimal_params, _make_climate())
 
-        frame = result.outputs.dataframe(["year"])
+        frame = result.outputs.select(["year"], format="pandas")
         assert list(frame.columns) == ["year", "day_of_year", "hour_of_day"]
         assert result.outputs["time"].sizes["time"] == 30
         assert set(result.outputs[["nee", "day"]].data_vars) == {"net_ecosystem_exchange"}
@@ -200,7 +200,7 @@ class TestEndToEnd:
         runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
         result = runner.run(minimal_params, _make_climate())
 
-        assert list(result.outputs.dataframe([]).columns) == [
+        assert list(result.outputs.select([], format="pandas").columns) == [
             "year",
             "day_of_year",
             "hour_of_day",
@@ -227,7 +227,7 @@ class TestEndToEnd:
 
         # bcdeltaC is a v2.1.0 column the registry still maps; this file has none.
         with pytest.raises(KeyError, match="are not in"):
-            result.outputs.dataframe(["bcdeltaC"])
+            result.outputs.select(["bcdeltaC"], format="pandas")
         assert len(reads) == 1
 
     def test_carbon_balance_identity(self, minimal_params):
@@ -548,7 +548,7 @@ class TestOutputIO:
         )
         result = runner.run(minimal_params, _make_climate())
 
-        subset = result.outputs.dataframe(["nee", "gpp"])
+        subset = result.outputs.select(["nee", "gpp"], format="pandas")
         assert list(subset.columns) == [
             "year",
             "day_of_year",
@@ -563,7 +563,7 @@ class TestOutputIO:
         runner = SIPNETRunner(flags=ModelFlags.standard())
         result = runner.run(minimal_params, _make_climate())
 
-        subset = result.outputs.dataframe(["nee"])
+        subset = result.outputs.select(["nee"], format="pandas")
         assert "net_ecosystem_exchange" in subset.columns
         assert "year" in subset.columns
         assert "wood_carbon" not in subset.columns
@@ -614,7 +614,7 @@ class TestOutputIO:
             "net_ecosystem_exchange",
             "gross_primary_production",
         }
-        assert not out.dataframe(["soil_respiration", "gpp"]).empty
+        assert not out.select(["soil_respiration", "gpp"], format="pandas").empty
 
         read_columns = [c for call in requested for c in (call or [])]
         assert len(read_columns) == len(set(read_columns)), (
@@ -635,7 +635,7 @@ class TestOutputIO:
         assert requested[-1] is None
         before = len(requested)
         assert out["nee"].sizes["time"] == 30
-        assert not out.dataframe(["gpp", "soil_respiration"]).empty
+        assert not out.select(["gpp", "soil_respiration"], format="pandas").empty
         assert len(requested) == before, f"a cached column was re-read: {requested[before:]}"
 
     def test_n_timesteps(self, minimal_params, tmp_path):
@@ -880,7 +880,10 @@ class TestFailedRunsRaise:
         result = SIPNETRunner(flags=ModelFlags.standard()).run(
             minimal_params, broken_climate, check=False
         )
-        for select in (lambda: result.outputs["nee"], lambda: result.outputs.dataframe(["nee"])):
+        for select in (
+            lambda: result.outputs["nee"],
+            lambda: result.outputs.select(["nee"], format="pandas"),
+        ):
             with pytest.raises(KeyError, match="provenance.stderr"):
                 select()
 

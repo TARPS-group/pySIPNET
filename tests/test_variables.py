@@ -358,7 +358,7 @@ def test_output_getitem_and_variables():
         "net_ecosystem_exchange",
         "wood_carbon",
     ]
-    subset = out.dataframe(["nee"])
+    subset = out.select(["nee"], format="pandas")
     assert list(subset.columns) == ["year", "day_of_year", "hour_of_day", "net_ecosystem_exchange"]
     assert set(out[["nee", "wood_carbon"]].data_vars) == {"net_ecosystem_exchange", "wood_carbon"}
 
@@ -529,6 +529,7 @@ def test_there_is_no_dataset_method():
 
     out = SIPNETOutput.from_dataframe(_frame())
     assert not hasattr(out, "dataset")
+    assert not hasattr(out, "dataframe")
     assert set(out[["nee"]].data_vars) == {"net_ecosystem_exchange"}
 
 
@@ -538,7 +539,7 @@ def test_output_rejects_a_bare_string_where_a_sequence_is_expected():
 
     out = SIPNETOutput.from_dataframe(_frame())
     with pytest.raises(TypeError, match="sequence of variable names"):
-        out.dataframe("nee")
+        out.select("nee")
 
 
 def test_output_reports_an_unknown_variable_name():
@@ -615,3 +616,17 @@ def test_a_frames_own_step_lengths_beat_the_inferred_ones():
     ds = build_xarray_dataset(frame, attributes_for=lambda _: {}, source="test")
     assert ds.attrs["time_step_length_source"] == "climate drivers"
     assert ds["time_step_length"].values[-1] == np.timedelta64(6, "h")
+
+
+def test_select_returns_the_format_it_was_asked_for():
+    import pandas as pd
+    import xarray as xr
+
+    from pysipnet.output import SIPNETOutput
+
+    out = SIPNETOutput.from_dataframe(_frame())
+    assert isinstance(out.select(["nee"]), xr.Dataset)
+    assert isinstance(out.select(["nee"], format="pandas"), pd.DataFrame)
+    assert out.select(["nee"]).identical(out[["nee"]])
+    with pytest.raises(ValueError, match="'xarray' or 'pandas'"):
+        out.select(["nee"], format="dataframe")

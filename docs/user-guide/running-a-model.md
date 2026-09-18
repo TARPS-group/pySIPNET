@@ -382,7 +382,7 @@ ds  = result.outputs.xarray          # xarray Dataset, one `time` dimension
 nee = result.outputs["nee"]          # one variable as a DataArray, by name or alias
 both = result.outputs[["nee", "gpp"]]  # several variables as a Dataset
 
-result.outputs.dataframe(["nee", "gpp"])  # the same selection as a DataFrame
+result.outputs.select(["nee", "gpp"], format="pandas")  # the same selection in pandas
 ```
 
 A DataArray still converts to whatever you need: `nee.to_series()` for pandas,

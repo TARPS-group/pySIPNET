@@ -248,21 +248,37 @@ r3 = runner.run(params, climate, output_dir=None)
     can never be inside it.  The check is there so the guarantee does not
     depend on that.
 
-### Variable-selective loading
+### `select`: the memory-efficient route
 
-For large ensemble outputs it is often wasteful to load every column.
-`result.outputs[[...]]` and `dataframe([...])` read only the named variables
-from the file and keep only those in memory. Names or aliases both work:
+`.pandas` and `.xarray` give you everything: on a file-backed output they read
+and cache all 35 columns. `select([...])` reads only the variables you name and
+holds only those, which for a large ensemble is the difference between keeping
+one column per member and keeping every member's full output.
 
 ```python
 # Just NEE and GPP — year/day_of_year/hour_of_day are always included:
-subset = result.outputs.dataframe(["nee", "gpp"])
-# DataFrame with columns: year, day_of_year, hour_of_day,
-#                         net_ecosystem_exchange, gross_primary_production
+ds = result.outputs.select(["nee", "gpp"])                    # xarray Dataset (default)
+df = result.outputs.select(["nee", "gpp"], format="pandas")   # ... or a DataFrame
+# DataFrame columns: year, day_of_year, hour_of_day,
+#                    net_ecosystem_exchange, gross_primary_production
 
-ds  = result.outputs[["nee", "gpp"]]           # the same selection as a Dataset
-nee = result.outputs["nee"]                    # one variable, as a DataArray
+ds  = result.outputs[["nee", "gpp"]]   # shorthand for the xarray default
+nee = result.outputs["nee"]            # one variable, as a DataArray
 ```
+
+Names or aliases both work (`"nee"`, `"NEE"`, `"net_ecosystem_exchange"`).
+
+Measured on a half-hourly year, 35 columns, selecting NEE from a file-backed
+output:
+
+| | retained | columns held |
+|:--|:--|:--|
+| `select(["nee"], format="pandas")` | 0.60 MB | 4 |
+| `pandas[["net_ecosystem_exchange"]]` | 4.94 MB | 35 |
+
+It is **not** a speed optimization: the parser scans every field of every line
+either way, so reading a few columns costs about four fifths of reading them
+all. The saving is memory.
 
 A selection never re-reads a column already in memory. Selecting NEE and then
 GPP costs the same two reads as selecting both together, and asking for either
@@ -325,5 +341,5 @@ together:
 | Interactive exploration, single run | Default (no `output_dir`) — data in memory |
 | Need the raw file for archival | `output_dir=` on runner or `keep_workdir=True` |
 | Large ensemble, full outputs needed | `output_dir=` — lazy-load member by member |
-| Large ensemble, only a few columns needed | `output_dir=` + `result.outputs.dataframe([...])` |
+| Large ensemble, only a few columns needed | `output_dir=` + `result.outputs.select([...])` |
 | Debugging a failing run | `keep_workdir=True` — inspect all files in `provenance.workdir` |
