@@ -285,9 +285,9 @@ def _frame(n: int = 4) -> pd.DataFrame:
 
 
 def test_dataset_is_one_dimensional_in_time():
-    from pysipnet.output import output_dataframe_to_dataset
+    from pysipnet.output import build_output_dataset
 
-    ds = output_dataframe_to_dataset(_frame())
+    ds = build_output_dataset(_frame())
     assert dict(ds.sizes) == {"time": 4, "bounds": 2}
     assert ds["time"].values[1] == np.datetime64("2020-01-01T12:00")
     assert ds["net_ecosystem_exchange"].attrs["units"] == "g m-2"
@@ -297,9 +297,9 @@ def test_dataset_is_one_dimensional_in_time():
 
 def test_dataset_infers_the_step_length_when_it_is_not_given():
     """Without the drivers the interval is reconstructed, and the Dataset says so."""
-    from pysipnet.output import output_dataframe_to_dataset
+    from pysipnet.output import build_output_dataset
 
-    ds = output_dataframe_to_dataset(_frame())
+    ds = build_output_dataset(_frame())
     assert ds.attrs["time_step_length_source"].startswith("inferred")
     # Rows are 12 h apart, and the last step repeats the one before it.
     assert list(ds["time_step_length"].values) == [np.timedelta64(12, "h")] * 4
@@ -307,21 +307,21 @@ def test_dataset_infers_the_step_length_when_it_is_not_given():
 
 
 def test_dataset_step_bounds_from_lengths():
-    from pysipnet.output import output_dataframe_to_dataset
+    from pysipnet.output import build_output_dataset
 
-    ds = output_dataframe_to_dataset(_frame(), time_step_length=np.full(4, 0.5))
+    ds = build_output_dataset(_frame(), time_step_length=np.full(4, 0.5))
     assert ds.attrs["time_step_length_source"] == "climate drivers"
     assert ds["time_step_end"].values[0] == np.datetime64("2020-01-01T12:00")
     assert ds["time_step_length"].values[0] == np.timedelta64(12, "h")
     with pytest.raises(ValueError, match="values but the data has"):
-        output_dataframe_to_dataset(_frame(), time_step_length=np.ones(3))
+        build_output_dataset(_frame(), time_step_length=np.ones(3))
 
 
 def test_dataset_carries_cf_time_bounds():
     """The interval each row covers, in the form CF-aware tooling looks for."""
-    from pysipnet.output import output_dataframe_to_dataset
+    from pysipnet.output import build_output_dataset
 
-    ds = output_dataframe_to_dataset(_frame(), time_step_length=np.full(4, 0.5))
+    ds = build_output_dataset(_frame(), time_step_length=np.full(4, 0.5))
     assert ds["time"].attrs["bounds"] == "time_bounds"
     assert ds["time_bounds"].dims == ("time", "bounds")
     np.testing.assert_array_equal(ds["time_bounds"].values[:, 0], ds["time"].values)
@@ -330,19 +330,19 @@ def test_dataset_carries_cf_time_bounds():
 
 def test_dataset_says_when_the_step_length_is_unknowable():
     """One row gives nothing to measure an interval against."""
-    from pysipnet.output import output_dataframe_to_dataset
+    from pysipnet.output import build_output_dataset
 
-    ds = output_dataframe_to_dataset(_frame().head(1))
+    ds = build_output_dataset(_frame().head(1))
     assert ds.attrs["time_step_length_source"] == "unknown"
     assert "time_step_end" not in ds.coords
     assert "time_bounds" not in ds.coords
 
 
 def test_dataset_needs_the_time_coordinates():
-    from pysipnet.output import output_dataframe_to_dataset
+    from pysipnet.output import build_output_dataset
 
     with pytest.raises(ValueError, match="missing"):
-        output_dataframe_to_dataset(_frame().drop(columns=["hour_of_day"]))
+        build_output_dataset(_frame().drop(columns=["hour_of_day"]))
 
 
 def test_output_getitem_and_variables():
@@ -587,7 +587,7 @@ def test_step_lengths_must_increase_the_clock():
     """Duplicate or backwards timestamps would give bounds that run backwards."""
     import pandas as pd
 
-    from pysipnet.output import output_dataframe_to_dataset
+    from pysipnet.output import build_output_dataset
 
     repeated = pd.DataFrame(
         {
@@ -598,14 +598,14 @@ def test_step_lengths_must_increase_the_clock():
         }
     )
     with pytest.raises(ValueError, match="do not increase"):
-        output_dataframe_to_dataset(repeated)
+        build_output_dataset(repeated)
 
 
 def test_supplied_step_lengths_must_be_positive():
-    from pysipnet.output import output_dataframe_to_dataset
+    from pysipnet.output import build_output_dataset
 
     with pytest.raises(ValueError, match="positive duration"):
-        output_dataframe_to_dataset(_frame(), time_step_length=np.array([0.5, 0.5, 0.0, 0.5]))
+        build_output_dataset(_frame(), time_step_length=np.array([0.5, 0.5, 0.0, 0.5]))
 
 
 def test_a_frames_own_step_lengths_beat_the_inferred_ones():

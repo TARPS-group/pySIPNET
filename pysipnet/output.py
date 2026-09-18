@@ -513,14 +513,15 @@ class SIPNETOutput:
 # ── DataFrame → Dataset ────────────────────────────────────────────────────────
 
 
-def output_dataframe_to_dataset(
+def build_output_dataset(
     df: pd.DataFrame, time_step_length: np.ndarray | None = None
 ) -> xr.Dataset:
     """Turn a parsed output DataFrame into a self-describing :class:`xarray.Dataset`.
 
-    For a frame that did not come from a :class:`SIPNETOutput`, which would
-    otherwise give it a Dataset through ``output[[...]]``. See
-    :func:`pysipnet.dataset.build_xarray_dataset` for the layout.
+    :func:`~pysipnet.dataset.build_xarray_dataset` with the output variable
+    registry already supplied, for a frame that did not come from a
+    :class:`SIPNETOutput` — one that did would give you the same thing through
+    ``output[[...]]``. See that function for the layout.
     """
     from pysipnet.dataset import build_xarray_dataset
 
