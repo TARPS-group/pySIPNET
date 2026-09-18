@@ -34,7 +34,7 @@ lines = [
     "unless that flag is on, so selecting it by name (`result.outputs[...]`) raises",
     "rather than returning the zeros. `result.outputs.pandas` still carries the column.",
     "",
-    '**Aliases.** `result.outputs["nee"]` and `result.outputs.dataframe(["nee"])` accept',
+    '**Aliases.** `result.outputs["nee"]` and `result.outputs.select(["nee"])` accept',
     "the aliases listed as well as the full names; column names are always the full names.",
     "",
     "| Name | SIPNET column | Time reference | Units | Decimals | Requires flag | Aliases | Description |",

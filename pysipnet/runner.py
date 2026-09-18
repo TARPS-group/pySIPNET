@@ -48,7 +48,7 @@ and return a file-backed :class:`~pysipnet.output.SIPNETOutput` instead::
     )
     results = [runner.run(params_i, climate, run_id=f"m{i}") for i in range(1000)]
     # No DataFrames in memory yet.
-    nee = pd.concat([r.outputs.dataframe(["nee"]) for r in results])
+    nee = pd.concat([r.outputs.select(["nee"], format="pandas") for r in results])
 
 Each run writes ``sipnet_<run_id>.out`` inside ``output_dir``. Two runs sharing
 a ``run_id`` would name the same file, so the second is refused rather than

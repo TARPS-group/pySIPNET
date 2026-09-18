@@ -8,8 +8,8 @@ time:
 - ``output["nee"]`` — one variable as a :class:`xarray.DataArray`, carrying its
   units, its time coordinate and the interval each value covers.
 - ``output[["nee", "gpp"]]`` — several variables as a Dataset.
-- :meth:`SIPNETOutput.dataset` / :meth:`SIPNETOutput.dataframe` — the same
-  selection, spelled out, in either library.
+- :meth:`SIPNETOutput.select` — the same selection, in either library:
+  ``select(["nee"], format="pandas")``.
 - :attr:`SIPNETOutput.xarray` / :attr:`SIPNETOutput.pandas` — everything.
 
 Every one of these accepts aliases (``"nee"``, ``"NEE"``,
@@ -18,6 +18,10 @@ in memory: asking for a variable twice costs one read, and asking for several
 at once is a single read.  Defining a likelihood over three output variables
 therefore does not read the file three times, no matter how the caller spells
 the request.
+
+:meth:`SIPNETOutput.select` is the memory-efficient route: it reads and keeps
+only the columns named, where :attr:`pandas` and :attr:`xarray` read and cache
+the whole file.
 
 The two construction modes are:
 
@@ -56,7 +60,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, overload
 
 import numpy as np
 
@@ -76,6 +80,7 @@ if TYPE_CHECKING:
 
 
 TimeStepLengths: TypeAlias = "np.ndarray | Callable[[], np.ndarray]"
+OutputFormat: TypeAlias = Literal["xarray", "pandas"]
 
 _SOURCE = "SIPNET output, via pySIPNET"
 
@@ -226,14 +231,35 @@ class SIPNETOutput:
         """The full output as an :class:`xarray.Dataset` with a ``time`` dimension.
 
         Built from :attr:`pandas` on first access and cached. See
-        :meth:`dataset` for the layout.
+        ``output[[...]]`` for the layout.
         """
         if self._dataset is None:
             self._dataset = self._build_dataset(self.pandas)
         return self._dataset
 
-    def dataframe(self, variables: Sequence[str] | None = None) -> pd.DataFrame:
-        """The output, or the named variables of it, as a DataFrame.
+    @overload
+    def select(
+        self, variables: Sequence[str], *, format: Literal["xarray"] = ...
+    ) -> xr.Dataset: ...
+
+    @overload
+    def select(self, variables: Sequence[str], *, format: Literal["pandas"]) -> pd.DataFrame: ...
+
+    def select(
+        self, variables: Sequence[str], *, format: OutputFormat = "xarray"
+    ) -> xr.Dataset | pd.DataFrame:
+        """The named variables, reading only those from the file.
+
+        This is the memory-efficient way to work with an output: on a
+        file-backed instance it reads the named columns and holds only those,
+        where :attr:`pandas` and :attr:`xarray` read and cache all 35. Across an
+        ensemble that is the difference between keeping one column per member
+        and keeping every member's full output. It is not a speed optimization —
+        the parser still scans every field of every line, so reading a few
+        columns costs about four fifths of reading them all.
+
+        A column already in memory is never read again, so selecting variables
+        one at a time costs the same as selecting them together.
 
         The time coordinates (``year``, ``day_of_year``, ``hour_of_day``) are
         always included, because they identify each row.
@@ -241,45 +267,29 @@ class SIPNETOutput:
         Parameters
         ----------
         variables:
-            Variable names or aliases. ``None`` returns everything, exactly as
-            :attr:`pandas` does — including handing back the frame this object
-            caches, rather than a copy. A named selection is always a copy.
+            Variable names or aliases (``"nee"``, ``"NEE"``,
+            ``"net_ecosystem_exchange"`` are the same variable).
+        format:
+            ``"xarray"`` (default) for a Dataset carrying units, the time
+            coordinate and the interval each value covers; ``"pandas"`` for a
+            plain DataFrame. ``output[[...]]`` is shorthand for the default.
+
+        Returns
+        -------
+        xarray.Dataset or pandas.DataFrame
+            The Dataset has one dimension, ``time``, whose coordinate is the
+            **start** of each timestep as ``datetime64``; ``year``,
+            ``day_of_year`` and ``hour_of_day`` as auxiliary coordinates on it;
+            ``time_step_length``, ``time_step_end`` and a CF ``time_bounds``
+            variable describing the interval each row covers; and one data
+            variable per selected column, carrying the attributes from
+            :meth:`~pysipnet.variables.VariableSpec.xarray_attributes`. Columns
+            the registry does not know become variables with no attributes.
         """
-        if variables is None:
-            return self.pandas
-        names = self._resolve(variables)
-        self._ensure_columns(names)
-        assert self._frame is not None
-        # Asking for a time coordinate by name must not list it twice; they are
-        # always present.
-        selected = [name for name in names if name not in TIME_COORDINATE_NAMES]
-        return self._frame[[*TIME_COORDINATE_NAMES, *selected]]
-
-    def dataset(self, variables: Sequence[str] | None = None) -> xr.Dataset:
-        """The output, or the named variables of it, as a self-describing Dataset.
-
-        Layout:
-
-        - one dimension, ``time``, whose coordinate is the **start** of each
-          timestep as ``datetime64``;
-        - ``year``, ``day_of_year`` and ``hour_of_day`` kept as auxiliary
-          coordinates on ``time``;
-        - ``time_step_length``, ``time_step_end`` and a CF ``time_bounds``
-          variable describing the interval each row covers;
-        - one data variable per selected column, with the attributes from
-          :meth:`~pysipnet.variables.VariableSpec.xarray_attributes`.
-
-        Columns the registry does not know become variables with no attributes.
-
-        Parameters
-        ----------
-        variables:
-            Variable names or aliases. ``None`` returns everything, exactly as
-            :attr:`xarray` does.
-        """
-        if variables is None:
-            return self.xarray
-        return self._build_dataset(self.dataframe(variables))
+        if format not in ("xarray", "pandas"):
+            raise ValueError(f"format must be 'xarray' or 'pandas', not {format!r}.")
+        frame = self._select_frame(variables)
+        return frame if format == "pandas" else self._build_dataset(frame)
 
     def __getitem__(self, key: str | Sequence[str]) -> xr.DataArray | xr.Dataset:
         """One variable as a DataArray, or several as a Dataset, by name or alias.
@@ -287,14 +297,15 @@ class SIPNETOutput:
         ``output["nee"]``, ``output["NEE"]`` and
         ``output["net_ecosystem_exchange"]`` all return the same array, with
         units, description and time reference in ``.attrs``.
-        ``output[["nee", "gpp"]]`` returns both in one Dataset, read in one go.
+        ``output[["nee", "gpp"]]`` is shorthand for :meth:`select` and returns
+        both in one Dataset, read in one go.
         """
         if isinstance(key, str):
             name = self._resolve([key])[0]
             if self._dataset is not None and name in self._dataset:
                 return self._dataset[name]
-            return self.dataset([key])[name]
-        return self.dataset(key)
+            return self._build_dataset(self._select_frame([key]))[name]
+        return self.select(key)
 
     @property
     def variables(self) -> tuple[VariableSpec, ...]:
@@ -442,6 +453,16 @@ class SIPNETOutput:
             "whose flags left the column out."
         )
 
+    def _select_frame(self, variables: Sequence[str]) -> pd.DataFrame:
+        """The named columns plus the time coordinates, read if not already held."""
+        names = self._resolve(variables)
+        self._ensure_columns(names)
+        assert self._frame is not None
+        # Asking for a time coordinate by name must not list it twice; they are
+        # always present.
+        selected = [name for name in names if name not in TIME_COORDINATE_NAMES]
+        return self._frame[[*TIME_COORDINATE_NAMES, *selected]]
+
     def _time_axis(self, df: pd.DataFrame) -> TimeAxis:
         """The shared time coordinates, built once per output.
 
@@ -492,18 +513,19 @@ class SIPNETOutput:
 # ── DataFrame → Dataset ────────────────────────────────────────────────────────
 
 
-def output_dataframe_to_dataset(
+def build_output_dataset(
     df: pd.DataFrame, time_step_length: np.ndarray | None = None
 ) -> xr.Dataset:
     """Turn a parsed output DataFrame into a self-describing :class:`xarray.Dataset`.
 
-    The free-function form of :meth:`SIPNETOutput.dataset`, for a frame that did
-    not come from a :class:`SIPNETOutput`. See :func:`pysipnet.dataset.dataframe_to_dataset`
-    for the layout.
+    :func:`~pysipnet.dataset.build_xarray_dataset` with the output variable
+    registry already supplied, for a frame that did not come from a
+    :class:`SIPNETOutput` — one that did would give you the same thing through
+    ``output[[...]]``. See that function for the layout.
     """
-    from pysipnet.dataset import dataframe_to_dataset
+    from pysipnet.dataset import build_xarray_dataset
 
-    return dataframe_to_dataset(
+    return build_xarray_dataset(
         df,
         attributes_for=_attributes_for,
         time_step_length=time_step_length,

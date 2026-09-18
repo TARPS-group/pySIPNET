@@ -362,8 +362,17 @@ error.
 
 `SIPNETOutput` exposes `.pandas` (DataFrame), `.xarray` (xarray Dataset, one
 `time` dimension = step start), `["nee"]` (DataArray by name or alias),
-`[["nee", "gpp"]]` (Dataset), and `.dataset(...)` / `.dataframe(...)` for the
-same selection spelled out. xarray is a required dependency.
+`[["nee", "gpp"]]` (Dataset), and `.select(names, format="xarray"|"pandas")`
+for the same selection in either library. xarray is a required dependency.
+
+`select` is the one that reads only the columns named; `.pandas` / `.xarray`
+read and cache all 35. `out[[...]]` is shorthand for `select(..., format="xarray")`,
+and `format` is typed with `@overload` on the literals so a selection's static
+type is the one library rather than a union. (The pandas half still reveals as
+`Any`: the installed pandas ships no `py.typed`, so every `pd.DataFrame`
+annotation in the package is `Any` to mypy. That is pandas, not the overload.) There is deliberately no
+`dataset()` method — `out[[...]]` already is one, and `dataset` was retired as
+a property name in `d7bd6a8` for saying nothing about which library it returns.
 
 The Dataset states the interval each row covers: `time_step_end`,
 `time_step_length` and a CF `time_bounds` variable named by `time`'s `bounds`

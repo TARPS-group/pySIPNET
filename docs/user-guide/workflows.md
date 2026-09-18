@@ -152,7 +152,7 @@ results = [
 
 # Read only NEE and GPP from each output file — the time coordinates are always included
 frames = [
-    r.outputs.dataframe(["nee", "gpp"]).assign(run_id=r.provenance.run_id)
+    r.outputs.select(["nee", "gpp"], format="pandas").assign(run_id=r.provenance.run_id)
     for r in results
 ]
 combined = pd.concat(frames, ignore_index=True)
@@ -160,11 +160,10 @@ combined = pd.concat(frames, ignore_index=True)
 #   net_ecosystem_exchange, gross_primary_production, run_id
 ```
 
-`dataframe([...])` and `dataset([...])` read only the requested variables, and
-what each member holds afterwards is those columns plus the three time
-coordinates — not its full output, let alone the whole ensemble. A column already
-read is never read again, so selecting variables one at a time costs the same as
-selecting them together.
+`select([...])` reads only the requested variables, and what each member holds
+afterwards is those columns plus the three time coordinates — not its full
+output, let alone the whole ensemble. A column already read is never read again,
+so selecting variables one at a time costs the same as selecting them together.
 
 ---
 
