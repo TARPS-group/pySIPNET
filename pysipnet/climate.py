@@ -237,9 +237,10 @@ class ClimateDrivers:
     def xarray(self) -> xr.Dataset:
         """The drivers as an :class:`xarray.Dataset` on the same ``time`` axis as outputs.
 
-        ``time`` is the start of each step; ``time_step_end`` and
-        ``time_step_length`` are coordinates; every variable carries its units,
-        description and time reference from :data:`pysipnet.variables.CLIMATE_VARIABLES`.
+        ``time`` is the end of each step, as for outputs; ``time_step_start``,
+        ``time_step_length`` and ``time_bounds`` are coordinates; every variable
+        carries its units, description and time reference from
+        :data:`pysipnet.variables.CLIMATE_VARIABLES`.
         """
         from pysipnet.dataset import build_xarray_dataset
 

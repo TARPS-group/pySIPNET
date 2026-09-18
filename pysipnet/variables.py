@@ -29,9 +29,24 @@ the step. ``TIMESTEP_TOTAL`` values are accumulated over the step,
 per-day rate for the step, and ``CUMULATIVE`` values run from the start of the
 simulation to the end of the step (and continue across a restart, which carries
 them in the checkpoint).
-Each spec's :attr:`VariableSpec.time_reference` states this in words, and the
-same text travels as an attribute on the xarray representation so a user never
-has to look it up.
+
+The xarray representation (:mod:`pysipnet.dataset`) therefore puts its ``time``
+coordinate at the **end** of the step, with ``time_bounds`` spanning the step:
+that is the one labeling under which every variable's CF ``cell_methods`` is
+literally true — a pool is ``time: point`` at ``time``, a total is ``time: sum``
+over the bounds.  Each spec's :attr:`VariableSpec.time_reference` states the
+same thing in words, and that text travels as an attribute so a user never has
+to look it up.
+
+Resampling
+----------
+Which ways of combining consecutive steps are meaningful depends on the kind:
+totals add, pools do not; a running total is the last value; means and rates
+must be weighted by the step length, because SIPNET steps are not all the same
+length.  :data:`RESAMPLING_METHODS_FOR_KIND` records the valid methods for each
+kind and :data:`RESAMPLED_KIND` what kind the result is.  There is deliberately
+no default: :func:`pysipnet.resample.resample` requires the caller to say which
+method they want and refuses one the kind does not support.
 
 Climate drivers
 ---------------
@@ -56,7 +71,7 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass
 from enum import StrEnum
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from pysipnet.units import UnitStyle, format_units, validate_units
 
@@ -86,25 +101,36 @@ class VariableKind(StrEnum):
     """A running total from the start of the simulation to the end of the timestep."""
 
 
-class Aggregation(StrEnum):
-    """How to combine consecutive values when resampling to a coarser timestep."""
+ResamplingMethod = Literal["sum", "mean", "last"]
+"""How consecutive steps may be combined: add them, time-weighted-average them, or keep the last."""
 
-    SUM = "sum"
-    MEAN = "mean"
-    LAST = "last"
-    NONE = "none"
-
-
-_AGGREGATION_FOR_KIND: dict[VariableKind, Aggregation] = {
-    VariableKind.TIMESTEP_START_COORDINATE: Aggregation.NONE,
-    VariableKind.TIMESTEP_END_STATE: Aggregation.MEAN,
-    VariableKind.TIMESTEP_TOTAL: Aggregation.SUM,
-    VariableKind.DAILY_RATE: Aggregation.MEAN,
-    VariableKind.TIMESTEP_MEAN: Aggregation.MEAN,
-    VariableKind.CUMULATIVE: Aggregation.LAST,
+RESAMPLING_METHODS_FOR_KIND: dict[VariableKind, frozenset[str]] = {
+    VariableKind.TIMESTEP_START_COORDINATE: frozenset(),
+    VariableKind.TIMESTEP_END_STATE: frozenset({"last", "mean"}),
+    VariableKind.TIMESTEP_TOTAL: frozenset({"sum"}),
+    VariableKind.DAILY_RATE: frozenset({"mean"}),
+    VariableKind.TIMESTEP_MEAN: frozenset({"mean"}),
+    VariableKind.CUMULATIVE: frozenset({"last"}),
 }
+"""The methods that give a meaningful value when steps of this kind are combined.
 
-_TIME_REFERENCE_FOR_KIND: dict[VariableKind, str] = {
+A total over a step adds to the next; a pool at the end of a step does not, so
+only its last value (still a pool) or its time-weighted mean (now a mean) make
+sense; a rate or a mean over a step averages, weighted by step length; a running
+total is whatever it had reached by the last step.
+"""
+
+RESAMPLED_KIND: dict[tuple[VariableKind, str], VariableKind] = {
+    (VariableKind.TIMESTEP_END_STATE, "last"): VariableKind.TIMESTEP_END_STATE,
+    (VariableKind.TIMESTEP_END_STATE, "mean"): VariableKind.TIMESTEP_MEAN,
+    (VariableKind.TIMESTEP_TOTAL, "sum"): VariableKind.TIMESTEP_TOTAL,
+    (VariableKind.DAILY_RATE, "mean"): VariableKind.DAILY_RATE,
+    (VariableKind.TIMESTEP_MEAN, "mean"): VariableKind.TIMESTEP_MEAN,
+    (VariableKind.CUMULATIVE, "last"): VariableKind.CUMULATIVE,
+}
+"""What kind a variable of a given kind becomes after each valid resampling method."""
+
+TIME_REFERENCE_FOR_KIND: dict[VariableKind, str] = {
     VariableKind.TIMESTEP_START_COORDINATE: "start of the timestep",
     VariableKind.TIMESTEP_END_STATE: "value at the end of the timestep",
     VariableKind.TIMESTEP_TOTAL: "total over the timestep",
@@ -113,14 +139,17 @@ _TIME_REFERENCE_FOR_KIND: dict[VariableKind, str] = {
     VariableKind.CUMULATIVE: "running total from the start of the run to the end of the timestep",
 }
 
-# ``cell_methods`` vocabulary from the Climate and Forecast (CF) conventions.
-_CELL_METHODS_FOR_KIND: dict[VariableKind, str | None] = {
+# ``cell_methods`` vocabulary from the Climate and Forecast (CF) conventions,
+# true under the step-end ``time`` labeling in pysipnet.dataset. A cumulative
+# value has none: its accumulation interval is the run so far, not the row's
+# bounds, and CF has no way to say so in cell_methods.
+CELL_METHODS_FOR_KIND: dict[VariableKind, str | None] = {
     VariableKind.TIMESTEP_START_COORDINATE: None,
     VariableKind.TIMESTEP_END_STATE: "time: point",
     VariableKind.TIMESTEP_TOTAL: "time: sum",
     VariableKind.DAILY_RATE: "time: mean",
     VariableKind.TIMESTEP_MEAN: "time: mean",
-    VariableKind.CUMULATIVE: "time: sum",
+    VariableKind.CUMULATIVE: None,
 }
 
 
@@ -167,6 +196,12 @@ class VariableSpec:
     group: str = ""
     """Display grouping: ``"carbon_pools"``, ``"carbon_fluxes"``, ``"water"``, ..."""
 
+    comment: str = ""
+    """Free-text CF ``comment`` attribute, for what ``cell_methods`` cannot say."""
+
+    cell_methods_comment: str = ""
+    """Qualifies the kind's ``cell_methods``, e.g. how a mean was actually formed."""
+
     def __post_init__(self) -> None:
         if not NAME_PATTERN.match(self.name):
             raise ValueError(f"Variable name {self.name!r} violates the naming convention.")
@@ -175,14 +210,17 @@ class VariableSpec:
             raise ValueError(f"Variable {self.name!r} needs a description and a long_label.")
 
     @property
-    def aggregation(self) -> Aggregation:
-        """Default rule for resampling this variable to a coarser timestep."""
-        return _AGGREGATION_FOR_KIND[self.kind]
-
-    @property
     def time_reference(self) -> str:
         """In words, which moment or interval of the timestep the value refers to."""
-        return _TIME_REFERENCE_FOR_KIND[self.kind]
+        return TIME_REFERENCE_FOR_KIND[self.kind]
+
+    @property
+    def cell_methods(self) -> str | None:
+        """CF ``cell_methods`` for this variable, or ``None`` when CF has no way to say it."""
+        base = CELL_METHODS_FOR_KIND[self.kind]
+        if base is not None and self.cell_methods_comment:
+            return f"{base} (comment: {self.cell_methods_comment})"
+        return base
 
     @property
     def label(self) -> str:
@@ -210,14 +248,14 @@ class VariableSpec:
             "description": self.description,
             "kind": self.kind.value,
             "time_reference": self.time_reference,
-            "aggregation": self.aggregation.value,
             "sipnet_name": self.sipnet_name,
         }
         if self.constituent:
             attrs["constituent"] = self.constituent
-        cell_methods = _CELL_METHODS_FOR_KIND[self.kind]
-        if cell_methods is not None:
-            attrs["cell_methods"] = cell_methods
+        if self.cell_methods is not None:
+            attrs["cell_methods"] = self.cell_methods
+        if self.comment:
+            attrs["comment"] = self.comment
         if self.sign_convention:
             attrs["sign_convention"] = self.sign_convention
         if self.requires_flag is not None:
@@ -231,8 +269,9 @@ class VariableSpec:
         record = asdict(self)
         record["kind"] = self.kind.value
         record["aliases"] = list(self.aliases)
-        record["aggregation"] = self.aggregation.value
         record["time_reference"] = self.time_reference
+        record["cell_methods"] = self.cell_methods
+        record["resampling_methods"] = sorted(RESAMPLING_METHODS_FOR_KIND[self.kind])
         record["formatted_units"] = self.formatted_units()
         return record
 
@@ -315,7 +354,11 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
         sipnet_name="woodCreation",
         kind=VariableKind.TIMESTEP_TOTAL,
         **_GC,
-        description="Carbon allocated to the wood pool over the timestep.",
+        description=(
+            "Carbon allocated to the wood pool over the timestep, after SIPNET's carbon "
+            "and nitrogen limitation adjustments. Excludes carbon added by planting events "
+            "and carbon withdrawn from wood for leaf-on."
+        ),
         long_label="Wood growth",
         aliases=("wood_creation", "woodCreation"),
         output_decimals=2,
@@ -394,6 +437,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
         ),
         long_label="Soil wetness fraction",
         aliases=("soil_wetness_frac", "soilWetnessFrac"),
+        cell_methods_comment="mean of the values at the start and end of the timestep",
         output_decimals=3,
         group="water",
     ),
@@ -432,7 +476,9 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
         **_GC,
         description=(
             "Net carbon flux between ecosystem and atmosphere over the timestep: "
-            "ecosystem respiration minus gross primary production."
+            "ecosystem respiration minus gross primary production. Excludes carbon lost "
+            "as methane and carbon removed by harvest events, so it does not by itself "
+            "close the carbon balance when those are active."
         ),
         long_label="Net ecosystem exchange",
         short_label="NEE",
@@ -454,6 +500,11 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
         long_label="Cumulative net ecosystem exchange",
         short_label="Cumulative NEE",
         aliases=("cum_nee", "cumNEE", "NEE_cum"),
+        comment=(
+            "Accumulated from the start of the run (or of the restart checkpoint it "
+            "continues) to the end of the timestep, not over the row's time bounds; "
+            "equal to the cumulative sum of net_ecosystem_exchange."
+        ),
         output_decimals=3,
         sign_convention="positive is a net loss of carbon from the ecosystem to the atmosphere",
         group="carbon_fluxes",
@@ -705,7 +756,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
             "Storage-lag component of wood_carbon: the difference between carbon gained "
             "this step (photosynthesis minus autotrophic respiration) and carbon allocated "
             "to growth from the five-day mean NPP, accumulated over the run. Can be negative. "
-            "SIPNET: plantCAccountingDelta."
+            "Reset to zero when the plant dies. SIPNET: plantCAccountingDelta."
         ),
         long_label="Wood storage carbon",
         aliases=("npp_storage", "nppStorage"),
@@ -1015,7 +1066,7 @@ def output_variable_records() -> list[dict[str, Any]]:
 
 
 __all__ = [
-    "Aggregation",
+    "CELL_METHODS_FOR_KIND",
     "CLIMATE_COLUMN_NAMES",
     "CLIMATE_VARIABLES",
     "CLIMATE_VARIABLES_BY_NAME",
@@ -1027,7 +1078,11 @@ __all__ = [
     "OUTPUT_VARIABLES",
     "OUTPUT_VARIABLES_BY_NAME",
     "OUTPUT_VARIABLES_BY_SIPNET_NAME",
+    "RESAMPLED_KIND",
+    "RESAMPLING_METHODS_FOR_KIND",
+    "ResamplingMethod",
     "TIME_COORDINATE_NAMES",
+    "TIME_REFERENCE_FOR_KIND",
     "VariableKind",
     "VariableSpec",
     "output_variable_records",

@@ -372,7 +372,10 @@ log warning rather than an output column, so a failed check appears in
     totals **over** it. One column, `transpiration_rate`, is a per-day rate
     rather than a total. The `kind` and `time_reference` fields of each
     variable spell this out, and the xarray view below carries them as
-    attributes.
+    attributes. The xarray `time` coordinate is therefore the **end** of the
+    step, the one instant at which a pool is the value "at `time`" and a flux
+    is the total "over the bounds", as the Climate and Forecast (CF)
+    `cell_methods` attributes say; `time_step_start` is SIPNET's row label.
 
 ### Five views of the same output
 
@@ -398,10 +401,10 @@ ds["net_ecosystem_exchange"].attrs
 #  'cell_methods': 'time: sum', 'constituent': 'C',
 #  'sign_convention': 'positive is a flux from the ecosystem to the atmosphere', ...}
 
-ds["time"]              # datetime64, start of each timestep
-ds["time_step_end"]     # datetime64, end of each timestep
-ds["time_step_length"]  # timedelta64
-ds["time_bounds"]       # (time, bounds) — the interval [time, time_step_end)
+ds["time"]              # datetime64, END of each timestep (CF standard_name "time")
+ds["time_step_start"]   # datetime64, start of each timestep, as SIPNET labels the row
+ds["time_step_length"]  # timedelta64, the length declared to SIPNET
+ds["time_bounds"]       # (time, bounds) — the interval [time_step_start, time]
 
 ds.attrs["run_id"]                   # which run produced this
 ds.attrs["time_step_length_source"]  # measured from the drivers, or inferred
@@ -415,20 +418,56 @@ ds.to_netcdf("run.nc")  # self-describing on disk; needs a netCDF backend
 interval each value covers, which is what an observation operator needs in order
 to decide how observations line up with model steps. It adds a second dimension,
 `bounds`, so `ds.sizes` reads `{'time': 365, 'bounds': 2}`; use `result.outputs.pandas`
-when you want a flat table.
+when you want a flat table. The Dataset declares `Conventions = "CF-1.11"`.
+Writing it needs a netCDF backend that stores 64-bit integers (`h5netcdf` or
+`netCDF4`); the netCDF3 backend built into scipy cannot hold nanosecond times.
 
-### Annual summaries
+### Daily, monthly and annual values
 
-Fluxes sum; pools average. The registry records the right rule for each
-variable as `spec.aggregation`:
+Use [`resample`][pysipnet.resample.resample] to combine steps into coarser
+ones. It takes no default method, because the right one is not a property of
+the variable: daily soil water can be the value at the end of the day or the
+mean over it, and those are different quantities. What *is* a property of the
+variable is which methods make sense at all, and `resample` refuses one that
+does not, saying why:
 
 ```python
-annual = (
-    result.outputs.pandas
-    .groupby("year")[["net_ecosystem_exchange", "gross_primary_production", "evapotranspiration"]]
-    .sum()
+from pysipnet import resample
+
+daily = resample(result.outputs[["nee", "gpp"]], "1D", how="sum")
+
+annual = resample(
+    result.outputs[["wood_carbon", "nee", "soil_wetness_fraction"]],
+    "YS",
+    how={
+        "wood_carbon": "last",             # the pool at the end of the year
+        "net_ecosystem_exchange": "sum",   # the annual total
+        "soil_wetness_fraction": "mean",   # weighted by step length
+    },
 )
+
+resample(result.outputs[["wood_carbon"]], "1D", how="sum")
+# ValueError: Cannot resample 'wood_carbon' with 'sum': it is a pool reported at
+# the end of the timestep (kind 'timestep_end_state'), and a pool is not additive
+# across steps ... Valid for this kind: 'last' gives the pool at the end of the
+# coarser step; 'mean' gives the time-weighted mean of the pool over the coarser
+# step, which makes it a timestep_mean rather than a state.
 ```
+
+| Kind | Valid methods | What you get |
+|:-----|:--------------|:-------------|
+| `timestep_total` (fluxes) | `sum` | the total over the coarser step |
+| `timestep_end_state` (pools) | `last`, `mean` | the pool at the end, or its time-weighted mean (now a `timestep_mean`) |
+| `daily_rate`, `timestep_mean` | `mean` | the mean weighted by `time_step_length` |
+| `cumulative` | `last` | the running total so far |
+
+Means are weighted by `time_step_length` because SIPNET steps need not be
+equal: the Niwot record alternates day and night steps of 0.29 and 0.63 days,
+and a plain mean would be biased toward the short ones. The result keeps the
+same layout, with `time` at the end of each coarser step and `kind`,
+`time_reference` and `cell_methods` rewritten to describe what each variable
+now is. A step ending exactly at midnight belongs to the day that ended, so a
+daily record resamples to itself.
 
 ## Querying parameter metadata
 

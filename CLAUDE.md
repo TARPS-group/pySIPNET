@@ -361,7 +361,7 @@ Units are UDUNITS strings (`"g m-2"`, `"cm d-1"`, `"1"`) validated at import by
 error.
 
 `SIPNETOutput` exposes `.pandas` (DataFrame), `.xarray` (xarray Dataset, one
-`time` dimension = step start), `["nee"]` (DataArray by name or alias),
+`time` dimension = step **end**), `["nee"]` (DataArray by name or alias),
 `[["nee", "gpp"]]` (Dataset), and `.select(names, format="xarray"|"pandas")`
 for the same selection in either library. xarray is a required dependency.
 
@@ -374,11 +374,33 @@ annotation in the package is `Any` to mypy. That is pandas, not the overload.) T
 `dataset()` method — `out[[...]]` already is one, and `dataset` was retired as
 a property name in `d7bd6a8` for saying nothing about which library it returns.
 
-The Dataset states the interval each row covers: `time_step_end`,
-`time_step_length` and a CF `time_bounds` variable named by `time`'s `bounds`
-attribute, so the half-open `[time, time_step_end)` is machine-readable — which
-is what an observation operator needs in order to decide which steps an
-observation spans. Step lengths come from the climate's `time_step_length`
+The `time` coordinate is the **end** of the step, not SIPNET's row label. It
+is the one labeling under which every variable's CF `cell_methods` is literally
+true: a pool is `time: point` at `time`, a total is `time: sum` over the bounds.
+Under start labeling `time: point` would have claimed the pool was the
+start-of-step value, which it is not. The Dataset states the interval each row
+covers: `time_step_start`, `time_step_length` and a CF `time_bounds` variable
+named by `time`'s `bounds` attribute, so `[time_step_start, time]` is
+machine-readable — which is what an observation operator needs in order to
+decide which steps an observation spans. `year`/`day_of_year`/`hour_of_day`
+stay as SIPNET wrote them, i.e. the start. A declared end within a minute of
+the next row's start snaps to it, so three-decimal `.clim` lengths do not put
+`time` seconds off the clock; `time_step_length` itself is never adjusted.
+Cumulative columns carry no `cell_methods` (their interval is the run so far,
+which CF cannot express in that attribute) and `soil_wetness_fraction`'s says
+it is a two-point mean. The Dataset declares `Conventions = "CF-1.11"`, `time`
+has `standard_name`/`axis`, and no coordinate gets a `_FillValue` on encoding.
+
+`pysipnet.resample.resample(ds, freq, how=...)` coarsens the axis. There is
+**no default method**: `RESAMPLING_METHODS_FOR_KIND` in `variables.py` says
+which of `sum`/`mean`/`last` are meaningful for each `VariableKind` (totals
+sum; pools last or mean; rates and means mean; cumulatives last), `mean` is
+weighted by `time_step_length` because Niwot's day/night steps differ in
+length, and an invalid pairing raises with the reason and the valid menu.
+`RESAMPLED_KIND` gives the result's kind (a pool averaged is a
+`timestep_mean`), and the result's `kind`/`cell_methods`/`time_reference`
+attributes are rewritten accordingly. The old `aggregation` attribute and
+`Aggregation` enum are gone. Step lengths come from the climate's `time_step_length`
 column; when the output has no climate attached they are **inferred** from
 consecutive timestamps (exact except for the last step, which repeats its
 predecessor), and `time_step_length_source` in the Dataset's attributes says
@@ -599,7 +621,8 @@ pySIPNET/
 │   ├── variables.py              # the output-variable registry (names, units, kinds, labels)
 │   ├── units.py                  # UDUNITS unit strings: Pint registry, validation, formatting
 │   ├── climate.py                # ClimateDrivers + validation
-│   ├── dataset.py                # shared DataFrame → xarray builder (time = step start)
+│   ├── dataset.py                # shared DataFrame → xarray builder (time = step end)
+│   ├── resample.py               # explicit, kind-checked coarsening of the time axis
 │   ├── events.py                 # management events (arity checked against SIPNET)
 │   ├── io/
 │   │   ├── param_io.py           # read/write .param

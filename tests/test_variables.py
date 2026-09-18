@@ -28,8 +28,8 @@ from pysipnet.variables import (
     NAME_PATTERN,
     OUTPUT_VARIABLES,
     OUTPUT_VARIABLES_BY_NAME,
+    RESAMPLING_METHODS_FOR_KIND,
     TIME_COORDINATE_NAMES,
-    Aggregation,
     VariableKind,
     VariableSpec,
     output_variable_records,
@@ -134,8 +134,9 @@ def test_spec_is_complete(spec: VariableSpec):
     assert spec.long_label.strip()
     assert spec.group
     if spec.kind is VariableKind.TIMESTEP_START_COORDINATE:
-        assert spec.aggregation is Aggregation.NONE
+        assert not RESAMPLING_METHODS_FOR_KIND[spec.kind]
     else:
+        assert RESAMPLING_METHODS_FOR_KIND[spec.kind], "every data column can be resampled somehow"
         assert spec.output_decimals is not None, "every numeric column has a printf precision"
     if spec.constituent:
         assert spec.units != "1", "a dimensionless quantity has no constituent"
@@ -222,7 +223,8 @@ def test_records_are_json_serialisable():
     assert len(records) == len(OUTPUT_VARIABLES)
     nee = next(r for r in records if r["name"] == "net_ecosystem_exchange")
     assert nee["formatted_units"] == "g C m⁻²"
-    assert nee["aggregation"] == "sum"
+    assert nee["resampling_methods"] == ["sum"]
+    assert nee["cell_methods"] == "time: sum"
 
 
 def test_spec_refuses_bad_names_and_units():
@@ -265,10 +267,28 @@ def test_xarray_attributes_carry_the_time_reference():
     attrs = OUTPUT_VARIABLES_BY_NAME["wood_carbon"].xarray_attributes()
     assert attrs["time_reference"] == "value at the end of the timestep"
     assert attrs["cell_methods"] == "time: point"
+    assert "aggregation" not in attrs, "no default aggregation: resample() asks for one"
     attrs = OUTPUT_VARIABLES_BY_NAME["net_ecosystem_exchange"].xarray_attributes()
     assert attrs["cell_methods"] == "time: sum"
     assert "sign_convention" in attrs
     assert attrs["units"] == "g m-2" and attrs["constituent"] == "C"
+
+
+def test_cell_methods_say_what_cf_can_and_cannot():
+    """A cumulative value's interval is not the row's bounds, so CF gets no claim; a
+    two-point mean is qualified rather than passed off as a true time mean."""
+    cumulative = OUTPUT_VARIABLES_BY_NAME["cumulative_net_ecosystem_exchange"].xarray_attributes()
+    assert "cell_methods" not in cumulative
+    assert "start of the run" in cumulative["comment"]
+    wetness = OUTPUT_VARIABLES_BY_NAME["soil_wetness_fraction"].xarray_attributes()
+    assert wetness["cell_methods"] == (
+        "time: mean (comment: mean of the values at the start and end of the timestep)"
+    )
+    for spec in OUTPUT_VARIABLES:
+        if spec.kind is VariableKind.TIMESTEP_END_STATE:
+            assert spec.cell_methods == "time: point"
+        elif spec.kind is VariableKind.TIMESTEP_TOTAL:
+            assert spec.cell_methods == "time: sum"
 
 
 def _frame(n: int = 4) -> pd.DataFrame:
@@ -289,7 +309,11 @@ def test_dataset_is_one_dimensional_in_time():
 
     ds = build_output_dataset(_frame())
     assert dict(ds.sizes) == {"time": 4, "bounds": 2}
-    assert ds["time"].values[1] == np.datetime64("2020-01-01T12:00")
+    # Rows start at 00:00 and 12:00; time is the END of each step.
+    assert ds["time_step_start"].values[1] == np.datetime64("2020-01-01T12:00")
+    assert ds["time"].values[1] == np.datetime64("2020-01-02T00:00")
+    assert ds["time"].attrs["standard_name"] == "time" and ds["time"].attrs["axis"] == "T"
+    assert ds.attrs["Conventions"] == "CF-1.11"
     assert ds["net_ecosystem_exchange"].attrs["units"] == "g m-2"
     assert ds["somethingNew"].attrs == {}
     assert ds["net_ecosystem_exchange"].dims == ("time",)
@@ -303,7 +327,7 @@ def test_dataset_infers_the_step_length_when_it_is_not_given():
     assert ds.attrs["time_step_length_source"].startswith("inferred")
     # Rows are 12 h apart, and the last step repeats the one before it.
     assert list(ds["time_step_length"].values) == [np.timedelta64(12, "h")] * 4
-    assert ds["time_step_end"].values[-1] == np.datetime64("2020-01-03T00:00")
+    assert ds["time"].values[-1] == np.datetime64("2020-01-03T00:00")
 
 
 def test_dataset_step_bounds_from_lengths():
@@ -311,7 +335,7 @@ def test_dataset_step_bounds_from_lengths():
 
     ds = build_output_dataset(_frame(), time_step_length=np.full(4, 0.5))
     assert ds.attrs["time_step_length_source"] == "climate drivers"
-    assert ds["time_step_end"].values[0] == np.datetime64("2020-01-01T12:00")
+    assert ds["time"].values[0] == np.datetime64("2020-01-01T12:00")
     assert ds["time_step_length"].values[0] == np.timedelta64(12, "h")
     with pytest.raises(ValueError, match="values but the data has"):
         build_output_dataset(_frame(), time_step_length=np.ones(3))
@@ -324,18 +348,46 @@ def test_dataset_carries_cf_time_bounds():
     ds = build_output_dataset(_frame(), time_step_length=np.full(4, 0.5))
     assert ds["time"].attrs["bounds"] == "time_bounds"
     assert ds["time_bounds"].dims == ("time", "bounds")
-    np.testing.assert_array_equal(ds["time_bounds"].values[:, 0], ds["time"].values)
-    np.testing.assert_array_equal(ds["time_bounds"].values[:, 1], ds["time_step_end"].values)
+    np.testing.assert_array_equal(ds["time_bounds"].values[:, 0], ds["time_step_start"].values)
+    np.testing.assert_array_equal(ds["time_bounds"].values[:, 1], ds["time"].values)
+    for name in ds.coords:
+        assert ds[name].encoding["_FillValue"] is None, "CF: no _FillValue on coordinates"
 
 
-def test_dataset_says_when_the_step_length_is_unknowable():
-    """One row gives nothing to measure an interval against."""
+def test_dataset_refuses_a_row_it_cannot_place_in_time():
+    """One row with no declared length has no end, so no time coordinate."""
     from pysipnet.output import build_output_dataset
 
-    ds = build_output_dataset(_frame().head(1))
-    assert ds.attrs["time_step_length_source"] == "unknown"
-    assert "time_step_end" not in ds.coords
-    assert "time_bounds" not in ds.coords
+    with pytest.raises(ValueError, match="Pass time_step_length"):
+        build_output_dataset(_frame().head(1))
+    ds = build_output_dataset(_frame().head(1), time_step_length=np.array([0.5]))
+    assert ds["time"].values[0] == np.datetime64("2020-01-01T12:00")
+
+
+def test_step_end_snaps_to_the_next_start_within_a_minute():
+    """A declared length rounded to three decimals must not put `time` off the clock,
+    but a real gap in the record stays a gap."""
+    import pandas as pd
+
+    from pysipnet.output import build_output_dataset
+
+    frame = pd.DataFrame(
+        {
+            "year": [1998] * 3,
+            "day_of_year": [305, 305, 305],
+            "hour_of_day": [0.0, 7.0, 17.0],
+            "net_ecosystem_exchange": [1.0, 2.0, 3.0],
+        }
+    )
+    # 0.292 d is 7 h less 28.8 s; the third step is followed by nothing, so it
+    # keeps its declared end.
+    ds = build_output_dataset(frame, time_step_length=np.array([0.292, 0.417, 0.583]))
+    assert ds["time"].values[0] == np.datetime64("1998-11-01T07:00")
+    assert ds["time"].values[1] == np.datetime64("1998-11-01T17:00")
+    assert ds["time_step_length"].values[0] == np.timedelta64(25_228_800, "ms")
+    # A three-hour hole is left alone.
+    gapped = build_output_dataset(frame, time_step_length=np.array([0.1667, 0.417, 0.583]))
+    assert gapped["time"].values[0] == np.datetime64("1998-11-01T04:00:02.880")
 
 
 def test_dataset_needs_the_time_coordinates():
@@ -459,7 +511,7 @@ def test_climate_conversion_note_survives_without_internal_units():
     attrs = CLIMATE_VARIABLES_BY_NAME["wind_speed"].xarray_attributes()
     assert "sipnet_internal_conversion" in attrs and "sipnet_internal_units" not in attrs
     length = CLIMATE_VARIABLES_BY_NAME["time_step_length"]
-    assert length.aggregation.value == "sum", "a duration sums when resampling"
+    assert RESAMPLING_METHODS_FOR_KIND[length.kind] == {"sum"}, "a duration only sums"
 
 
 def test_climate_time_coordinates_match_output_coordinates():

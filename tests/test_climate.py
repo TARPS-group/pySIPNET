@@ -485,8 +485,9 @@ class TestClimateRegistry:
         ds = cd.xarray
         assert dict(ds.sizes) == {"time": 3, "bounds": 2}
         assert ds["air_temperature"].dims == ("time",)
-        assert ds["time"].values[0] == np.datetime64("2020-04-09T00:00")
-        assert ds["time_step_end"].values[0] == ds["time"].values[1]
+        assert ds["time_step_start"].values[0] == np.datetime64("2020-04-09T00:00")
+        assert ds["time"].values[0] == np.datetime64("2020-04-10T00:00")
+        assert ds["time"].values[0] == ds["time_step_start"].values[1]
         assert ds["time"].attrs["bounds"] == "time_bounds"
         assert ds["air_temperature"].attrs["units"] == "degC"
         assert ds["precipitation"].attrs["time_reference"] == "total over the timestep"

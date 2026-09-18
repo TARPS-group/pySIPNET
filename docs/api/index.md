@@ -24,6 +24,8 @@
 ## Output
 
 ::: pysipnet.output
+::: pysipnet.dataset
+::: pysipnet.resample
 
 ## Variables and units
 
