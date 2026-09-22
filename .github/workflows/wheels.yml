@@ -54,7 +54,9 @@ jobs:
           if-no-files-found: error
 
   smoke:
-    name: Install and run (${{ matrix.os }})
+    # The wheel is part of the name: two jobs run on ubuntu-24.04 (the
+    # manylinux wheel and the pure one) and would otherwise be indistinguishable.
+    name: Install and run (${{ matrix.os }}, ${{ matrix.wheel }})
     needs: build
     strategy:
       fail-fast: false
