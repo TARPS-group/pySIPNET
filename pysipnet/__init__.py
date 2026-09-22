@@ -30,10 +30,13 @@ With agronomic events::
 # Runner
 # Build utilities
 from pysipnet.build import (
+    BinaryVersionError,
+    BuildError,
     DownloadError,
     build_sipnet,
     download_sipnet,
     ensure_binary,
+    install_sipnet,
     sipnet_version,
 )
 
@@ -137,11 +140,14 @@ __all__ = [
     "niwot_reference_climate",
     "niwot_reference_output",
     # Build
+    "install_sipnet",
     "build_sipnet",
     "download_sipnet",
-    "DownloadError",
     "ensure_binary",
     "sipnet_version",
+    "BinaryVersionError",
+    "BuildError",
+    "DownloadError",
     # Version
     "PYSIPNET_VERSION",
     "SIPNET_PINNED_COMMIT",

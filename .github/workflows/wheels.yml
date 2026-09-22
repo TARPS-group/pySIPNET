@@ -1,0 +1,131 @@
+# Build the distributable artifacts: an sdist, the pure-Python wheel, and one
+# wheel per platform SIPNET publishes a binary for, with that binary inside.
+#
+# A platform wheel is tagged for the system its binary needs (macOS 26 on
+# arm64; glibc 2.34 on x86_64 Linux), so pip installs it only there and takes
+# the pure wheel everywhere else, where `pysipnet install-sipnet` gets a
+# binary the other ways. The binaries are not compiled here: they are
+# upstream's release assets, verified against the digests pinned in
+# pysipnet/version.py by `pysipnet stage-bundle`.
+#
+# Runs on demand and on a version tag. On a tag it attaches the artifacts to a
+# draft GitHub release for a human to publish. Nothing is uploaded to PyPI;
+# add a job with trusted publishing when the project is ready for that.
+name: Wheels
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    name: Build sdist and wheels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --all-groups --locked
+
+      - name: sdist and pure wheel
+        run: uv build -o dist
+
+      # Each binary is staged under pysipnet/bin/<key>/ and the hook bundles
+      # only the directory matching the key it tags the wheel with, so both
+      # can be staged up front.
+      - name: Platform wheels
+        run: |
+          set -euo pipefail
+          for key in darwin-arm64 linux-x86_64; do
+            uv run pysipnet stage-bundle "$key"
+            PYSIPNET_BUNDLE_SIPNET="$key" uv build --wheel -o dist
+          done
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
+
+  smoke:
+    name: Install and run (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Each platform wheel on a runner that can run its binary, plus the
+          # pure wheel where a binary has to be fetched into the user cache.
+          - os: ubuntu-24.04
+            wheel: manylinux_2_34_x86_64
+          - os: macos-26
+            wheel: macosx_26_0_arm64
+          - os: ubuntu-24.04
+            wheel: any
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install the wheel into a fresh environment
+        run: |
+          set -euo pipefail
+          uv venv .venv
+          uv pip install --python .venv/bin/python dist/pysipnet-*-py3-none-${{ matrix.wheel }}.whl
+
+      - name: Fetch a binary when the wheel has none
+        if: matrix.wheel == 'any'
+        run: .venv/bin/pysipnet install-sipnet --method download
+
+      - name: The binary is found, is the pinned SIPNET, and runs the model
+        run: |
+          set -euo pipefail
+          .venv/bin/pysipnet info
+          .venv/bin/python - <<'PY'
+          # Run SIPNET by hand on the bundled Niwot inputs, the way test_fidelity
+          # does, so a binary that answers --version but cannot run the model
+          # (missing shared library, wrong loader) fails here and not on a user.
+          import shutil, subprocess, tempfile
+          from pathlib import Path
+          from pysipnet import niwot_reference_files
+          from pysipnet.build import ensure_binary
+          from pysipnet.io.output_reader import read_output_file
+          binary = ensure_binary()
+          files = niwot_reference_files()
+          with tempfile.TemporaryDirectory() as tmp:
+              work = Path(tmp)
+              shutil.copy(files.param, work / "sipnet.param")
+              shutil.copy(files.clim, work / "sipnet.clim")
+              (work / "sipnet.in").write_text("FILE_NAME = sipnet\nEVENTS = 0\nPRINT_HEADER = 1\n")
+              subprocess.run([str(binary)], cwd=work, check=True, capture_output=True)
+              out = read_output_file(work / "sipnet.out")
+          assert len(out) == 800, len(out)
+          print(f"SIPNET at {binary} ran the Niwot record: {len(out)} timesteps")
+          PY
+
+  release:
+    name: Attach to a draft release
+    needs: smoke
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: dist/*

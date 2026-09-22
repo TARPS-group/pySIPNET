@@ -27,14 +27,17 @@ Dask, Parsl, Ray, etc.)::
 
 The SIPNET binary
 -----------------
-There is a single SIPNET binary, stored in ``.sipnet_cache/`` at the repo root
-and built with::
+There is a single SIPNET binary. Every model option is chosen at run time and
+written into ``sipnet.in``, so one binary serves every configuration. Where it
+comes from is :mod:`pysipnet.build`'s business: by default the runner takes the
+first binary in that module's search order — ``$PYSIPNET_BINARY``, a binary
+bundled in the wheel, ``.sipnet_cache/`` in a checkout, the per-user cache —
+and ``SIPNETRunner(binary=...)`` names one outright. Install one with ``pysipnet install-sipnet``.
 
-    make sipnet
-
-Every model option is chosen at run time and written into ``sipnet.in``, so one
-binary serves every configuration. The cache directory can be overridden via
-``SIPNETRunner(cache_dir=...)``.
+Before the first run, the runner asks the binary for its version and refuses
+one built from a different SIPNET than this pySIPNET pins, so a stale or
+mismatched binary fails loudly rather than producing another model's output.
+``verify_binary=False`` switches that off.
 
 Output persistence
 ------------------
@@ -66,7 +69,14 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from pysipnet.build import BINARY_NAME
+from pysipnet.build import (
+    BINARY_NAME,
+    missing_binary_message,
+    verify_binary_matches_pin,
+)
+from pysipnet.build import (
+    binary_path as _default_binary_path,
+)
 from pysipnet.parameters.model import ModelFlags
 
 if TYPE_CHECKING:
@@ -78,8 +88,6 @@ if TYPE_CHECKING:
 
 # Sentinel used to distinguish "not passed" from None in output_dir overrides.
 _UNSET = object()
-
-_DEFAULT_CACHE_DIR = Path(__file__).parent.parent / ".sipnet_cache"
 
 
 class ClimateStaging(StrEnum):
@@ -231,9 +239,18 @@ class SIPNETRunner:
     overwrite:
         Whether a run may replace an output file left by an earlier run with
         the same ``run_id``.  ``False`` (default) refuses; see :meth:`run`.
+    binary:
+        Path of the SIPNET binary to run, resolved to an absolute path.
+        Default: the first binary found in
+        :func:`pysipnet.build.binary_candidates` order, looked up afresh on
+        each run so a binary installed after the runner was created is used.
     cache_dir:
-        Directory containing pre-compiled SIPNET binaries (default:
-        ``.sipnet_cache/`` at the repo root).
+        Directory holding a binary named ``sipnet``; the same as passing
+        ``binary=cache_dir / "sipnet"``. Ignored when *binary* is given.
+    verify_binary:
+        Ask the binary for its version before the first run and refuse one
+        not built from the pinned SIPNET tag (default ``True``). See
+        :func:`pysipnet.build.verify_binary_matches_pin`.
     climate_staging:
         How file-backed climate instances are staged into the working
         directory.  See :class:`ClimateStaging`.
@@ -257,7 +274,9 @@ class SIPNETRunner:
         output_dir: Path | str | None = None,
         overwrite: bool = False,
         climate_staging: ClimateStaging = ClimateStaging.COPY,
+        binary: Path | str | None = None,
         cache_dir: Path | str | None = None,
+        verify_binary: bool = True,
         workdir_base: Path | str | None = None,
         keep_workdir: bool = False,
         timeout: float = 300.0,
@@ -268,22 +287,44 @@ class SIPNETRunner:
         self.output_dir = Path(output_dir).resolve() if output_dir is not None else None
         self.overwrite = overwrite
         self.climate_staging = climate_staging
-        self.cache_dir = Path(cache_dir) if cache_dir else _DEFAULT_CACHE_DIR
+        if binary is None and cache_dir is not None:
+            binary = Path(cache_dir) / BINARY_NAME
+        # Resolved, as output_dir is: the binary is executed with the run's
+        # working directory as cwd, where a relative path would mean something
+        # else, and --version on a bare name would search PATH instead.
+        self._binary = Path(binary).resolve() if binary is not None else None
+        self.verify_binary = verify_binary
         self.workdir_base = Path(workdir_base) if workdir_base else Path(tempfile.gettempdir())
         self.keep_workdir = keep_workdir
         self.timeout = timeout
 
     @property
     def binary_path(self) -> Path:
-        """Absolute path to the SIPNET binary this runner will execute."""
-        return self.cache_dir / BINARY_NAME
+        """Path of the SIPNET binary this runner will execute.
 
-    def _check_binary(self) -> None:
-        if not self.binary_path.exists():
+        An explicit *binary* wins; otherwise the search in
+        :mod:`pysipnet.build` is repeated on each access, so a binary installed
+        after the runner was created is picked up. :meth:`run` reads it once
+        per run and uses that one path for the check, the execution and the
+        provenance record, so all three describe the same file.
+        """
+        if self._binary is not None:
+            return self._binary
+        return _default_binary_path()
+
+    def _check_binary(self) -> Path:
+        """Return the binary to run, after checking it exists and is the pinned SIPNET."""
+        path = self.binary_path
+        if not path.is_file():
+            if self._binary is None:
+                raise FileNotFoundError(missing_binary_message())
             raise FileNotFoundError(
-                f"SIPNET binary not found at {self.binary_path}. "
-                "Run 'make sipnet' from the repo root to build it."
+                f"SIPNET binary not found at {path}. Install one with "
+                "'pysipnet install-sipnet', or pass the path of an existing binary."
             )
+        if self.verify_binary:
+            verify_binary_matches_pin(path)
+        return path
 
     def _check_output_dir(self, output_dir: Path, workdir: Path) -> None:
         """Raise ValueError if output_dir is inside the run's working directory."""
@@ -455,6 +496,9 @@ class SIPNETRunner:
             If this run's output file already exists and *overwrite* is false.
         FileNotFoundError
             If the SIPNET binary cannot be found.
+        pysipnet.build.BinaryVersionError
+            If *verify_binary* is on and the binary was built from a
+            different SIPNET than this pySIPNET pins.
         subprocess.TimeoutExpired
             If the run exceeds *timeout* seconds.
         """
@@ -463,7 +507,7 @@ class SIPNETRunner:
         from pysipnet.io.param_io import write_param_file
         from pysipnet.result import RunProvenance, SIPNETResult
 
-        self._check_binary()
+        binary = self._check_binary()
         flags = self.flags
 
         # Resolve effective output_dir (per-call overrides runner-level default).
@@ -518,7 +562,7 @@ class SIPNETRunner:
             )
 
             proc = subprocess.run(
-                [str(self.binary_path)],
+                [str(binary)],
                 cwd=workdir,
                 capture_output=True,
                 text=True,
@@ -527,7 +571,7 @@ class SIPNETRunner:
 
             provenance = RunProvenance(
                 flags=flags,
-                binary_path=self.binary_path,
+                binary_path=binary,
                 run_id=run_id,
                 workdir=workdir,
                 returncode=proc.returncode,

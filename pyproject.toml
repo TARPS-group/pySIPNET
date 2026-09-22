@@ -24,7 +24,12 @@ dependencies = [
     "numpy>=1.24",
     "pint>=0.23",
     "xarray>=2023.0",
+    "platformdirs>=4.0",
+    "packaging>=23.0",
 ]
+
+[project.scripts]
+pysipnet = "pysipnet.cli:main"
 
 [project.optional-dependencies]
 viz = ["plotly>=5.3"]
@@ -54,6 +59,13 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["pysipnet"]
+# pysipnet/bin/ holds a SIPNET binary only while a platform wheel is being
+# built; the hook below force-includes it then and tags the wheel for that
+# platform. Excluding it here keeps a staged binary out of the pure wheel.
+exclude = ["pysipnet/bin/**"]
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
 
 [tool.ruff]
 target-version = "py311"
