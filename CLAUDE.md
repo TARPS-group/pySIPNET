@@ -679,6 +679,7 @@ pySIPNET/
 ├── sipnet/                       # git submodule — SIPNET source, pinned to v2.2.0-alpha.1
 ├── Makefile                      # `make sipnet`, `make sipnet-download`
 ├── hatch_build.py                # build hook: bundle a staged binary into a platform-tagged wheel
+├── RELEASING.md                  # maintainer notes: how to cut a release (tag → Wheels workflow → draft release)
 ├── pysipnet/
 │   ├── version.py                # pinned commit, target version, release assets, wheel platform tags (import-free)
 │   ├── build.py                  # find (search order), download, compile, verify the binary
