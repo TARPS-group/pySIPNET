@@ -20,7 +20,7 @@ Two complementary properties are tested:
 2. **End-to-end input-translation fidelity**
    (:meth:`test_reproduces_independent_reference`).  Start from an
    independently-authored SIPNET input set (the Niwot Ridge smoke fixture, see
-   ``tests/fixtures/niwot_reference/README.md``), read it into the Python data
+   ``pysipnet/data/niwot/README.md``), read it into the Python data
    model, and run it through the wrapper.  Compare against the bare binary run
    directly on the *original* files.  Because the reference files were authored
    by the SIPNET project — not by pySIPNET's writer — a writer bug (wrong name,
@@ -44,13 +44,14 @@ import pytest
 
 from pysipnet.io.clim_io import read_clim_file
 from pysipnet.io.output_reader import read_output_file
+from pysipnet.io.reference import niwot_reference_files
 from pysipnet.parameters.model import ModelFlags
 from pysipnet.runner import SIPNETRunner
 from tests.helpers import params_from_sipnet_file
 
-REFERENCE_DIR = Path(__file__).parent / "fixtures" / "niwot_reference"
-REFERENCE_PARAM = REFERENCE_DIR / "sipnet.param"
-REFERENCE_CLIM = REFERENCE_DIR / "sipnet.clim"
+_REFERENCE = niwot_reference_files()
+REFERENCE_PARAM = _REFERENCE.param
+REFERENCE_CLIM = _REFERENCE.clim
 
 _SIPNET_BINARY = SIPNETRunner(flags=ModelFlags.standard()).binary_path
 
@@ -59,10 +60,6 @@ pytestmark = [
     pytest.mark.skipif(
         not _SIPNET_BINARY.exists(),
         reason=f"SIPNET binary not found at {_SIPNET_BINARY}; run 'make sipnet'",
-    ),
-    pytest.mark.skipif(
-        not REFERENCE_PARAM.exists() or not REFERENCE_CLIM.exists(),
-        reason=f"Reference fixture missing under {REFERENCE_DIR}",
     ),
 ]
 

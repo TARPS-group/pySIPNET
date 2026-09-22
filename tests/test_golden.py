@@ -8,9 +8,11 @@ column contract shifts, the frozen values (or column set) stop matching and the
 test fails — even though the wrapper and binary would still agree with each
 other (so :mod:`tests.test_fidelity` alone would not notice).
 
-The baseline is a fixed, in-repo input: the Niwot reference parameters and the
-first :data:`_N_TIMESTEPS` rows of its climate.  Regenerate the golden after an
-*intended* change with::
+The baseline is a fixed input that ships with the package: the Niwot reference
+parameters and the first :data:`_N_TIMESTEPS` rows of its climate, under
+``pysipnet/data/niwot/`` (see :mod:`pysipnet.io.reference`).  The golden lives
+beside them and is shipped too, so regenerating it is a visible change for
+anyone who builds tests on it.  Regenerate after an *intended* change with::
 
     python -m tests.test_golden        # from the repo root
 
@@ -21,22 +23,18 @@ Requires the compiled SIPNET binary; skipped when absent.
 
 from __future__ import annotations
 
-import warnings
-from pathlib import Path
-
 import pandas as pd
 import pytest
 
 from pysipnet.climate import ClimateDrivers
-from pysipnet.io.clim_io import read_clim_file
+from pysipnet.io.reference import niwot_reference_climate, niwot_reference_files
 from pysipnet.parameters.model import ModelFlags
 from pysipnet.runner import SIPNETRunner
 from tests.helpers import params_from_sipnet_file
 
-REFERENCE_DIR = Path(__file__).parent / "fixtures" / "niwot_reference"
-REFERENCE_PARAM = REFERENCE_DIR / "sipnet.param"
-REFERENCE_CLIM = REFERENCE_DIR / "sipnet.clim"
-GOLDEN = Path(__file__).parent / "fixtures" / "golden" / "niwot_standard.out.csv"
+_REFERENCE = niwot_reference_files()
+REFERENCE_PARAM = _REFERENCE.param
+GOLDEN = _REFERENCE.output
 
 _N_TIMESTEPS = 60  # ~3–4 weeks at Niwot's sub-daily cadence; keeps the golden compact
 
@@ -48,18 +46,12 @@ pytestmark = [
         not _SIPNET_BINARY.exists(),
         reason=f"SIPNET binary not found at {_SIPNET_BINARY}; run 'make sipnet'",
     ),
-    pytest.mark.skipif(
-        not REFERENCE_PARAM.exists() or not REFERENCE_CLIM.exists(),
-        reason=f"Reference fixture missing under {REFERENCE_DIR}",
-    ),
 ]
 
 
 def _run_baseline() -> pd.DataFrame:
     """Run the frozen baseline input through the wrapper and return its output."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # upstream data has a few vpd ≤ 0 rows
-        full = read_clim_file(REFERENCE_CLIM, n_columns=14)
+    full = niwot_reference_climate()
     climate = ClimateDrivers.from_dataframe(full.pandas.head(_N_TIMESTEPS).copy(), n_columns=14)
     params = params_from_sipnet_file(REFERENCE_PARAM)
     result = SIPNETRunner(flags=ModelFlags.standard()).run(params, climate, run_id="golden")

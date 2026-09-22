@@ -117,7 +117,13 @@ Expect to revisit:
    `.clim` column and the conversion SIPNET applies on read; each parameter's
    `ParameterSpec.sipnet_name` is where a renamed SIPNET parameter lands.
 4. **Golden fixtures.** Regenerate with `python -m tests.test_golden` and
-   review the diff, recording the before-and-after values in the commit.
+   review the diff, recording the before-and-after values in the commit. The
+   golden ships in the package (`pysipnet/data/niwot/niwot_standard.out.csv`,
+   reachable through `niwot_reference_output()`), so regenerating it is a
+   visible change for consumers, not only for the test suite. Re-copy
+   `sipnet.param` and `sipnet.clim` from the new submodule's smoke fixtures
+   too, and update the commit hash in `pysipnet/data/niwot/README.md`;
+   `tests/test_reference.py` compares them to the submodule byte for byte.
 
 The public API — `SIPNETRunner.run(params, climate)` — should not need to
 change.

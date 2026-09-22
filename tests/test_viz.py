@@ -181,12 +181,9 @@ class TestDashboardOnARealResult:
     """
 
     def test_dashboard_accepts_a_real_result(self, minimal_params):
-        import warnings
-        from pathlib import Path
-
         from pysipnet.build import binary_path
         from pysipnet.climate import ClimateDrivers
-        from pysipnet.io.clim_io import read_clim_file
+        from pysipnet.io.reference import niwot_reference_climate
         from pysipnet.parameters.model import ModelFlags
         from pysipnet.runner import SIPNETRunner
         from pysipnet.viz import dashboard
@@ -194,10 +191,7 @@ class TestDashboardOnARealResult:
         if not binary_path().exists():
             pytest.skip("SIPNET binary not built; run 'make sipnet'")
 
-        reference = Path(__file__).parent / "fixtures" / "niwot_reference" / "sipnet.clim"
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            full = read_clim_file(reference, n_columns=14)
+        full = niwot_reference_climate()
         climate = ClimateDrivers.from_dataframe(full.pandas.head(40).copy(), n_columns=14)
 
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, climate)

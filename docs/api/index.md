@@ -49,3 +49,7 @@
 ::: pysipnet.io.param_io
 ::: pysipnet.io.clim_io
 ::: pysipnet.io.output_reader
+
+## Bundled reference data
+
+::: pysipnet.io.reference

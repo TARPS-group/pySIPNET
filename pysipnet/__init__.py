@@ -54,6 +54,14 @@ from pysipnet.events import (
     TillageEvent,
 )
 
+# Bundled reference data
+from pysipnet.io.reference import (
+    NiwotReferenceFiles,
+    niwot_reference_climate,
+    niwot_reference_files,
+    niwot_reference_output,
+)
+
 # Model (high-level interface)
 from pysipnet.model import SIPNETModel
 
@@ -123,6 +131,11 @@ __all__ = [
     "FertilizationEvent",
     "PlantingEvent",
     "TillageEvent",
+    # Bundled reference data
+    "NiwotReferenceFiles",
+    "niwot_reference_files",
+    "niwot_reference_climate",
+    "niwot_reference_output",
     # Build
     "build_sipnet",
     "download_sipnet",

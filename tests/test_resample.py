@@ -7,8 +7,6 @@ and the tests can tell them apart.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -16,17 +14,15 @@ import xarray as xr
 
 from pysipnet import resample
 from pysipnet.climate import ClimateDrivers
-from pysipnet.io.clim_io import read_clim_file
+from pysipnet.io.reference import niwot_reference_climate, niwot_reference_files
 from pysipnet.output import build_output_dataset
 from pysipnet.variables import RESAMPLED_KIND, RESAMPLING_METHODS_FOR_KIND, VariableKind
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture(scope="module")
 def niwot() -> tuple[pd.DataFrame, np.ndarray, xr.Dataset]:
-    frame = pd.read_csv(FIXTURES / "golden" / "niwot_standard.out.csv")
-    climate = read_clim_file(FIXTURES / "niwot_reference" / "sipnet.clim", n_columns=14)
+    frame = pd.read_csv(niwot_reference_files().output)
+    climate = niwot_reference_climate()
     length = climate.pandas["time_step_length"].to_numpy()[: len(frame)]
     return frame, length, build_output_dataset(frame, time_step_length=length)
 

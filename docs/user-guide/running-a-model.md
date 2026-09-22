@@ -153,7 +153,8 @@ params = SIPNETParameters(
 ```
 
 These are SIPNET's own nominal Niwot Ridge values, from the parameter file the
-model authors ship (kept here as `tests/fixtures/niwot_reference/sipnet.param`),
+model authors ship (bundled as `pysipnet/data/niwot/sipnet.param`, see
+[Bundled reference data](file-io.md#bundled-reference-data)),
 so they go with the climate loaded above.  They are a starting point, not a fit
 to any particular year.
 

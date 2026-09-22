@@ -629,7 +629,9 @@ pySIPNET/
 │   ├── io/
 │   │   ├── param_io.py           # read/write .param
 │   │   ├── clim_io.py            # read/write .clim (12- and 14-column layouts)
-│   │   └── output_reader.py      # read .out, header detected by content
+│   │   ├── output_reader.py      # read .out, header detected by content
+│   │   └── reference.py          # locate and load the bundled Niwot data (importlib.resources)
+│   ├── data/niwot/               # shipped in the wheel: SIPNET-authored .param/.clim, golden output, README
 │   ├── runner.py                 # SIPNETRunner, _render_sipnet_in
 │   ├── model.py                  # SIPNETModel — high-level callable interface
 │   ├── config.py                 # RunConfig — a saveable run specification
@@ -647,10 +649,8 @@ pySIPNET/
 │   ├── test_download.py          # prebuilt-binary download and its verification
 │   ├── test_fidelity.py          # wrapper output == bare binary output
 │   ├── test_golden.py            # frozen numeric baseline
-│   ├── test_build.py             # binary/pin agreement
-│   └── fixtures/
-│       ├── niwot_reference/      # SIPNET-authored .param and .clim
-│       └── golden/               # frozen output baseline
+│   ├── test_reference.py         # bundled data ships in the wheel and matches the submodule
+│   └── test_build.py             # binary/pin agreement
 ├── data/                         # (gitignored) sample data
 ├── docs/
 └── CLAUDE.md                     # this file
@@ -658,6 +658,21 @@ pySIPNET/
 
 Note there is no `patches/` directory and no per-option build targets; both
 belonged to the pre-v2.0.0 compile-time-flag era.
+
+### Bundled reference data
+
+The Niwot fixtures live **inside the package**, at `pysipnet/data/niwot/`, not
+under `tests/`, because a project that installs pySIPNET needs real SIPNET data
+to test against and a wheel does not carry `tests/`. `pysipnet/io/reference.py`
+locates them through `importlib.resources` and is the one place in the package
+that reads package data; `niwot_reference_output()` returns the golden as a
+`SIPNETOutput` paired with the climate's step lengths under standard flags.
+pySIPNET's own tests read the same files, so there is one copy and no drift.
+`sipnet.param` and `sipnet.clim` are SIPNET-authored and must stay byte-identical
+to the submodule's smoke fixtures; never re-save them. The golden is shipped
+too, so regenerating it is a visible change for consumers. hatchling includes
+non-Python files under the listed package with no extra config, which
+`tests/test_reference.py` proves by building the wheel rather than trusting it.
 
 ### Test layers, and what each one would catch
 
@@ -681,6 +696,10 @@ Worth knowing which test to look at when something breaks:
 - `test_golden.py` — the numbers themselves match a checked-in baseline.
   Catches an unintended model change that the wrapper and binary would still
   agree about. Regenerate deliberately with `python -m tests.test_golden`.
+- `test_reference.py` — the Niwot reference files are in the built wheel byte
+  for byte, and the two inputs are still identical to the submodule's smoke
+  fixtures. Catches a packaging change that drops them (reading the source
+  tree would not) and any re-save or reformat of upstream-authored data.
 - `test_integration.py` — end-to-end behavior, including that flags visibly
   change results and that SIPNET's own mass-balance errors stay near zero.
 

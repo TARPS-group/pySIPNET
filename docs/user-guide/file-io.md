@@ -343,3 +343,46 @@ together:
 | Large ensemble, full outputs needed | `output_dir=` — lazy-load member by member |
 | Large ensemble, only a few columns needed | `output_dir=` + `result.outputs.select([...])` |
 | Debugging a failing run | `keep_workdir=True` — inspect all files in `provenance.workdir` |
+
+## Bundled reference data
+
+pySIPNET ships one real SIPNET input set and one real SIPNET output inside the
+package, under `pysipnet/data/niwot/`, so that code depending on pySIPNET can
+test against genuine model data with nothing but `pip install` — no source
+checkout, no compiled binary. The files are the same ones pySIPNET's own tests
+use; there is exactly one copy.
+
+| File | What it is |
+|:--|:--|
+| `sipnet.param` | SIPNET's own Niwot Ridge parameters, byte-identical to the pinned submodule's smoke-test copy |
+| `sipnet.clim` | The first 800 rows of the matching climate record (about one year from November 1998, sub-daily, 14-column layout) |
+| `niwot_standard.out.csv` | pySIPNET's golden baseline: standard-flag output on the first 60 climate rows |
+
+Three functions in `pysipnet.io.reference`, also exported from `pysipnet`,
+give access to them:
+
+```python
+from pysipnet import niwot_reference_climate, niwot_reference_files, niwot_reference_output
+
+output = niwot_reference_output()     # SIPNETOutput, 60 steps, no binary needed
+nee = output["nee"]                   # DataArray on a time axis built from the
+                                      # climate's own step lengths
+climate = niwot_reference_climate()   # ClimateDrivers, 800 steps, in memory
+paths = niwot_reference_files()       # paths.param, paths.clim, paths.output, paths.readme
+```
+
+The output loader returns the golden already paired with the climate's
+`time_step_length` column and flagged `ModelFlags.standard()`, so its Dataset
+carries the same time axis a live run would, and selecting a column SIPNET wrote
+as constant zero is refused just as it is for a live run.
+
+Two things to know before building on the golden. It is a narrow slice of the
+model: one dormant-season month in which photosynthesis is almost inactive and
+ten of the 35 columns are identically zero. And it changes whenever the
+baseline is deliberately regenerated, for a SIPNET pin bump or an intended
+wrapper change, so it is a fixed sample of the model's output, not a reference
+solution. The `README.md` beside the files records the provenance in full.
+
+There is not yet a reader that turns `sipnet.param` into a `SIPNETParameters`
+(issue #19); `read_param_file(paths.param)` gives the flat
+`{sipnet_name: value}` dictionary.
