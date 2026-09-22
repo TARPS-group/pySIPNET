@@ -69,8 +69,12 @@ pySIPNET looks for a binary in this order and uses the first that exists:
 |:--|:--|:--|
 | 1 | `$PYSIPNET_BINARY` | You already have a SIPNET binary: a cluster module, a shared build, one you compiled yourself. |
 | 2 | `pysipnet/bin/sipnet` inside the installed package | Present only in a platform wheel that bundles the binary. |
-| 3 | `.sipnet_cache/sipnet` at the repository root | A source checkout, where `make sipnet` puts it. |
-| 4 | The per-user cache, named by the pinned commit | Where `pysipnet install-sipnet` puts a binary outside a checkout. |
+| 3 | `.sipnet_cache/<commit>/sipnet` at the repository root | A source checkout, where `make sipnet` puts it. |
+| 4 | The per-user cache, `<cache root>/pysipnet/sipnet/<commit>/sipnet` | Where `pysipnet install-sipnet` puts a binary outside a checkout. |
+
+Both caches are named by the pinned SIPNET commit, so a later pySIPNET that
+pins a different SIPNET looks in a new, empty directory and can never mistake
+the old binary for the new one.
 
 `PYSIPNET_CACHE_DIR` replaces the cache root in row 4, for a cluster where
 home directories are small or where a scratch filesystem is what every compute
@@ -120,7 +124,7 @@ not yet on PyPI: `pip install git+https://github.com/arob5/PyEns.git`.
 ### 3. Build the SIPNET binary
 
 ```bash
-make sipnet           # compiles the submodule into .sipnet_cache/sipnet
+make sipnet           # compiles the submodule into .sipnet_cache/<commit>/sipnet
 ```
 
 In a checkout this is where pySIPNET looks after `$PYSIPNET_BINARY`, so the
@@ -150,10 +154,14 @@ version tag, and on a tag attaches the artifacts to a draft GitHub release.
 Locally:
 
 ```bash
-uv run pysipnet stage-bundle linux-x86_64            # verified download to pysipnet/bin/
+uv run pysipnet stage-bundle linux-x86_64            # verified download to pysipnet/bin/linux-x86_64/
 PYSIPNET_BUNDLE_SIPNET=linux-x86_64 uv build --wheel  # tagged manylinux_2_34_x86_64
-rm -rf pysipnet/bin
 ```
+
+Each platform is staged in its own directory and the build bundles only the
+directory matching the platform it tags, so a wheel cannot carry the other
+platform's binary. `pysipnet/bin/` is ignored by git and left out of the pure
+wheel.
 
 ## Upgrading SIPNET
 
@@ -166,11 +174,12 @@ To update the pin:
 4. Commit the update: `git commit -m "chore: update SIPNET pin to <short-hash>"`
 5. Update `pysipnet/version.py` — `SIPNET_PINNED_COMMIT`, `SIPNET_PINNED_TAG`,
    `SIPNET_NUMERIC_VERSION`, `SIPNET_RELEASE_ASSETS` and
-   `SIPNET_PREBUILT_REQUIREMENTS` all move together — and this page.
-   `pytest -m network` re-derives the digests and the platform requirements
-   from the published archives.
-6. Rebuild the binary: `make clean-sipnet sipnet`. The user-cache route needs
-   nothing: its directory is named by the commit.
+   `SIPNET_WHEEL_PLATFORM_TAGS` all move together — and this page.
+   `pytest -m network` re-derives the digests and the platform tags from the
+   published archives.
+6. Rebuild the binary: `make sipnet`. Both caches are named by the commit, so
+   the new binary lands in a fresh directory; `make clean-sipnet` removes the
+   old ones when you want the space back.
 7. Run the full test suite: `uv run pytest`
 
 !!! warning "Regenerate documentation after any version change"

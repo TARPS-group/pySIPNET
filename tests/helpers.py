@@ -8,6 +8,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pysipnet.version import SIPNET_NUMERIC_VERSION, SIPNET_PINNED_TAG
+
+PINNED_VERSION_LINE = f"SIPNET version {SIPNET_NUMERIC_VERSION} ({SIPNET_PINNED_TAG})"
+"""What the pinned SIPNET answers to ``--version``."""
+
+
+def fake_sipnet_binary(path: Path, version_line: str = PINNED_VERSION_LINE) -> Path:
+    """A shell script standing in for SIPNET that answers ``--version`` with *version_line*.
+
+    For tests of what pySIPNET does with the answer — the search order, the
+    pin check, the CLI — where running the real model would prove nothing more
+    and would need a compiled binary.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f'#!/bin/sh\necho "{version_line}"\n')
+    path.chmod(0o755)
+    return path
+
 
 def params_from_sipnet_file(path: Path):
     """Reconstruct a ``SIPNETParameters`` from a SIPNET ``.param`` file.

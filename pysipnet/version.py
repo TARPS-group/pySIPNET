@@ -24,8 +24,6 @@ Three constants describe the pin, and they are not interchangeable:
     ``v2.2.0-alpha.1`` it still reads ``2.1.0``.
 """
 
-from typing import NamedTuple
-
 PYSIPNET_VERSION: str = "0.1.0.dev0"
 
 # ── SIPNET source pinning ─────────────────────────────────────────────────────
@@ -99,26 +97,18 @@ macOS, Windows, ARM Linux — has to compile from source, which always works.
 """
 
 
-class PrebuiltRequirement(NamedTuple):
-    """What a published binary needs from the machine it runs on."""
-
-    minimum: str
-    """Minimum macOS release, or minimum glibc version, as a dotted string."""
-
-    wheel_tag: str
-    """The platform tag a wheel bundling this binary must carry."""
-
-
 # Upstream compiles on recent runners, and what comes out runs only on systems
-# at least that recent. Read from the binaries themselves, not from upstream's
-# docs: the macOS binary's LC_BUILD_VERSION load command declares minos 26.0,
-# and the Linux binary references versioned glibc symbols up to GLIBC_2.34.
-# The wheel tags are the same facts in pip's vocabulary, so pip installs a
-# bundled wheel only where the binary inside it can run and otherwise falls
-# back to the pure-Python wheel. `pytest -m network` re-derives both from the
+# at least that recent. Each binary's requirement is recorded as the platform
+# tag of the wheel that bundles it: the macOS binary's LC_BUILD_VERSION load
+# command declares minos 26.0, and the Linux binary references versioned glibc
+# symbols up to GLIBC_2.34 — read from the binaries themselves, not from
+# upstream's docs. pip installs a wheel only where its tag is accepted, and
+# pysipnet.build asks packaging.tags the same question before downloading, so
+# "pip would install the bundled wheel here" and "the download would run here"
+# are one predicate. `pytest -m network` re-derives both tags from the
 # published archives, so a pin bump that changes them fails loudly.
-SIPNET_PREBUILT_REQUIREMENTS: dict[str, PrebuiltRequirement] = {
-    "darwin-arm64": PrebuiltRequirement(minimum="26.0", wheel_tag="macosx_26_0_arm64"),
-    "linux-x86_64": PrebuiltRequirement(minimum="2.34", wheel_tag="manylinux_2_34_x86_64"),
+SIPNET_WHEEL_PLATFORM_TAGS: dict[str, str] = {
+    "darwin-arm64": "macosx_26_0_arm64",
+    "linux-x86_64": "manylinux_2_34_x86_64",
 }
-"""What each published binary needs to run, and how a wheel bundling it is tagged."""
+"""Platform tag of the wheel that bundles each published binary, keyed like the assets."""

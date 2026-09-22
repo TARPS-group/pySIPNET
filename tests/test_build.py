@@ -26,17 +26,19 @@ from pathlib import Path
 import pytest
 
 from pysipnet.build import (
-    _CACHE_DIR,
     _REPO_ROOT,
     _SIPNET_DIR,
     BINARY_ENV_VAR,
     BINARY_NAME,
     CACHE_DIR_ENV_VAR,
+    PINNED_CACHE_SUBDIR,
     BinaryVersionError,
+    BuildError,
     binary_candidates,
     binary_path,
     binary_sha256,
     build_sipnet,
+    checkout_cache_dir,
     describe_binary_search,
     ensure_binary,
     find_binary,
@@ -54,42 +56,16 @@ from pysipnet.version import (
     SIPNET_PINNED_COMMIT,
     SIPNET_PINNED_TAG,
 )
+from tests.helpers import PINNED_VERSION_LINE
+from tests.helpers import fake_sipnet_binary as _fake_binary
 
 # Skip marker for tests that need a compiled binary present.
 requires_binary = pytest.mark.skipif(
     find_binary() is None,
-    reason="SIPNET binary not built; run 'make sipnet'",
+    reason="no SIPNET binary; run 'pysipnet install-sipnet' (or 'make sipnet' in a checkout)",
 )
 
-
-def _fake_binary(path: Path, version_line: str) -> Path:
-    """A shell script standing in for SIPNET, answering ``--version`` with *version_line*."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f'#!/bin/sh\necho "{version_line}"\n')
-    path.chmod(0o755)
-    return path
-
-
-PINNED_VERSION_LINE = f"SIPNET version {SIPNET_NUMERIC_VERSION} ({SIPNET_PINNED_TAG})"
-
-
-@pytest.fixture
-def isolated(tmp_path, monkeypatch):
-    """Point every candidate location into tmp_path, with nothing installed anywhere.
-
-    Returns the directory for each source so a test can plant a binary in the
-    ones it wants and see which wins.
-    """
-    homes = {
-        "bundled": tmp_path / "bundled",
-        "source tree": tmp_path / "checkout_cache",
-        "user cache": tmp_path / "user_cache_root",
-    }
-    monkeypatch.setattr("pysipnet.build._BUNDLED_DIR", homes["bundled"])
-    monkeypatch.setattr("pysipnet.build._CACHE_DIR", homes["source tree"])
-    monkeypatch.setenv(CACHE_DIR_ENV_VAR, str(homes["user cache"]))
-    monkeypatch.delenv(BINARY_ENV_VAR, raising=False)
-    return homes
+isolated = pytest.fixture(lambda isolated_binary_locations: isolated_binary_locations)
 
 
 class TestPaths:
@@ -107,7 +83,15 @@ class TestPaths:
         assert in_source_tree()
 
     def test_install_target_in_a_source_tree_is_the_checkout_cache(self):
-        assert install_target() == _CACHE_DIR / BINARY_NAME
+        assert install_target() == checkout_cache_dir() / BINARY_NAME
+
+    def test_checkout_cache_is_named_by_the_pinned_commit_like_the_makefile(self):
+        """make sipnet reads the commit from version.py; both must land in the same directory."""
+        assert checkout_cache_dir().name == PINNED_CACHE_SUBDIR == SIPNET_PINNED_COMMIT[:12]
+        dry_run = subprocess.run(
+            ["make", "-n", "sipnet"], cwd=_REPO_ROOT, capture_output=True, text=True, check=True
+        )
+        assert f".sipnet_cache/{PINNED_CACHE_SUBDIR}/sipnet" in dry_run.stdout
 
     def test_install_target_outside_a_source_tree_is_the_user_cache(self, isolated, monkeypatch):
         monkeypatch.setattr("pysipnet.build.in_source_tree", lambda: False)
@@ -115,8 +99,8 @@ class TestPaths:
 
     def test_user_cache_is_named_by_the_pinned_commit(self, isolated):
         """A pin bump must look in a fresh directory, never at the previous version's binary."""
-        assert user_cache_dir() == isolated["user cache"] / "sipnet" / SIPNET_PINNED_COMMIT[:12]
-        assert user_cache_dir().parent.parent == isolated["user cache"]
+        assert user_cache_dir() == isolated["user cache"]
+        assert user_cache_dir().name == SIPNET_PINNED_COMMIT[:12]
 
     def test_user_cache_defaults_to_platformdirs(self, isolated, monkeypatch):
         monkeypatch.delenv(CACHE_DIR_ENV_VAR)
@@ -179,6 +163,15 @@ class TestSearchOrder:
         assert found is not None and found.path == real
         assert "environment" in describe_binary_search()
         assert "(not found)" in describe_binary_search().splitlines()[0]
+
+    def test_relative_environment_path_is_resolved(self, isolated, monkeypatch, tmp_path):
+        """The binary runs with the workdir as cwd, where a relative path would point elsewhere."""
+        _fake_binary(tmp_path / "here" / "sipnet", PINNED_VERSION_LINE)
+        monkeypatch.chdir(tmp_path / "here")
+        monkeypatch.setenv(BINARY_ENV_VAR, "./sipnet")
+        found = find_binary()
+        assert found is not None and found.path.is_absolute()
+        assert found.path == (tmp_path / "here" / "sipnet").resolve()
 
     def test_binary_path_is_the_found_binary_or_the_install_target(self, isolated):
         assert binary_path() == install_target()
@@ -246,7 +239,7 @@ class TestBinarySha256:
 
 class TestBuild:
     def test_skips_compiling_when_a_binary_is_at_the_install_target(self, isolated, monkeypatch):
-        (isolated["source tree"]).mkdir()
+        isolated["source tree"].mkdir(parents=True)
         (isolated["source tree"] / BINARY_NAME).write_bytes(b"pretend binary")
         monkeypatch.setattr(
             "pysipnet.build.subprocess.run",
@@ -256,7 +249,7 @@ class TestBuild:
 
     def test_force_compiles_even_when_a_binary_is_present(self, isolated, monkeypatch):
         """force=True is the escape hatch after changing the pinned SIPNET version."""
-        isolated["source tree"].mkdir()
+        isolated["source tree"].mkdir(parents=True)
         (isolated["source tree"] / BINARY_NAME).write_bytes(b"stale binary")
         commands = []
         monkeypatch.setattr(
@@ -292,7 +285,7 @@ class TestBuild:
 
             if args[:2] == ["make", "sipnet"]:
                 _fake_binary(cwd / BINARY_NAME, PINNED_VERSION_LINE)
-            if args[:2] == [str(target.with_name("sipnet.incoming")), "--version"]:
+            if args[1:] == ["--version"]:
                 Result.stdout = PINNED_VERSION_LINE
             return Result()
 
@@ -303,16 +296,67 @@ class TestBuild:
         assert ["make", "sipnet", f"GIT_HASH={SIPNET_PINNED_TAG}"] in commands
 
     def test_outside_a_source_tree_names_the_missing_tool(self, isolated, monkeypatch):
-        from pysipnet.build import BuildError
-
         monkeypatch.setattr("pysipnet.build.in_source_tree", lambda: False)
         monkeypatch.setattr("pysipnet.build.shutil.which", lambda name: None)
         with pytest.raises(BuildError, match="'git' was not found"):
             build_sipnet()
 
+    def test_pre_check_asks_for_the_compiler_the_makefile_uses(self, isolated, monkeypatch):
+        """SIPNET's Makefile hard-codes CC=gcc, so gcc, not cc, is the name that must resolve."""
+        assert (_SIPNET_DIR / "Makefile").read_text().splitlines()[0] == "CC=gcc"
+        monkeypatch.setattr("pysipnet.build.in_source_tree", lambda: False)
+        monkeypatch.setattr(
+            "pysipnet.build.shutil.which",
+            lambda name: None if name == "gcc" else f"/usr/bin/{name}",
+        )
+        with pytest.raises(BuildError, match="'gcc' was not found"):
+            build_sipnet()
+
+    def test_a_wrong_tag_from_the_compile_route_is_a_build_error(self, isolated, monkeypatch):
+        """The compile route must not blame the download digest for a mismatched binary."""
+        monkeypatch.setattr("pysipnet.build.in_source_tree", lambda: False)
+        monkeypatch.setattr("pysipnet.build.shutil.which", lambda name: f"/usr/bin/{name}")
+
+        def fake_run(args, **kw):
+            class Result:
+                stdout = SIPNET_PINNED_COMMIT + "\n"
+
+            if args[:2] == ["make", "sipnet"]:
+                _fake_binary(Path(kw["cwd"]) / BINARY_NAME, "SIPNET version 2.1.0 (v2.1.0)")
+            if args[1:] == ["--version"]:
+                Result.stdout = "SIPNET version 2.1.0 (v2.1.0)"
+            return Result()
+
+        monkeypatch.setattr("pysipnet.build.subprocess.run", fake_run)
+        with pytest.raises(BuildError, match="v2.1.0.*It was not installed"):
+            build_sipnet()
+        assert not install_target().exists()
+        assert not list(install_target().parent.glob(".sipnet.*")), "staging file left behind"
+
+
+@pytest.mark.network
+class TestCompileFromGitForReal:
+    """The fetch-and-compile route, run for real: git, make and gcc against upstream."""
+
+    def test_compiles_the_pinned_commit_into_the_target(self, tmp_path):
+        import shutil
+
+        from pysipnet.build import _compile_pinned_source
+
+        missing = [tool for tool in ("git", "make", "gcc") if shutil.which(tool) is None]
+        if missing:
+            pytest.skip(f"toolchain missing: {missing}")
+        target = tmp_path / "cache" / BINARY_NAME
+        _compile_pinned_source(target)
+        assert target.is_file() and os.access(target, os.X_OK)
+        assert (
+            verify_binary_matches_pin(target) == f"{SIPNET_NUMERIC_VERSION} ({SIPNET_PINNED_TAG})"
+        )
+        assert not (target.parent / "src").exists(), "source tree should be cleaned up"
+
 
 class TestInstallSipnet:
-    def test_returns_an_existing_binary_without_installing(self, isolated, monkeypatch):
+    def test_returns_an_existing_verified_binary_without_installing(self, isolated, monkeypatch):
         planted = _fake_binary(user_cache_dir() / BINARY_NAME, PINNED_VERSION_LINE)
         monkeypatch.setattr(
             "pysipnet.build.download_sipnet", lambda **kw: pytest.fail("must not download")
@@ -321,6 +365,31 @@ class TestInstallSipnet:
             "pysipnet.build.build_sipnet", lambda **kw: pytest.fail("must not compile")
         )
         assert install_sipnet() == planted
+
+    def test_never_hands_back_a_binary_from_the_wrong_release(self, isolated, monkeypatch):
+        """An existing binary is only "already installed" if it is the pinned SIPNET."""
+        stale = _fake_binary(install_target(), "SIPNET version 2.1.0 (v2.1.0)")
+        monkeypatch.setattr("pysipnet.build.prebuilt_unavailable_reason", lambda key=None: None)
+        seen = {}
+
+        def fake_download(*, force):
+            seen["force"] = force
+            return _fake_binary(stale, PINNED_VERSION_LINE)
+
+        monkeypatch.setattr("pysipnet.build.download_sipnet", fake_download)
+        assert install_sipnet() == stale
+        assert seen == {"force": True}, "the stale file at the target must be replaced"
+
+    def test_a_wrong_environment_binary_is_an_error_not_a_reinstall(
+        self, isolated, monkeypatch, tmp_path
+    ):
+        wrong = _fake_binary(tmp_path / "module" / "sipnet", "SIPNET version 2.1.0 (v2.1.0)")
+        monkeypatch.setenv(BINARY_ENV_VAR, str(wrong))
+        monkeypatch.setattr(
+            "pysipnet.build.download_sipnet", lambda **kw: pytest.fail("must not download")
+        )
+        with pytest.raises(BinaryVersionError, match="unset it first"):
+            install_sipnet()
 
     def test_auto_downloads_when_a_usable_prebuilt_exists(self, isolated, monkeypatch):
         monkeypatch.setattr("pysipnet.build.prebuilt_unavailable_reason", lambda key=None: None)
@@ -383,6 +452,21 @@ class TestVerifyBinaryMatchesPin:
         with pytest.raises(BinaryVersionError):
             verify_binary_matches_pin(binary)
 
+    def test_a_freshly_installed_binary_is_not_run_twice(self, isolated, monkeypatch):
+        """Installing checks the binary; the CLI's verify afterwards must be a cache hit."""
+        from pysipnet.build import _install_binary
+
+        source = _fake_binary(isolated["bundled"] / "src" / "sipnet", PINNED_VERSION_LINE)
+        target = install_target()
+        _install_binary(source, target)
+        monkeypatch.setattr(
+            "pysipnet.build.subprocess.run",
+            lambda *a, **kw: pytest.fail("verify after install must hit the cache"),
+        )
+        assert (
+            verify_binary_matches_pin(target) == f"{SIPNET_NUMERIC_VERSION} ({SIPNET_PINNED_TAG})"
+        )
+
     def test_a_binary_that_will_not_run_is_reported_with_its_stderr(self, tmp_path):
         binary = tmp_path / "sipnet"
         binary.write_text("#!/bin/sh\necho 'dyld: incompatible' >&2\nexit 1\n")
@@ -436,8 +520,21 @@ class TestRunnerRefusesTheWrongBinary:
 
         _fake_binary(isolated["bundled"] / BINARY_NAME, PINNED_VERSION_LINE)
         explicit = _fake_binary(tmp_path / "mine" / "sipnet", PINNED_VERSION_LINE)
-        assert SIPNETRunner(binary=explicit).binary_path == explicit
-        assert SIPNETRunner(cache_dir=tmp_path / "mine").binary_path == explicit
+        assert SIPNETRunner(binary=explicit).binary_path == explicit.resolve()
+        assert SIPNETRunner(cache_dir=tmp_path / "mine").binary_path == explicit.resolve()
+
+    def test_relative_binary_is_resolved_so_the_check_and_the_run_agree(
+        self, tmp_path, monkeypatch
+    ):
+        """Path("./sipnet") is "sipnet", which --version would look up on PATH and the run
+        would look for inside the temporary working directory."""
+        from pysipnet.runner import SIPNETRunner
+
+        real = _fake_binary(tmp_path / "here" / "sipnet", PINNED_VERSION_LINE)
+        monkeypatch.chdir(tmp_path / "here")
+        runner = SIPNETRunner(binary="./sipnet")
+        assert runner.binary_path == real.resolve()
+        assert runner._check_binary() == real.resolve()
 
     def test_default_runner_follows_the_search(self, isolated):
         from pysipnet.runner import SIPNETRunner

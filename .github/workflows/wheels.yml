@@ -35,15 +35,16 @@ jobs:
       - name: sdist and pure wheel
         run: uv build -o dist
 
+      # Each binary is staged under pysipnet/bin/<key>/ and the hook bundles
+      # only the directory matching the key it tags the wheel with, so both
+      # can be staged up front.
       - name: Platform wheels
         run: |
           set -euo pipefail
           for key in darwin-arm64 linux-x86_64; do
-            rm -rf pysipnet/bin
             uv run pysipnet stage-bundle "$key"
             PYSIPNET_BUNDLE_SIPNET="$key" uv build --wheel -o dist
           done
-          rm -rf pysipnet/bin
           ls -l dist
 
       - uses: actions/upload-artifact@v4
@@ -86,18 +87,30 @@ jobs:
         if: matrix.wheel == 'any'
         run: .venv/bin/pysipnet install-sipnet --method download
 
-      - name: The binary is found and is the pinned SIPNET
+      - name: The binary is found, is the pinned SIPNET, and runs the model
         run: |
           set -euo pipefail
           .venv/bin/pysipnet info
           .venv/bin/python - <<'PY'
-          from pysipnet import SIPNETRunner, niwot_reference_output
-          from pysipnet.build import find_binary
-          found = find_binary()
-          assert found is not None, "no binary"
-          print("binary source:", found.source)
-          SIPNETRunner()._check_binary()
-          print(niwot_reference_output())
+          # Run SIPNET by hand on the bundled Niwot inputs, the way test_fidelity
+          # does, so a binary that answers --version but cannot run the model
+          # (missing shared library, wrong loader) fails here and not on a user.
+          import shutil, subprocess, tempfile
+          from pathlib import Path
+          from pysipnet import niwot_reference_files
+          from pysipnet.build import ensure_binary
+          from pysipnet.io.output_reader import read_output_file
+          binary = ensure_binary()
+          files = niwot_reference_files()
+          with tempfile.TemporaryDirectory() as tmp:
+              work = Path(tmp)
+              shutil.copy(files.param, work / "sipnet.param")
+              shutil.copy(files.clim, work / "sipnet.clim")
+              (work / "sipnet.in").write_text("FILE_NAME = sipnet\nEVENTS = 0\nPRINT_HEADER = 1\n")
+              subprocess.run([str(binary)], cwd=work, check=True, capture_output=True)
+              out = read_output_file(work / "sipnet.out")
+          assert len(out) == 800, len(out)
+          print(f"SIPNET at {binary} ran the Niwot record: {len(out)} timesteps")
           PY
 
   release:

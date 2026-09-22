@@ -6,26 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from pysipnet.build import BINARY_ENV_VAR, BINARY_NAME, CACHE_DIR_ENV_VAR, user_cache_dir
-from pysipnet.cli import build_parser, main
+from pysipnet.build import BINARY_NAME, install_target, user_cache_dir
+from pysipnet.cli import build_parser, main, staged_bundle_path
 from pysipnet.version import SIPNET_NUMERIC_VERSION, SIPNET_PINNED_TAG
-
-PINNED_VERSION_LINE = f"SIPNET version {SIPNET_NUMERIC_VERSION} ({SIPNET_PINNED_TAG})"
-
-
-def _fake_binary(path: Path, version_line: str = PINNED_VERSION_LINE) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f'#!/bin/sh\necho "{version_line}"\n')
-    path.chmod(0o755)
-    return path
+from tests.helpers import fake_sipnet_binary as _fake_binary
 
 
 @pytest.fixture
-def isolated(tmp_path, monkeypatch):
-    monkeypatch.setattr("pysipnet.build._BUNDLED_DIR", tmp_path / "bundled")
-    monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path / "checkout")
-    monkeypatch.setenv(CACHE_DIR_ENV_VAR, str(tmp_path / "user"))
-    monkeypatch.delenv(BINARY_ENV_VAR, raising=False)
+def isolated(isolated_binary_locations: dict[str, Path], tmp_path: Path) -> Path:
     return tmp_path
 
 
@@ -76,6 +64,23 @@ class TestInstall:
         assert main(["install-sipnet", "--method", "compile", "--force"]) == 0
         assert seen == {"method": "compile", "force": True}
 
+    def test_an_existing_wrong_binary_is_one_line_not_a_traceback(
+        self, isolated, monkeypatch, capsys
+    ):
+        """install-sipnet when the binary already at the install target is the wrong release.
+
+        ``--method download`` without ``--force`` keeps an existing target, so
+        the CLI's own check is what catches it, and that failure must come out
+        as the one-line error rather than a traceback.
+        """
+        _fake_binary(install_target(), "SIPNET version 2.1.0 (v2.1.0)")
+        monkeypatch.setattr(
+            "pysipnet.build._open_url", lambda *a, **kw: pytest.fail("must not download")
+        )
+        assert main(["install-sipnet", "--method", "download"]) == 1
+        err = capsys.readouterr().err
+        assert err.startswith("error: ") and "v2.1.0" in err and "Traceback" not in err
+
     def test_a_failure_is_one_line_on_stderr_and_exit_1(self, isolated, monkeypatch, capsys):
         from pysipnet.build import DownloadError
 
@@ -100,9 +105,9 @@ class TestStageBundle:
             return target
 
         monkeypatch.setattr("pysipnet.cli.fetch_release_binary", fake_fetch)
-        monkeypatch.setattr("pysipnet.cli._BUNDLE_DIR", isolated / "bin")
         assert main(["stage-bundle", "linux-x86_64"]) == 0
-        assert calls == [("linux-x86_64", isolated / "bin" / "sipnet")]
+        assert calls == [("linux-x86_64", staged_bundle_path("linux-x86_64"))]
+        assert staged_bundle_path("linux-x86_64").parent.name == "linux-x86_64"
         assert "staged linux-x86_64" in capsys.readouterr().out
 
     def test_only_published_platforms_are_accepted(self):

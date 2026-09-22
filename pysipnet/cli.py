@@ -18,15 +18,15 @@ import argparse
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import cast
 
 from pysipnet.build import (
+    _BUNDLED_DIR,
     BINARY_ENV_VAR,
+    BINARY_NAME,
     CACHE_DIR_ENV_VAR,
     BinaryVersionError,
     BuildError,
     DownloadError,
-    InstallMethod,
     describe_binary_search,
     fetch_release_binary,
     find_binary,
@@ -43,17 +43,23 @@ from pysipnet.version import (
     SIPNET_RELEASE_ASSETS,
 )
 
-_BUNDLE_DIR = Path(__file__).parent / "bin"
+
+def staged_bundle_path(key: str) -> Path:
+    """Where ``stage-bundle`` puts the binary for platform *key*: ``pysipnet/bin/<key>/sipnet``.
+
+    One directory per platform, so the wheel build can only bundle the binary
+    whose directory matches the platform it is tagging the wheel for.
+    """
+    return _BUNDLED_DIR / key / BINARY_NAME
 
 
 def _cmd_install(args: argparse.Namespace) -> int:
-    method = cast(InstallMethod, args.method)
     try:
-        path = install_sipnet(method=method, force=args.force)
+        path = install_sipnet(method=args.method, force=args.force)
+        version = verify_binary_matches_pin(path)
     except (DownloadError, BuildError, BinaryVersionError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    version = verify_binary_matches_pin(path)
     print(f"SIPNET {version} at {path}")
     return 0
 
@@ -85,18 +91,17 @@ def _cmd_info(_: argparse.Namespace) -> int:
 
 
 def _cmd_stage_bundle(args: argparse.Namespace) -> int:
-    """Put the published binary for a platform at ``pysipnet/bin/sipnet``.
+    """Put the published binary for a platform at ``pysipnet/bin/<platform>/sipnet``.
 
-    The step before building a platform wheel: ``hatch_build.py`` bundles
-    whatever is at that path when ``$PYSIPNET_BUNDLE_SIPNET`` names the
-    platform. The binary is verified by digest; it is run to confirm its
-    version only when it is for this machine, since one for another platform
-    cannot be executed here.
+    The step before building a platform wheel: ``hatch_build.py`` bundles the
+    binary in the directory named by ``$PYSIPNET_BUNDLE_SIPNET``. The binary is
+    verified by digest; it is run to confirm its version only when this
+    machine can execute it.
     """
-    key = cast(str, args.platform)
+    key: str = args.platform
     try:
-        path = fetch_release_binary(key, _BUNDLE_DIR / "sipnet")
-    except DownloadError as exc:
+        path = fetch_release_binary(key, staged_bundle_path(key))
+    except (DownloadError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"staged {key} binary at {path}")
@@ -130,7 +135,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     stage = sub.add_parser(
         "stage-bundle",
-        help="stage a published binary at pysipnet/bin/ for building a platform wheel",
+        help="stage a published binary at pysipnet/bin/<platform>/ for building a platform wheel",
     )
     stage.add_argument("platform", choices=sorted(SIPNET_RELEASE_ASSETS))
     stage.set_defaults(func=_cmd_stage_bundle)
@@ -139,7 +144,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    return cast(int, args.func(args))
+    code: int = args.func(args)
+    return code
 
 
 if __name__ == "__main__":

@@ -9,7 +9,15 @@
 
 SIPNET_DIR := sipnet
 CACHE_DIR  := .sipnet_cache
-BINARY     := $(CACHE_DIR)/sipnet
+# The binary lives in a subdirectory named by the pinned commit, read from
+# pysipnet/version.py so it is the same name pysipnet.build looks under. A pin
+# bump therefore lands the new binary in an empty directory instead of
+# overwriting, or being mistaken for, the old one.
+COMMIT     := $(shell sed -n 's/^SIPNET_PINNED_COMMIT: str = "\([0-9a-f]\{12\}\).*/\1/p' pysipnet/version.py)
+ifeq ($(COMMIT),)
+$(error could not read SIPNET_PINNED_COMMIT from pysipnet/version.py)
+endif
+BINARY     := $(CACHE_DIR)/$(COMMIT)/sipnet
 
 .PHONY: sipnet sipnet-download submodule clean-sipnet
 
@@ -18,7 +26,7 @@ BINARY     := $(CACHE_DIR)/sipnet
 sipnet: submodule
 	$(MAKE) -C $(SIPNET_DIR) clean
 	$(MAKE) -C $(SIPNET_DIR)
-	mkdir -p $(CACHE_DIR)
+	mkdir -p $(CACHE_DIR)/$(COMMIT)
 	# Install via a temporary name and mv, never by copying over the target.
 	# On Apple Silicon every Mach-O binary carries a code signature, and
 	# overwriting one in place invalidates it — the kernel then SIGKILLs the

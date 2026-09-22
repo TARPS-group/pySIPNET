@@ -82,13 +82,17 @@ def _no_real_network(monkeypatch, request):
 
 
 @pytest.fixture
-def served(monkeypatch, tmp_path):
+def served(monkeypatch, tmp_path, isolated_binary_locations):
     """Serve chosen bytes from the download URL, and install into tmp_path.
+
+    Every binary location is isolated as well, so a real ``$PYSIPNET_BINARY``
+    or a staged bundle on the developer's machine cannot stand in for the
+    download under test.
 
     Returns a function that takes the bytes to serve and pins the matching
     checksum, so a test can choose whether the two agree.
     """
-    monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+    monkeypatch.setattr("pysipnet.build.install_target", lambda: tmp_path / BINARY_NAME)
 
     def _serve(payload: bytes, *, pinned_sha256: str | None = None):
         class _Response:
@@ -350,7 +354,7 @@ class TestDownloadSipnet:
             "pysipnet.build._open_url",
             lambda *a, **kw: pytest.fail("must not download when a binary exists"),
         )
-        monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+        monkeypatch.setattr("pysipnet.build.install_target", lambda: tmp_path / BINARY_NAME)
         assert download_sipnet().read_bytes() == b"already here"
 
     def test_force_replaces_an_existing_binary(self, served, tmp_path):
@@ -474,13 +478,13 @@ class TestDownloadSipnet:
     def test_creates_the_cache_directory_if_it_is_missing(self, served, tmp_path, monkeypatch):
         """The first-run case: .sipnet_cache/ does not exist yet."""
         fresh = tmp_path / "not-created-yet"
-        monkeypatch.setattr("pysipnet.build._CACHE_DIR", fresh)
+        monkeypatch.setattr("pysipnet.build.install_target", lambda: fresh / BINARY_NAME)
         served(_tar_bytes({BINARY_NAME: FAKE_BINARY}))
         assert download_sipnet().exists()
 
     def test_timeout_is_passed_to_the_fetch(self, monkeypatch, tmp_path):
         """A documented parameter that silently did nothing would be worse than none."""
-        monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+        monkeypatch.setattr("pysipnet.build.install_target", lambda: tmp_path / BINARY_NAME)
         seen = {}
 
         def _record(url, timeout):
@@ -520,7 +524,7 @@ class TestDownloadSipnet:
         """The checksum cannot help here: it runs after the bytes are already in."""
         from pysipnet.build import MAX_ARCHIVE_BYTES
 
-        monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+        monkeypatch.setattr("pysipnet.build.install_target", lambda: tmp_path / BINARY_NAME)
 
         class _Endless:
             def read(self, size=-1):
@@ -543,7 +547,7 @@ class TestDownloadSipnet:
     def test_network_failure_is_reported_clearly(self, monkeypatch, tmp_path):
         # Pin the asset: without this the test depends on the host platform
         # having a published binary, and fails on e.g. Intel macOS.
-        monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+        monkeypatch.setattr("pysipnet.build.install_target", lambda: tmp_path / BINARY_NAME)
         monkeypatch.setattr(
             "pysipnet.build.release_asset", lambda key=None: ("sipnet-test.tar.gz", "00" * 32)
         )
@@ -556,7 +560,7 @@ class TestDownloadSipnet:
             download_sipnet()
 
     def test_network_failure_suggests_compiling_instead(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+        monkeypatch.setattr("pysipnet.build.install_target", lambda: tmp_path / BINARY_NAME)
         monkeypatch.setattr(
             "pysipnet.build.release_asset", lambda key=None: ("sipnet-test.tar.gz", "00" * 32)
         )
@@ -655,7 +659,7 @@ class TestAgainstTheRealRelease:
         if platform_key() not in SIPNET_RELEASE_ASSETS:
             pytest.skip(f"no prebuilt binary published for {platform_key()}")
 
-        monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
+        monkeypatch.setattr("pysipnet.build.install_target", lambda: tmp_path / BINARY_NAME)
         path = download_sipnet(force=True)
         # download_sipnet raises on every failure path, so path.exists() alone
         # would assert nothing. Run the binary instead.

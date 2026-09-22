@@ -19,17 +19,17 @@ wins:
    build.
 2. ``pysipnet/bin/sipnet`` inside the installed package — present only in a
    platform-specific wheel that bundles the binary.
-3. ``.sipnet_cache/sipnet`` at the repository root — when pySIPNET is running
-   from a source checkout, which is where ``make sipnet`` puts it.
-4. A per-user cache directory named by the pinned SIPNET commit, under
-   ``platformdirs.user_cache_dir("pysipnet")`` or ``$PYSIPNET_CACHE_DIR``.
-   This is where :func:`install_sipnet` puts a binary outside a checkout.
+3. ``.sipnet_cache/<commit>/sipnet`` at the repository root — when pySIPNET is
+   running from a source checkout, which is where ``make sipnet`` puts it.
+4. A per-user cache directory, under ``platformdirs.user_cache_dir("pysipnet")``
+   or ``$PYSIPNET_CACHE_DIR``, again in a subdirectory named by the pinned
+   commit. This is where :func:`install_sipnet` puts a binary outside a checkout.
 
-Naming the user-cache directory by commit means a pin bump can never pick up a
-stale binary from there. The checkout cache is flat, so it can go stale; the
-runner asks every binary for its version before the first run and refuses one
-built from a different tag (:func:`verify_binary_matches_pin`), which is what
-catches that.
+Both caches are named by the pinned SIPNET commit, so a pin bump looks in a
+new, empty directory and can never pick up the previous version's binary. The
+one place that cannot be arranged is ``$PYSIPNET_BINARY``, so the runner asks
+whatever binary it is about to run for its version first and refuses one built
+from a different tag (:func:`verify_binary_matches_pin`).
 
 Getting one
 -----------
@@ -67,15 +67,16 @@ from pathlib import Path
 from typing import IO, Any, Literal
 
 import platformdirs
+from packaging.tags import sys_tags
 
 from pysipnet.version import (
     SIPNET_PINNED_COMMIT,
     SIPNET_PINNED_TAG,
-    SIPNET_PREBUILT_REQUIREMENTS,
     SIPNET_RELEASE_ASSETS,
     SIPNET_RELEASE_REPO,
     SIPNET_RELEASE_TAG,
     SIPNET_SOURCE_REPO_URL,
+    SIPNET_WHEEL_PLATFORM_TAGS,
 )
 
 _REPO_ROOT = Path(__file__).parent.parent
@@ -99,6 +100,14 @@ class BinaryVersionError(RuntimeError):
     """The SIPNET binary found was built from a different source than this pySIPNET pins."""
 
 
+class DownloadError(RuntimeError):
+    """A prebuilt binary could not be fetched, verified, or unpacked."""
+
+
+class BuildError(RuntimeError):
+    """SIPNET could not be compiled from source."""
+
+
 @dataclass(frozen=True)
 class BinaryCandidate:
     """One place a SIPNET binary may be, and whether it is there."""
@@ -114,11 +123,28 @@ class BinaryCandidate:
 def in_source_tree() -> bool:
     """Whether pySIPNET is running from a checkout rather than an installed wheel.
 
-    A checkout has the repository Makefile beside ``pyproject.toml``; a wheel
-    installed into ``site-packages`` has neither. Editable installs count as a
-    checkout, which is what a developer wants.
+    A checkout has the repository Makefile and the ``sipnet/`` submodule
+    directory beside ``pyproject.toml`` (git creates the directory even before
+    the submodule is populated); a wheel installed into ``site-packages`` has
+    none of them, and a project that merely vendors this package under its own
+    Makefile lacks the submodule. Editable installs count as a checkout, which
+    is what a developer wants.
     """
-    return (_REPO_ROOT / "Makefile").is_file() and (_REPO_ROOT / "pyproject.toml").is_file()
+    return (
+        (_REPO_ROOT / "Makefile").is_file()
+        and (_REPO_ROOT / "pyproject.toml").is_file()
+        and _SIPNET_DIR.is_dir()
+    )
+
+
+#: Subdirectory, under either cache root, holding the binary for the pinned commit.
+#: The Makefile derives the same name from version.py, so both routes agree.
+PINNED_CACHE_SUBDIR = SIPNET_PINNED_COMMIT[:12]
+
+
+def checkout_cache_dir() -> Path:
+    """The directory ``make sipnet`` puts the binary in: ``.sipnet_cache/<commit>/``."""
+    return _CACHE_DIR / PINNED_CACHE_SUBDIR
 
 
 def user_cache_dir() -> Path:
@@ -133,7 +159,7 @@ def user_cache_dir() -> Path:
     root = (
         Path(override).expanduser() if override else Path(platformdirs.user_cache_dir("pysipnet"))
     )
-    return root / "sipnet" / SIPNET_PINNED_COMMIT[:12]
+    return root / "sipnet" / PINNED_CACHE_SUBDIR
 
 
 def binary_candidates() -> list[BinaryCandidate]:
@@ -147,10 +173,12 @@ def binary_candidates() -> list[BinaryCandidate]:
     candidates: list[BinaryCandidate] = []
     explicit = os.environ.get(BINARY_ENV_VAR)
     if explicit:
-        candidates.append(BinaryCandidate("environment", Path(explicit).expanduser()))
+        # Resolved, because the binary is executed with the run's working
+        # directory as cwd, where a relative path would mean something else.
+        candidates.append(BinaryCandidate("environment", Path(explicit).expanduser().resolve()))
     candidates.append(BinaryCandidate("bundled", _BUNDLED_DIR / BINARY_NAME))
     if in_source_tree():
-        candidates.append(BinaryCandidate("source tree", _CACHE_DIR / BINARY_NAME))
+        candidates.append(BinaryCandidate("source tree", checkout_cache_dir() / BINARY_NAME))
     candidates.append(BinaryCandidate("user cache", user_cache_dir() / BINARY_NAME))
     return candidates
 
@@ -167,7 +195,7 @@ def install_target() -> Path:
     and the tests expect it; the per-user cache everywhere else.
     """
     if in_source_tree():
-        return _CACHE_DIR / BINARY_NAME
+        return checkout_cache_dir() / BINARY_NAME
     return user_cache_dir() / BINARY_NAME
 
 
@@ -222,9 +250,6 @@ def build_sipnet(*, force: bool = False) -> Path:
     ----------
     force:
         Compile even when a binary is already present at the install target.
-        Use this after changing the pinned SIPNET version in a checkout, since
-        the checkout cache is not named by commit and would otherwise be
-        trusted.
 
     Returns
     -------
@@ -253,10 +278,6 @@ def _require_tool(name: str, purpose: str) -> None:
         )
 
 
-class BuildError(RuntimeError):
-    """SIPNET could not be compiled from source."""
-
-
 def _compile_pinned_source(target: Path) -> None:
     """Fetch the pinned SIPNET commit with git and compile it beside *target*.
 
@@ -268,10 +289,12 @@ def _compile_pinned_source(target: Path) -> None:
     way a full checkout would; the tag is also passed explicitly so the stamp
     does not depend on how the fetch went.
     """
+    # SIPNET's Makefile hard-codes CC=gcc, so that is the name that has to
+    # resolve; on macOS it is Apple's clang shim, which is fine.
     for tool, purpose in (
         ("git", "fetch the pinned SIPNET source"),
         ("make", "run SIPNET's Makefile"),
-        ("cc", "compile SIPNET"),
+        ("gcc", "compile SIPNET (SIPNET's Makefile invokes gcc by name)"),
     ):
         _require_tool(tool, purpose)
 
@@ -316,27 +339,59 @@ def _compile_pinned_source(target: Path) -> None:
     built = source_dir / BINARY_NAME
     if not built.is_file():
         raise BuildError(f"SIPNET's Makefile finished but produced no {built}.")
-    _install_binary(built, target)
+    _install_binary(built, target, error=BuildError)
     shutil.rmtree(source_dir, ignore_errors=True)
 
 
-def _install_binary(source: Path, target: Path) -> None:
-    """Copy *source* to *target* atomically, checking its version first.
+def _install_binary(
+    source: Path,
+    target: Path,
+    *,
+    check: bool = True,
+    error: type[RuntimeError] = DownloadError,
+) -> str | None:
+    """Copy *source* to *target* atomically, normally checking its version first.
 
-    The new binary is staged beside the target and checked there, then moved
-    into place with :func:`os.replace`. Overwriting the target directly would
-    destroy a working binary whenever the new one turns out to be unusable,
-    and would let a concurrent run observe a half-written executable.
+    The new binary is staged beside the target under a name unique to this
+    process, checked there, then moved into place with :func:`os.replace`,
+    which is atomic. Overwriting the target directly would destroy a working
+    binary whenever the new one turns out to be unusable, and would let a
+    concurrent run observe a half-written executable; a shared staging name
+    would let two installers running at once trip over each other's file.
+
+    Parameters
+    ----------
+    check:
+        Run the binary and require the pinned tag. Off only when the binary
+        is for another platform and so cannot be executed here.
+    error:
+        Exception type raised when the check fails, so a download failure and
+        a compile failure each surface as the error their route documents.
+
+    Returns
+    -------
+    str | None
+        The version the binary reported, or ``None`` when *check* is off.
     """
     target.parent.mkdir(parents=True, exist_ok=True)
-    staged = target.with_name(target.name + ".incoming")
+    handle, staged_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+    os.close(handle)
+    staged = Path(staged_name)
+    version: str | None = None
     try:
         shutil.copy2(source, staged)
         staged.chmod(0o755)
-        _check_staged_binary(staged)
+        if check:
+            try:
+                version = _pinned_version_or_raise(staged)
+            except BinaryVersionError as exc:
+                raise error(f"{exc} It was not installed.") from exc
         os.replace(staged, target)
     finally:
         staged.unlink(missing_ok=True)
+    if version is not None:
+        _remember_verified(target, version)
+    return version
 
 
 def ensure_binary() -> Path:
@@ -383,8 +438,6 @@ def sipnet_version() -> str:
     Reads the version from the binary itself rather than from the submodule
     checkout, so the answer describes what will actually run.
     """
-    # SIPNET prints e.g. "SIPNET version 2.1.0 (v2.2.0-alpha.1)"; keep
-    # everything after the "version" keyword so the tag suffix is preserved.
     return _version_of(ensure_binary())
 
 
@@ -423,24 +476,21 @@ def sipnet_build_tag(version_string: str | None = None) -> str:
 
 
 def _version_of(path: Path) -> str:
-    """Ask the binary at *path* what it is; the tail of ``--version`` after ``version``."""
+    """Ask the binary at *path* what it is.
+
+    SIPNET prints e.g. ``SIPNET version 2.1.0 (v2.2.0-alpha.1)``; everything
+    after the ``version`` keyword is kept so the tag suffix survives.
+    """
     result = subprocess.run([str(path), "--version"], capture_output=True, text=True, check=True)
     _, _, reported = result.stdout.strip().partition("version ")
     return reported or result.stdout.strip()
 
 
-_verified: dict[tuple[Path, int, int], str] = {}
+def _pinned_version_or_raise(path: Path) -> str:
+    """Run the binary at *path* and return its version if it carries the pinned tag.
 
-
-def verify_binary_matches_pin(path: Path) -> str:
-    """Check that the binary at *path* was built from the pinned tag, and return its version.
-
-    Called by :class:`~pysipnet.runner.SIPNETRunner` before its first run, so a
-    binary from another release — a stale checkout cache after a pin bump, or
-    a cluster module of a different version named by ``$PYSIPNET_BINARY`` — is
-    refused instead of quietly producing a different model's output. The
-    result is cached on the file's path, size and modification time, so an
-    ensemble pays one ``--version`` call per process, not per run.
+    The one statement of what "the right binary" means, shared by the runtime
+    check and by every install route.
 
     Raises
     ------
@@ -448,11 +498,6 @@ def verify_binary_matches_pin(path: Path) -> str:
         If the binary will not run, carries no build tag, or carries a tag
         other than :data:`~pysipnet.version.SIPNET_PINNED_TAG`.
     """
-    stat = path.stat()
-    key = (path, stat.st_size, stat.st_mtime_ns)
-    if key in _verified:
-        return _verified[key]
-
     try:
         version = _version_of(path)
     except (subprocess.SubprocessError, OSError) as exc:
@@ -466,10 +511,51 @@ def verify_binary_matches_pin(path: Path) -> str:
         raise BinaryVersionError(
             f"The SIPNET binary at {path} was built from "
             f"{tag or 'an untagged commit'!r}, but this pySIPNET pins {SIPNET_PINNED_TAG!r} "
-            f"(full version string: {version!r}). Rebuild or reinstall it with "
-            "'pysipnet install-sipnet --force', or pass verify_binary=False to "
-            "SIPNETRunner to run it anyway."
+            f"(full version string: {version!r})."
         )
+    return version
+
+
+_verified: dict[tuple[Path, int, int], str] = {}
+
+
+def _file_key(path: Path) -> tuple[Path, int, int]:
+    stat = path.stat()
+    return (path, stat.st_size, stat.st_mtime_ns)
+
+
+def _remember_verified(path: Path, version: str) -> None:
+    _verified[_file_key(path)] = version
+
+
+def verify_binary_matches_pin(path: Path) -> str:
+    """Check that the binary at *path* was built from the pinned tag, and return its version.
+
+    Called by :class:`~pysipnet.runner.SIPNETRunner` before its first run, so a
+    binary from another release — most likely a cluster module of a different
+    version named by ``$PYSIPNET_BINARY`` — is refused instead of quietly
+    producing a different model's output. The result is cached on the file's
+    path, size and modification time, so an ensemble pays one ``--version``
+    call per process, not per run, and a binary that was just installed and
+    checked is not run a second time.
+
+    Raises
+    ------
+    BinaryVersionError
+        If the binary will not run, carries no build tag, or carries a tag
+        other than :data:`~pysipnet.version.SIPNET_PINNED_TAG`.
+    """
+    key = _file_key(path)
+    if key in _verified:
+        return _verified[key]
+    try:
+        version = _pinned_version_or_raise(path)
+    except BinaryVersionError as exc:
+        raise BinaryVersionError(
+            f"{exc} Reinstall it with 'pysipnet install-sipnet --force', point "
+            f"${BINARY_ENV_VAR} at a binary built from {SIPNET_PINNED_TAG}, or pass "
+            "verify_binary=False to SIPNETRunner to run it anyway."
+        ) from exc
     _verified[key] = version
     return version
 
@@ -485,10 +571,6 @@ def verify_binary_matches_pin(path: Path) -> str:
 # SHA-256 of each archive is pinned in pysipnet.version and verified before
 # anything is unpacked, and the archive's members are inspected before
 # extraction so a hostile path cannot write outside the destination.
-
-
-class DownloadError(RuntimeError):
-    """A prebuilt binary could not be fetched, verified, or unpacked."""
 
 
 # The published archives are around 1 MB. These caps are generous enough never
@@ -711,47 +793,40 @@ def _find_binary(root: Path) -> Path:
     return candidates[0]
 
 
+def describe_wheel_tag(tag: str) -> str:
+    """Say in words what system a wheel platform tag requires, e.g. ``macOS 26.0 or newer``."""
+    if match := re.fullmatch(r"macosx_(\d+)_(\d+)_(\w+)", tag):
+        return f"{match[3]} macOS {match[1]}.{match[2]} or newer"
+    if match := re.fullmatch(r"manylinux_(\d+)_(\d+)_(\w+)", tag):
+        return f"{match[3]} Linux with glibc {match[1]}.{match[2]} or newer"
+    return tag
+
+
 def prebuilt_unavailable_reason(key: str | None = None) -> str | None:
-    """Why the published binary for *key* cannot be used here, or ``None`` if it can.
+    """Why the published binary for *key* cannot run on this machine, or ``None`` if it can.
 
     Upstream builds on recent systems, and what it produces runs only on
     systems at least as recent: the macOS binary is linked for macOS 26 and the
-    Linux binary needs glibc 2.34. This checks the running machine against the
-    requirement recorded in :data:`~pysipnet.version.SIPNET_PREBUILT_REQUIREMENTS`
-    so :func:`install_sipnet` can compile instead of downloading something that
-    the loader would refuse.
+    Linux binary needs glibc 2.34. Each binary's requirement is recorded as the
+    platform tag of the wheel that bundles it
+    (:data:`~pysipnet.version.SIPNET_WHEEL_PLATFORM_TAGS`), and this asks
+    :func:`packaging.tags.sys_tags` — the same code pip uses to choose a wheel
+    — whether this interpreter's platform accepts that tag. So "pip would
+    install the bundled wheel here" and "the download would run here" are one
+    predicate, correct on musl, Rosetta and platforms nobody wrote a branch for.
     """
     key = key or platform_key()
     if key not in SIPNET_RELEASE_ASSETS:
         supported = ", ".join(sorted(SIPNET_RELEASE_ASSETS))
         return f"no prebuilt binary is published for {key} (published: {supported})"
-    if key != platform_key():
-        return None  # not this machine; nothing to compare against
-
-    requirement = SIPNET_PREBUILT_REQUIREMENTS[key]
-    if key.startswith("darwin"):
-        release = platform.mac_ver()[0]
-        have = _version_tuple(release)
-        need = _version_tuple(requirement.minimum)
-        if have and have < need:
-            return (
-                f"the published macOS binary needs macOS {requirement.minimum}+, this is {release}"
-            )
-    elif key.startswith("linux"):
-        libc, libc_version = platform.libc_ver()
-        if libc == "glibc" and libc_version:
-            if _version_tuple(libc_version) < _version_tuple(requirement.minimum):
-                return (
-                    f"the published Linux binary needs glibc {requirement.minimum}+, "
-                    f"this system has {libc_version}"
-                )
-        elif libc:
-            return f"the published Linux binary needs glibc, this system reports {libc}"
-    return None
-
-
-def _version_tuple(text: str) -> tuple[int, ...]:
-    return tuple(int(part) for part in re.findall(r"\d+", text)[:3])
+    required = SIPNET_WHEEL_PLATFORM_TAGS[key]
+    offered = {tag.platform for tag in sys_tags()}
+    if required in offered:
+        return None
+    return (
+        f"the published {key} binary needs {describe_wheel_tag(required)}; "
+        f"this machine is {platform_key()} running {platform.platform(terse=True)}"
+    )
 
 
 def download_sipnet(*, force: bool = False, timeout: float = 120.0) -> Path:
@@ -794,10 +869,10 @@ def fetch_release_binary(
     build uses to stage a binary for another platform. Verification of the
     archive is the same in both cases. Whether the installed binary is *run*
     to confirm its version defaults to "only when *key* is this machine",
-    since a binary for another platform cannot be executed here.
+    since a binary another machine's loader would refuse cannot be executed here.
     """
     if verify_runs is None:
-        verify_runs = key == platform_key()
+        verify_runs = prebuilt_unavailable_reason(key) is None
 
     filename, expected_sha256 = release_asset(key)
     # Re-check here rather than trusting release_asset alone. The filename
@@ -865,14 +940,7 @@ def fetch_release_binary(
             raise DownloadError(f"Could not unpack {filename}: {exc}") from exc
 
         source = _find_binary(unpacked)
-        if verify_runs:
-            _install_binary(source, target)
-        else:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            staged = target.with_name(target.name + ".incoming")
-            shutil.copy2(source, staged)
-            staged.chmod(0o755)
-            os.replace(staged, target)
+        _install_binary(source, target, check=verify_runs, error=DownloadError)
 
     return target
 
@@ -884,10 +952,11 @@ def install_sipnet(*, method: InstallMethod = "auto", force: bool = False) -> Pa
     """Get a SIPNET binary onto this machine, and return its path.
 
     What ``pysipnet install-sipnet`` runs. With ``method="auto"``: a binary
-    that already exists anywhere in the search order is returned as is, unless
-    *force*; otherwise the published binary is downloaded when one exists for
-    this platform and can run here, and SIPNET is compiled from the pinned
-    source when not. ``"download"`` and ``"compile"`` insist on one route.
+    that already exists anywhere in the search order and passes
+    :func:`verify_binary_matches_pin` is returned as is, unless *force*;
+    otherwise the published binary is downloaded when one exists for this
+    platform and can run here, and SIPNET is compiled from the pinned source
+    when not. ``"download"`` and ``"compile"`` insist on one route.
 
     Parameters
     ----------
@@ -900,7 +969,19 @@ def install_sipnet(*, method: InstallMethod = "auto", force: bool = False) -> Pa
     if method == "auto" and not force:
         found = find_binary()
         if found is not None:
-            return found.path
+            try:
+                verify_binary_matches_pin(found.path)
+            except BinaryVersionError as exc:
+                if found.source == "environment":
+                    raise BinaryVersionError(
+                        f"{exc} Because ${BINARY_ENV_VAR} names that binary, installing "
+                        "another would not change what pySIPNET runs; unset it first."
+                    ) from exc
+                # Anything else outranking the install target is a broken
+                # file, not a choice; replace it if it is the target itself.
+                force = found.path == install_target()
+            else:
+                return found.path
 
     if method == "download":
         return download_sipnet(force=force)
@@ -911,33 +992,3 @@ def install_sipnet(*, method: InstallMethod = "auto", force: bool = False) -> Pa
     if reason is None:
         return download_sipnet(force=force)
     return build_sipnet(force=force)
-
-
-def _check_staged_binary(path: Path) -> None:
-    """Confirm a freshly unpacked or compiled binary is the release we expect.
-
-    Asks the binary what it is rather than trusting the filename it arrived
-    under. A mismatch means the pinned asset and :data:`SIPNET_PINNED_TAG` have
-    drifted apart, which is what a half-finished pin bump looks like.
-
-    Checks the ``git describe`` tag rather than the numeric version, because
-    the numeric version lags pre-release tags and would accept a binary from
-    the wrong release.
-    """
-    try:
-        reported = _version_of(path)
-    except (subprocess.SubprocessError, OSError) as exc:
-        detail = getattr(exc, "stderr", "") or str(exc)
-        raise DownloadError(
-            f"The new binary would not run: {detail.strip()}. It was not installed. "
-            f"{prebuilt_unavailable_reason() or ''}".rstrip()
-        ) from exc
-
-    tag = sipnet_build_tag(reported)
-    if tag != SIPNET_PINNED_TAG:
-        raise DownloadError(
-            f"The new binary was built from {tag or 'an untagged commit'!r}, "
-            f"but this pySIPNET pins {SIPNET_PINNED_TAG!r}. It was not installed. "
-            f"(Full version string: {reported!r}.) The pinned asset in "
-            "pysipnet.version is probably out of step with SIPNET_PINNED_TAG."
-        )

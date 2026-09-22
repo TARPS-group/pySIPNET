@@ -34,6 +34,31 @@ def sipnet_source_params() -> set[str]:
 
 
 @pytest.fixture
+def isolated_binary_locations(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
+    """Point every place pySIPNET looks for a SIPNET binary into tmp_path, empty.
+
+    Keyed by the candidate's source name (``bundled``, ``source tree``,
+    ``user cache``), so a test can plant a binary in the ones it wants and see
+    which wins. ``$PYSIPNET_BINARY`` is unset. Shared by the build, CLI and
+    download tests so that a binary on the developer's machine — a real
+    ``$PYSIPNET_BINARY``, a staged bundle, the checkout cache — can never leak
+    into a test that believes nothing is installed.
+    """
+    from pysipnet.build import BINARY_ENV_VAR, CACHE_DIR_ENV_VAR, PINNED_CACHE_SUBDIR
+
+    homes = {
+        "bundled": tmp_path / "bundled",
+        "source tree": tmp_path / "checkout_cache" / PINNED_CACHE_SUBDIR,
+        "user cache": tmp_path / "user_cache_root" / "sipnet" / PINNED_CACHE_SUBDIR,
+    }
+    monkeypatch.setattr("pysipnet.build._BUNDLED_DIR", homes["bundled"])
+    monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path / "checkout_cache")
+    monkeypatch.setenv(CACHE_DIR_ENV_VAR, str(tmp_path / "user_cache_root"))
+    monkeypatch.delenv(BINARY_ENV_VAR, raising=False)
+    return homes
+
+
+@pytest.fixture
 def reference_fixture_dir() -> Path:
     """Directory holding a known-good sipnet.param and sipnet.clim pair.
 

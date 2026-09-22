@@ -56,7 +56,7 @@ make sipnet             # compile the pinned submodule into .sipnet_cache/
 uv run pytest
 ```
 
-In a checkout, `.sipnet_cache/sipnet` is where pySIPNET looks first after
+In a checkout, `.sipnet_cache/<commit>/sipnet` is where pySIPNET looks first after
 `PYSIPNET_BINARY`, so the binary you built is the one the tests run. Requires
 Python ≥ 3.11, [uv](https://docs.astral.sh/uv/), `gcc`/`clang` and `make`.
 
