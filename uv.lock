@@ -2545,6 +2545,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pandas" },
     { name = "pint" },
+    { name = "platformdirs" },
     { name = "pydantic" },
     { name = "xarray" },
 ]
@@ -2586,6 +2587,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.24" },
     { name = "pandas", specifier = ">=2.0" },
     { name = "pint", specifier = ">=0.23" },
+    { name = "platformdirs", specifier = ">=4.0" },
     { name = "plotly", marker = "extra == 'viz'", specifier = ">=5.3" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "xarray", specifier = ">=2023.0" },

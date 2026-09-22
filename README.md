@@ -12,15 +12,53 @@ pySIPNET is independent of the [PEcAn](https://github.com/pecanproject) ecosyste
 - Clean output as a labeled DataFrame or a self-describing xarray Dataset, every variable named for what it is and carrying its units and time reference
 - `SIPNETModel` — a single callable compatible with PyEns, Dask, Parsl, Ray, and any framework that treats the model as `(**inputs) → output`
 
-## Quick start
+## Installation
+
+pySIPNET is two things: a Python package, and the SIPNET binary it drives.
+Installing the package does not install SIPNET, so setup is two steps on any
+machine. Full details, including clusters and offline machines, are in the
+[installation guide](docs/installation.md).
+
+### Using pySIPNET
+
+```bash
+pip install git+https://github.com/TARPS-group/pySIPNET.git   # 1. the package
+pysipnet install-sipnet                                        # 2. the SIPNET binary
+pysipnet info                                                  # check: what was found, and where
+```
+
+`pysipnet install-sipnet` downloads the binary the SIPNET project publishes
+when one exists for your machine (arm64 macOS 26+, x86_64 Linux with glibc 2.34+)
+and otherwise compiles the pinned SIPNET source, which needs `git`, `make` and a
+C compiler. It goes into a per-user cache named by the pinned SIPNET commit, so a
+later pySIPNET that pins a different SIPNET cannot pick it up by mistake.
+Release wheels for those two platforms carry the binary inside them, and on
+them step 2 is not needed.
+
+Two environment variables cover the cases where you already have a binary or
+cannot write to your home directory:
+
+- `PYSIPNET_BINARY=/path/to/sipnet` — use this binary, for example a cluster
+  module or a shared build. It is checked before anything else.
+- `PYSIPNET_CACHE_DIR=/scratch/me` — put the cache there instead of the
+  platform default, for example a filesystem every compute node can see.
+
+Before its first run, pySIPNET asks the binary for its version and refuses one
+built from a different SIPNET than it pins, whatever route it arrived by.
+
+### Developing pySIPNET
 
 ```bash
 git clone --recurse-submodules https://github.com/TARPS-group/pySIPNET.git
 cd pySIPNET
-uv sync
-make sipnet
+uv sync                 # Python dependencies, including the dev tools
+make sipnet             # compile the pinned submodule into .sipnet_cache/
 uv run pytest
 ```
+
+In a checkout, `.sipnet_cache/sipnet` is where pySIPNET looks first after
+`PYSIPNET_BINARY`, so the binary you built is the one the tests run. Requires
+Python ≥ 3.11, [uv](https://docs.astral.sh/uv/), `gcc`/`clang` and `make`.
 
 ## Usage
 
@@ -63,12 +101,13 @@ uv run mkdocs serve
 ## SIPNET version
 
 Pinned to the SIPNET **v2.2.0-alpha.1** pre-release (commit `41fa853e`). Model options are
-chosen at run time, so there is a single binary and no compiler flags. See
-[docs/sipnet-version.md](docs/sipnet-version.md).
+chosen at run time, so there is a single binary and no compiler flags. Every route to a
+binary — download, compile, bundled wheel, `PYSIPNET_BINARY` — is checked against that pin
+before the first run. See [docs/sipnet-version.md](docs/sipnet-version.md).
 
 ## Requirements
 
-Python ≥ 3.11, [uv](https://docs.astral.sh/uv/), `gcc`/`clang`, `make`
+Python ≥ 3.11. To compile SIPNET rather than download it: `git`, `make`, `gcc`/`clang`.
 
 ## License
 

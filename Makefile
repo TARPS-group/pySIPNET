@@ -35,8 +35,7 @@ sipnet: submodule
 # checked before anything is unpacked; compiling from source (above) works on
 # any platform and is the default.
 sipnet-download:
-	uv run python -c "from pysipnet.build import download_sipnet; print(download_sipnet(force=True))"
-	@$(BINARY) --version
+	uv run pysipnet install-sipnet --method download --force
 
 # Fetch the submodule contents if this is a fresh clone.
 submodule:

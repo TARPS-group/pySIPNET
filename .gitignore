@@ -15,6 +15,9 @@ memory/
 # Compiled SIPNET binaries cache
 .sipnet_cache/
 
+# A SIPNET binary staged for a platform wheel (pysipnet stage-bundle); never committed
+pysipnet/bin/
+
 # uv
 .venv/
 # uv.lock is deliberately NOT ignored: CI installs from it with --locked so a

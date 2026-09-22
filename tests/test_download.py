@@ -174,7 +174,7 @@ class TestReleaseAsset:
 
     def test_error_points_at_building_from_source(self):
         """Compiling always works, so an unsupported platform is not a dead end."""
-        with pytest.raises(DownloadError, match="make sipnet"):
+        with pytest.raises(DownloadError, match="install-sipnet --method compile"):
             release_asset("plan9-vax")
 
     def test_pinned_digests_look_like_sha256(self):
@@ -555,7 +555,7 @@ class TestDownloadSipnet:
         with pytest.raises(DownloadError, match="Could not download"):
             download_sipnet()
 
-    def test_network_failure_suggests_building_from_source(self, monkeypatch, tmp_path):
+    def test_network_failure_suggests_compiling_instead(self, monkeypatch, tmp_path):
         monkeypatch.setattr("pysipnet.build._CACHE_DIR", tmp_path)
         monkeypatch.setattr(
             "pysipnet.build.release_asset", lambda key=None: ("sipnet-test.tar.gz", "00" * 32)
@@ -564,7 +564,7 @@ class TestDownloadSipnet:
             "pysipnet.build._open_url",
             lambda *a, **kw: (_ for _ in ()).throw(urllib.error.URLError("offline")),
         )
-        with pytest.raises(DownloadError, match="make sipnet"):
+        with pytest.raises(DownloadError, match="install-sipnet --method compile"):
             download_sipnet()
 
     def test_binary_reporting_the_wrong_version_is_removed(self, served, tmp_path):

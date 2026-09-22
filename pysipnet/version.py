@@ -24,6 +24,8 @@ Three constants describe the pin, and they are not interchangeable:
     ``v2.2.0-alpha.1`` it still reads ``2.1.0``.
 """
 
+from typing import NamedTuple
+
 PYSIPNET_VERSION: str = "0.1.0.dev0"
 
 # ── SIPNET source pinning ─────────────────────────────────────────────────────
@@ -76,6 +78,8 @@ CLIM_COLS_14: int = 14
 
 SIPNET_RELEASE_REPO: str = "PecanProject/sipnet"
 SIPNET_RELEASE_TAG: str = SIPNET_PINNED_TAG
+SIPNET_SOURCE_REPO_URL: str = f"https://github.com/{SIPNET_RELEASE_REPO}.git"
+"""Where :func:`pysipnet.build.build_sipnet` fetches the pinned commit from outside a checkout."""
 
 SIPNET_RELEASE_ASSETS: dict[str, tuple[str, str]] = {
     # platform key -> (archive filename, SHA-256 of the archive)
@@ -93,3 +97,28 @@ SIPNET_RELEASE_ASSETS: dict[str, tuple[str, str]] = {
 Only the platforms upstream builds for appear here. Anywhere else — Intel
 macOS, Windows, ARM Linux — has to compile from source, which always works.
 """
+
+
+class PrebuiltRequirement(NamedTuple):
+    """What a published binary needs from the machine it runs on."""
+
+    minimum: str
+    """Minimum macOS release, or minimum glibc version, as a dotted string."""
+
+    wheel_tag: str
+    """The platform tag a wheel bundling this binary must carry."""
+
+
+# Upstream compiles on recent runners, and what comes out runs only on systems
+# at least that recent. Read from the binaries themselves, not from upstream's
+# docs: the macOS binary's LC_BUILD_VERSION load command declares minos 26.0,
+# and the Linux binary references versioned glibc symbols up to GLIBC_2.34.
+# The wheel tags are the same facts in pip's vocabulary, so pip installs a
+# bundled wheel only where the binary inside it can run and otherwise falls
+# back to the pure-Python wheel. `pytest -m network` re-derives both from the
+# published archives, so a pin bump that changes them fails loudly.
+SIPNET_PREBUILT_REQUIREMENTS: dict[str, PrebuiltRequirement] = {
+    "darwin-arm64": PrebuiltRequirement(minimum="26.0", wheel_tag="macosx_26_0_arm64"),
+    "linux-x86_64": PrebuiltRequirement(minimum="2.34", wheel_tag="manylinux_2_34_x86_64"),
+}
+"""What each published binary needs to run, and how a wheel bundling it is tagged."""

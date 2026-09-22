@@ -68,13 +68,23 @@ that does would pass against the wrong release.
   recalibration of SIPNET params."
 - **Upstream ships binaries** for `linux-x86_64` and `macos-arm64` from v2.0.0
   on, so local compilation is optional on those platforms.
-  `pysipnet.build.download_sipnet()` (or `make sipnet-download`) fetches one.
-  The archive SHA-256 is pinned in `SIPNET_RELEASE_ASSETS` and checked before
-  extraction, archive members are inspected so a hostile path cannot escape the
-  destination, and the installed binary is asked for its version afterwards.
-  A failure at any of those steps leaves nothing installed. Refresh the digests
-  whenever `SIPNET_PINNED_COMMIT` moves; a stale one fails loudly, which is what
-  you want. `pytest -m network` checks them against the published release.
+  `pysipnet.build.download_sipnet()` (or `pysipnet install-sipnet`) fetches
+  one. The archive SHA-256 is pinned in `SIPNET_RELEASE_ASSETS` and checked
+  before extraction, archive members are inspected so a hostile path cannot
+  escape the destination, and the installed binary is asked for its version
+  afterwards. A failure at any of those steps leaves nothing installed.
+  Refresh the digests whenever `SIPNET_PINNED_COMMIT` moves; a stale one fails
+  loudly, which is what you want. `pytest -m network` checks them against the
+  published release.
+- **The published binaries only run on recent systems.** Read from the
+  binaries, not upstream's docs: the macOS one declares `minos 26.0` in its
+  `LC_BUILD_VERSION` load command, and the Linux one references `GLIBC_2.34`.
+  `SIPNET_PREBUILT_REQUIREMENTS` records both, `prebuilt_unavailable_reason()`
+  compares them against the running machine so `install_sipnet()` compiles
+  instead of downloading something dyld or ld.so would refuse, and the same
+  facts become the platform wheel tags (`macosx_26_0_arm64`,
+  `manylinux_2_34_x86_64`) so pip only installs a bundled wheel where its
+  binary can run. `pytest -m network` re-derives both from the archives.
 
 ### Pinning mechanics
 
@@ -83,7 +93,46 @@ result to `.sipnet_cache/sipnet` (gitignored). Never commit the binary.
 `tests/test_build.py` asserts that the submodule is at
 `SIPNET_PINNED_COMMIT` and that the compiled binary reports
 `SIPNET_PINNED_TAG`, so a stale binary or half-finished bump fails loudly
-rather than producing quietly wrong output.
+rather than producing quietly wrong output. The same check runs **at
+runtime**: `SIPNETRunner._check_binary()` calls
+`verify_binary_matches_pin()` before the first run (cached per file, one
+`--version` call per process) and raises `BinaryVersionError` on a mismatch,
+so a user who never runs the tests still cannot drive the wrong SIPNET.
+`verify_binary=False` is the escape hatch.
+
+### Where the binary comes from
+
+Installing the Python package does not install SIPNET, and nothing in the
+library fetches one on its own. `pysipnet/build.py` owns the whole story:
+
+- **Search order** (`binary_candidates()`, first existing wins):
+  `$PYSIPNET_BINARY` → `pysipnet/bin/sipnet` bundled in a platform wheel →
+  `.sipnet_cache/sipnet` when `in_source_tree()` (repo `Makefile` beside
+  `pyproject.toml`; true for editable installs) → the per-user cache,
+  `platformdirs.user_cache_dir("pysipnet")/sipnet/<commit12>/sipnet`, root
+  replaceable by `$PYSIPNET_CACHE_DIR`. The user cache is named by commit so a
+  pin bump can never pick up a stale binary there; the checkout cache is flat,
+  which is why the runtime check above exists.
+- **Acquisition** (`install_sipnet()`, the `pysipnet install-sipnet`
+  command): download when `prebuilt_unavailable_reason()` is `None`, else
+  compile. `build_sipnet()` runs `make sipnet` in a checkout; outside one it
+  fetches the pinned commit with git (by commit, not a GitHub tarball, whose
+  bytes are generated on request and have changed before), verifies
+  `rev-parse HEAD`, and runs SIPNET's Makefile with `GIT_HASH=<tag>` so the
+  binary is stamped even from a shallow fetch. Both routes stage the binary
+  beside the target, check its version, and `os.replace` it into place.
+- **Bundled wheels**: `hatch_build.py` is a hatch build hook that, when
+  `$PYSIPNET_BUNDLE_SIPNET=<platform key>`, force-includes whatever
+  `pysipnet stage-bundle <key>` put at `pysipnet/bin/sipnet` and tags the
+  wheel from `SIPNET_PREBUILT_REQUIREMENTS`. It downloads nothing itself: the
+  build env has only hatchling, so it loads `pysipnet/version.py` by path
+  (that module must stay import-free) and leaves verification to the staging
+  step. `pysipnet/bin/` is gitignored and excluded from the pure wheel.
+  `.github/workflows/wheels.yml` builds sdist, pure wheel and both platform
+  wheels, smoke-tests each on a runner that can execute its binary, and on a
+  `v*` tag attaches them to a **draft** release. No PyPI publishing yet.
+- `SIPNETRunner(binary=...)` names a binary outright; `cache_dir=` is the
+  older spelling and means `<cache_dir>/sipnet`.
 
 When moving to a newer SIPNET, expect to touch: the required-parameter set,
 the output column list, the `sipnet.in` keys, and the golden fixtures. Bump
@@ -614,9 +663,11 @@ different parameters depending on `sipnet.in`. `ModelFlags` mirrors this in
 pySIPNET/
 ├── sipnet/                       # git submodule — SIPNET source, pinned to v2.2.0-alpha.1
 ├── Makefile                      # `make sipnet`, `make sipnet-download`
+├── hatch_build.py                # build hook: bundle a staged binary into a platform-tagged wheel
 ├── pysipnet/
-│   ├── version.py                # pinned commit, target version, clim column counts
-│   ├── build.py                  # compile or download, locate, verify the binary
+│   ├── version.py                # pinned commit, target version, release assets, prebuilt requirements (import-free)
+│   ├── build.py                  # find (search order), download, compile, verify the binary
+│   ├── cli.py                    # `pysipnet install-sipnet | info | stage-bundle`
 │   ├── parameters/
 │   │   ├── base.py               # ParameterSpec, param_field, domains (version-agnostic)
 │   │   └── model.py              # ModelFlags and SIPNETParameters
@@ -650,7 +701,9 @@ pySIPNET/
 │   ├── test_fidelity.py          # wrapper output == bare binary output
 │   ├── test_golden.py            # frozen numeric baseline
 │   ├── test_reference.py         # bundled data ships in the wheel and matches the submodule
-│   └── test_build.py             # binary/pin agreement
+│   ├── test_bundle_hook.py       # platform wheels carry the binary and the right tag
+│   ├── test_cli.py               # the pysipnet command
+│   └── test_build.py             # search order, compile fallback, runtime pin check
 ├── data/                         # (gitignored) sample data
 ├── docs/
 └── CLAUDE.md                     # this file
@@ -678,8 +731,14 @@ non-Python files under the listed package with no extra config, which
 
 Worth knowing which test to look at when something breaks:
 
-- `test_build.py` — the binary matches the recorded pin. Catches a stale
-  binary or a half-finished version bump.
+- `test_build.py` — the binary matches the recorded pin, the search order
+  is what the docs say, and `verify_binary_matches_pin` refuses the wrong
+  tag. Catches a stale binary, a half-finished version bump, or a candidate
+  location silently outranking another.
+- `test_bundle_hook.py` — a wheel built with `$PYSIPNET_BUNDLE_SIPNET` carries
+  the staged binary, executable, under the platform tag from
+  `SIPNET_PREBUILT_REQUIREMENTS`, and the pure wheel carries none. Under
+  `-m network`, that the requirements table matches the published binaries.
 - `test_sipnet_in.py` — SIPNET understood every config key we wrote, proven by
   reading its own resolved-config dump. Catches a key silently ignored.
 - `test_param_file_contract.py` — SIPNET recognized every parameter name and

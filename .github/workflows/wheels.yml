@@ -1,0 +1,118 @@
+# Build the distributable artifacts: an sdist, the pure-Python wheel, and one
+# wheel per platform SIPNET publishes a binary for, with that binary inside.
+#
+# A platform wheel is tagged for the system its binary needs (macOS 26 on
+# arm64; glibc 2.34 on x86_64 Linux), so pip installs it only there and takes
+# the pure wheel everywhere else, where `pysipnet install-sipnet` gets a
+# binary the other ways. The binaries are not compiled here: they are
+# upstream's release assets, verified against the digests pinned in
+# pysipnet/version.py by `pysipnet stage-bundle`.
+#
+# Runs on demand and on a version tag. On a tag it attaches the artifacts to a
+# draft GitHub release for a human to publish. Nothing is uploaded to PyPI;
+# add a job with trusted publishing when the project is ready for that.
+name: Wheels
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    name: Build sdist and wheels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --all-groups --locked
+
+      - name: sdist and pure wheel
+        run: uv build -o dist
+
+      - name: Platform wheels
+        run: |
+          set -euo pipefail
+          for key in darwin-arm64 linux-x86_64; do
+            rm -rf pysipnet/bin
+            uv run pysipnet stage-bundle "$key"
+            PYSIPNET_BUNDLE_SIPNET="$key" uv build --wheel -o dist
+          done
+          rm -rf pysipnet/bin
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
+
+  smoke:
+    name: Install and run (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Each platform wheel on a runner that can run its binary, plus the
+          # pure wheel where a binary has to be fetched into the user cache.
+          - os: ubuntu-24.04
+            wheel: manylinux_2_34_x86_64
+          - os: macos-26
+            wheel: macosx_26_0_arm64
+          - os: ubuntu-24.04
+            wheel: any
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install the wheel into a fresh environment
+        run: |
+          set -euo pipefail
+          uv venv .venv
+          uv pip install --python .venv/bin/python dist/pysipnet-*-py3-none-${{ matrix.wheel }}.whl
+
+      - name: Fetch a binary when the wheel has none
+        if: matrix.wheel == 'any'
+        run: .venv/bin/pysipnet install-sipnet --method download
+
+      - name: The binary is found and is the pinned SIPNET
+        run: |
+          set -euo pipefail
+          .venv/bin/pysipnet info
+          .venv/bin/python - <<'PY'
+          from pysipnet import SIPNETRunner, niwot_reference_output
+          from pysipnet.build import find_binary
+          found = find_binary()
+          assert found is not None, "no binary"
+          print("binary source:", found.source)
+          SIPNETRunner()._check_binary()
+          print(niwot_reference_output())
+          PY
+
+  release:
+    name: Attach to a draft release
+    needs: smoke
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: dist/*
