@@ -147,6 +147,9 @@ uv run pytest                                                # everything but ne
 
 ## Release wheels
 
+How a release is cut is a maintainer matter, written up in `RELEASING.md` at
+the repository root.
+
 The `Wheels` workflow builds an sdist, the pure-Python wheel, and one wheel per
 platform upstream publishes a binary for, with the verified binary bundled and
 the wheel tagged for the system that binary needs. It runs on demand and on a
