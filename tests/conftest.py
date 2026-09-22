@@ -37,21 +37,28 @@ def sipnet_source_params() -> set[str]:
 def reference_fixture_dir() -> Path:
     """Directory holding a known-good sipnet.param and sipnet.clim pair.
 
-    Used by tests that need to run the real binary on realistic inputs.
+    Used by tests that need to run the real binary on realistic inputs. The
+    files ship inside the package (``pysipnet/data/niwot/``) so that
+    downstream projects get them too; tests read them from there, so there is
+    exactly one copy.
     """
-    return Path(__file__).parent / "fixtures" / "niwot_reference"
+    from pysipnet.io.reference import niwot_reference_files
+
+    return niwot_reference_files().directory
 
 
 @pytest.fixture
 def reference_clim_path() -> Path:
-    """Path to the committed reference climate file.
+    """Path to the bundled reference climate file.
 
-    Lives under ``tests/fixtures/`` and is tracked by git, so it is there in
-    CI and after a fresh clone. Any test needing climate input should use
-    this rather than reaching into the gitignored ``data/`` directory, which
-    only exists on the machine that put it there.
+    Tracked by git and shipped in the wheel, so it is there in CI, after a
+    fresh clone and in an installed package. Any test needing climate input
+    should use this rather than reaching into the gitignored ``data/``
+    directory, which only exists on the machine that put it there.
     """
-    return Path(__file__).parent / "fixtures" / "niwot_reference" / "sipnet.clim"
+    from pysipnet.io.reference import niwot_reference_files
+
+    return niwot_reference_files().clim
 
 
 @pytest.fixture

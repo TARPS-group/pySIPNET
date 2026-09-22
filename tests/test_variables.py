@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from pysipnet.io.reference import niwot_reference_files
 from pysipnet.variables import (
     LEGACY_OUTPUT_COLUMNS,
     NAME_PATTERN,
@@ -37,7 +37,7 @@ from pysipnet.variables import (
     resolve_output_variable_names,
 )
 
-GOLDEN = Path(__file__).parent / "fixtures" / "golden" / "niwot_standard.out.csv"
+GOLDEN = niwot_reference_files().output
 
 # Written by hand from outputHeader() in sipnet/src/sipnet/sipnet.c. Do not
 # derive this from the registry; the point is that it is independent.
