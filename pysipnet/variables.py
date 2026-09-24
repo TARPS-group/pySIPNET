@@ -22,7 +22,8 @@ understands, but they are never column names.
 Time convention
 ---------------
 SIPNET labels each row with the **start** of the timestep (``year``,
-``day_of_year``, ``hour_of_day``), but pools are written **after** the step
+``day_of_year``, ``hour_of_day``), on whatever clock the climate drivers use —
+SIPNET has no time zone of its own — but pools are written **after** the step
 has been applied, so a ``TIMESTEP_END_STATE`` value is the pool at the *end* of
 the step. ``TIMESTEP_TOTAL`` values are accumulated over the step,
 ``TIMESTEP_MEAN`` values are means over it, the single ``DAILY_RATE`` value is a
@@ -55,8 +56,10 @@ same way. Each :class:`ClimateVariableSpec` also records the units SIPNET
 converts the value to on read (``internal_units``), because SIPNET's own
 documentation quotes those rather than the file units. Climate rows follow the
 same time convention: ``year`` / ``day_of_year`` / ``hour_of_day`` are the
-start of the step, means are over the step, and ``photosynthetically_active_radiation``
-and ``precipitation`` are totals over the step.
+start of the step on the drivers' clock, which
+:class:`~pysipnet.climate.ClimateDrivers` may declare; means are over the step,
+and ``photosynthetically_active_radiation`` and ``precipitation`` are totals
+over the step.
 
 Precision
 ---------
@@ -292,7 +295,7 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
         sipnet_name="year",
         kind=VariableKind.TIMESTEP_START_COORDINATE,
         units="1",
-        description="Calendar year at the start of the timestep.",
+        description="Calendar year at the start of the timestep, on the climate drivers' clock.",
         long_label="Year",
         group="time",
     ),
@@ -301,7 +304,8 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
         sipnet_name="day",
         kind=VariableKind.TIMESTEP_START_COORDINATE,
         units="1",
-        description="Day of year at the start of the timestep; 1 is January 1st.",
+        description="Day of year at the start of the timestep, on the climate drivers' clock; "
+        "1 is January 1st.",
         long_label="Day of year",
         short_label="DOY",
         aliases=("day", "doy"),
@@ -312,7 +316,8 @@ OUTPUT_VARIABLES: tuple[VariableSpec, ...] = (
         sipnet_name="time",
         kind=VariableKind.TIMESTEP_START_COORDINATE,
         units="h",
-        description="Hours after midnight at the start of the timestep; may be fractional.",
+        description="Hours after midnight at the start of the timestep, on the climate drivers' "
+        "clock; may be fractional.",
         long_label="Hour of day",
         aliases=("time",),
         output_decimals=2,
@@ -827,7 +832,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
         sipnet_name="year",
         kind=VariableKind.TIMESTEP_START_COORDINATE,
         units="1",
-        description="Calendar year at the start of the timestep.",
+        description="Calendar year at the start of the timestep, on the climate drivers' clock.",
         long_label="Year",
         group="time",
     ),
@@ -836,7 +841,8 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
         sipnet_name="day",
         kind=VariableKind.TIMESTEP_START_COORDINATE,
         units="1",
-        description="Day of year at the start of the timestep; 1 is January 1st.",
+        description="Day of year at the start of the timestep, on the climate drivers' clock; "
+        "1 is January 1st.",
         long_label="Day of year",
         short_label="DOY",
         aliases=("day", "doy"),
@@ -847,7 +853,8 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
         sipnet_name="time",
         kind=VariableKind.TIMESTEP_START_COORDINATE,
         units="h",
-        description="Hours after midnight at the start of the timestep; may be fractional.",
+        description="Hours after midnight at the start of the timestep, on the climate drivers' "
+        "clock; may be fractional.",
         long_label="Hour of day",
         aliases=("time",),
         group="time",

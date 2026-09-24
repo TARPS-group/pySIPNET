@@ -131,7 +131,7 @@ class RunConfig:
                     "the climate data into the config directory."
                 )
             clim_path = self.climate.source_path.resolve()
-            climate_meta = {
+            climate_meta: dict[str, str | None] = {
                 "mode": _MODE_REFERENCE,
                 "path": str(clim_path),
                 "sha256": _sha256(clim_path),
@@ -139,6 +139,8 @@ class RunConfig:
         else:
             write_clim_file(self.climate, path / "sipnet.clim")
             climate_meta = {"mode": _MODE_COPY}
+        # A .clim file cannot record its clock, so the config does.
+        climate_meta["time_zone"] = self.climate.time_zone
 
         has_events = self.events is not None and len(self.events) > 0
         if self.events is not None and has_events:
@@ -204,8 +206,9 @@ class RunConfig:
         params = SIPNETParameters.model_validate(data["params"])
 
         clim_meta = data["climate"]
+        time_zone = clim_meta.get("time_zone")
         if clim_meta["mode"] == _MODE_COPY:
-            climate = ClimateDrivers.from_path(path / "sipnet.clim")
+            climate = ClimateDrivers.from_path(path / "sipnet.clim", time_zone=time_zone)
         else:
             clim_path = Path(clim_meta["path"])
             if not clim_path.exists():
@@ -223,7 +226,7 @@ class RunConfig:
                         f"SHA-256: {actual_hash[:16]}...\nFile: {clim_path}",
                         stacklevel=2,
                     )
-            climate = ClimateDrivers.from_path(clim_path)
+            climate = ClimateDrivers.from_path(clim_path, time_zone=time_zone)
 
         events = None
         if data.get("has_events"):

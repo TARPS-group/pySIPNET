@@ -157,7 +157,8 @@ class TestEndToEnd:
         assert attrs["run_id"] == "calibration_042" == result.provenance.run_id
         assert json.loads(attrs["model_flags"]) == result.flags.model_dump()
         assert attrs["time_step_length_source"] == "climate drivers"
-        assert attrs["time_zone"].startswith("naive")
+        assert attrs["time_axis_source"] == "climate drivers"
+        assert attrs["time_zone"] == "undeclared"
         assert result.outputs.xarray["time"].attrs["time_zone"] == attrs["time_zone"]
 
     def test_a_file_backed_dataset_records_its_run_too(self, minimal_params, tmp_path):

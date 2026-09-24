@@ -376,7 +376,22 @@ log warning rather than an output column, so a failed check appears in
     attributes. The xarray `time` coordinate is therefore the **end** of the
     step, the one instant at which a pool is the value "at `time`" and a flux
     is the total "over the bounds", as the Climate and Forecast (CF)
-    `cell_methods` attributes say; `time_step_start` is SIPNET's row label.
+    `cell_methods` attributes say; `time_step_start` is the row's label.
+
+!!! note "SIPNET has no time zone; the drivers declare the clock"
+    SIPNET computes no solar geometry and never interprets its labels: it
+    echoes each climate row's `year`, `day` and `time` into the matching
+    output row and integrates on `time_step_length`. So the times are on
+    whatever clock your climate drivers use. Say which when you build them —
+    `ClimateDrivers.from_file(path, time_zone="UTC")`, or a fixed offset such
+    as `"UTC-07:00"` for local standard time — and the declaration is recorded
+    on the `time` coordinate of both the climate and the output Datasets. It
+    is metadata only: nothing is converted, and undeclared is the default.
+
+    A run's output takes its time axis from those drivers, row for row, so
+    `result.outputs.xarray` and `climate.xarray` share one axis exactly.
+    (SIPNET prints `hour_of_day` rounded to 0.01 h; the `.pandas` view keeps
+    those printed values.)
 
 ### Five views of the same output
 
@@ -403,13 +418,14 @@ ds["net_ecosystem_exchange"].attrs
 #  'sign_convention': 'positive is a flux from the ecosystem to the atmosphere', ...}
 
 ds["time"]              # datetime64, END of each timestep (CF standard_name "time")
-ds["time_step_start"]   # datetime64, start of each timestep, as SIPNET labels the row
+ds["time_step_start"]   # datetime64, start of each timestep, as the drivers label the row
 ds["time_step_length"]  # timedelta64, the length declared to SIPNET
 ds["time_bounds"]       # (time, bounds) — the interval [time_step_start, time]
 
 ds.attrs["run_id"]                   # which run produced this
 ds.attrs["time_step_length_source"]  # measured from the drivers, or inferred
-ds.attrs["time_zone"]                # naive; whatever the .clim used
+ds.attrs["time_axis_source"]         # the drivers, or SIPNET's printed labels
+ds.attrs["time_zone"]                # the drivers' declared clock, or "undeclared"
 
 ds.to_netcdf("run.nc")  # self-describing on disk; needs a netCDF backend
                         # (`pip install h5netcdf`), which pySIPNET does not require

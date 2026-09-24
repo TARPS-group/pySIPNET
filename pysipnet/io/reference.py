@@ -151,20 +151,23 @@ def niwot_reference_climate() -> ClimateDrivers:
 def niwot_reference_output() -> SIPNETOutput:
     """The golden baseline as a memory-backed :class:`~pysipnet.output.SIPNETOutput`.
 
-    The step lengths come from the bundled climate, so the Dataset's time axis
-    is the one a real run would carry rather than one inferred from
-    timestamps, and the flags are :meth:`~pysipnet.parameters.model.ModelFlags.standard`,
+    It carries the first rows of the bundled climate, so the Dataset's time
+    axis is the one a real run would carry, the climate's own, rather than one
+    rebuilt from SIPNET's printed labels, and the flags are
+    :meth:`~pysipnet.parameters.model.ModelFlags.standard`,
     the flags the baseline was produced under, so selecting a variable SIPNET
     wrote as constant zero is refused as it would be for a live run.
 
     See the module docstring for what the baseline does and does not cover.
     """
+    from pysipnet.climate import ClimateDrivers
     from pysipnet.output import SIPNETOutput
     from pysipnet.parameters.model import ModelFlags
 
     paths = niwot_reference_files()
     frame = pd.read_csv(paths.output)
-    climate = niwot_reference_climate().pandas.head(len(frame))
+    full = niwot_reference_climate()
+    climate = full.pandas.head(len(frame))
 
     time_columns = ["year", "day_of_year", "hour_of_day"]
     if not frame[time_columns].to_numpy().tolist() == climate[time_columns].to_numpy().tolist():
@@ -176,7 +179,7 @@ def niwot_reference_output() -> SIPNETOutput:
 
     return SIPNETOutput.from_dataframe(
         frame,
-        time_step_length=climate["time_step_length"].to_numpy(),
+        climate=ClimateDrivers(data=climate.copy(), n_columns=full.n_columns),
         flags=ModelFlags.standard(),
         run_id=NIWOT_OUTPUT_RUN_ID,
     )

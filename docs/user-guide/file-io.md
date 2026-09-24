@@ -121,6 +121,36 @@ Accessing `climate.pandas` triggers a full load and caches the result.
     climate.validate()   # raises ValueError if not monotone
     ```
 
+#### Labels, lengths and the clock
+
+SIPNET integrates each row over its `time_step_length` and never checks that
+the row's start plus that length is where the next row starts. `validate()`
+(which `from_dataframe` and `from_file` run) does:
+
+- a row that starts more than a minute before the previous one ends is an
+  **overlap**, and refused;
+- labels that wander more than five minutes from the running sum of the
+  lengths are a **drift**, and refused — a clock advancing 3.0007 h per
+  3-hour step, or hourly lengths written as `0.042`;
+- a row that starts more than a minute after the previous one ends is a
+  **gap**, and only warned about.
+
+The same check runs when a time axis is built from drivers, which is how a
+file-backed climate that was never validated is caught.
+
+A `.clim` file cannot say which clock its labels are on, so tell
+`ClimateDrivers`:
+
+```python
+climate = ClimateDrivers.from_file("data/my_site.clim", time_zone="UTC-07:00")
+climate.xarray["time"].attrs["time_zone"]   # 'UTC-07:00'
+```
+
+Accepted values are `"UTC"` and fixed offsets `"UTC±HH:MM"`; a named zone
+such as `"America/Denver"` is refused, because daylight saving time would make
+the labels jump. The declaration is metadata only, travels to every output run
+on these drivers, and is saved by `RunConfig`.
+
 ### Climate file staging modes
 
 When staging a file-backed climate instance, the runner can either **copy**
@@ -212,9 +242,18 @@ print(result.outputs.source_path)
 df = result.outputs.pandas
 ```
 
-The runner records the timestep lengths from the climate drivers on the
-`SIPNETOutput`, so `result.outputs.xarray` knows when each step ends even
-when the output is read from disk later.
+The runner attaches the climate drivers to the `SIPNETOutput`, so
+`result.outputs.xarray` is built on their time axis — their start times, step
+lengths and declared `time_zone` — even when the output is read from disk
+later. A file-backed climate is not read until a Dataset is asked for. To
+rebuild the same axis for an output file you kept, pass its drivers:
+
+```python
+out = SIPNETOutput.from_path("run_outputs/sipnet_baseline.out", climate=climate)
+```
+
+Without `climate=`, the axis is rebuilt from the labels SIPNET printed, which
+are rounded to 0.01 h; `ds.attrs["time_axis_source"]` says which you got.
 
 ### output_dir: runner-level and per-call
 

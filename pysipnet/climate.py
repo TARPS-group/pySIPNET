@@ -46,6 +46,31 @@ Column numbers are for the 12-column file layout; the 14-column layout wraps
 the same values in a leading site identifier and a trailing soil wetness
 value, both of which SIPNET ignores and neither of which is stored here.
 
+``year``, ``day_of_year`` and ``hour_of_day`` label the start of the step on
+whatever clock the drivers were written in.
+
+The drivers declare the clock
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+SIPNET has no time zone.  It computes no solar geometry and reads a row's
+labels only to name the row, to compare against ``leafOnDay`` /
+``leafOffDay`` and to check restart boundaries, so which clock the labels are
+on is a property of the drivers, not of the model.  ``ClimateDrivers`` can
+declare it: ``time_zone="UTC"``, or a fixed offset such as ``"UTC-07:00"``.
+The declaration is metadata only — nothing is converted — and it travels on
+the ``time`` coordinate of :attr:`ClimateDrivers.xarray` and of every output
+run on these drivers.  It is undeclared by default.  A named zone is refused,
+because one with daylight saving time has a clock that jumps and SIPNET's rows
+cannot.
+
+Labels and lengths
+~~~~~~~~~~~~~~~~~~
+SIPNET integrates each row over ``time_step_length`` and never checks that a
+row's start plus its length is the next row's start.
+:meth:`ClimateDrivers.validate` does: it refuses a row that starts before the
+previous one ends and labels that drift away from the running sum of the
+lengths, and warns about a gap in the record.  See
+:func:`pysipnet.dataset.check_step_continuity` for the tolerances.
+
 PAR units note
 ~~~~~~~~~~~~~~
 ``photosynthetically_active_radiation`` holds the **total** over the timestep
@@ -63,6 +88,7 @@ behavior while making the issue visible to the user.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -81,6 +107,39 @@ if TYPE_CHECKING:
 # The loc and soil_wetness columns of the 14-column layout are not included:
 # they are written/read by the IO layer as padding, not stored in the DataFrame.
 CLIMATE_COLUMNS: list[str] = list(CLIMATE_COLUMN_NAMES)
+
+_UTC_OFFSET = re.compile(r"UTC(?:([+-])(\d{2}):(\d{2}))?")
+
+
+def normalize_time_zone(time_zone: str | None) -> str | None:
+    """Check a clock declaration and return it in canonical form.
+
+    Accepts ``"UTC"`` or a fixed offset from it, ``"UTC+HH:MM"`` /
+    ``"UTC-HH:MM"``; a zero offset is returned as ``"UTC"``.  ``None`` means
+    undeclared and is returned unchanged.
+    """
+    if time_zone is None:
+        return None
+    match = _UTC_OFFSET.fullmatch(time_zone)
+    if match is None:
+        raise ValueError(
+            f"time_zone must be 'UTC' or a fixed offset such as 'UTC-07:00', not {time_zone!r}. "
+            "A named zone like 'America/Denver' includes daylight saving time, whose clock "
+            "jumps twice a year; SIPNET's rows cannot jump, so drivers labeled on such a clock "
+            "would overlap or leave a gap at each change. Name the offset the labels actually "
+            "use (for local standard time in Denver, 'UTC-07:00')."
+        )
+    sign, hours, minutes = match.groups()
+    if sign is None:
+        return "UTC"
+    if int(hours) > 14 or int(minutes) >= 60:
+        raise ValueError(
+            f"time_zone {time_zone!r} is not a UTC offset: offsets run from UTC-12:00 to "
+            "UTC+14:00, with minutes below 60."
+        )
+    if int(hours) == 0 and int(minutes) == 0:
+        return "UTC"
+    return f"UTC{sign}{hours}:{minutes}"
 
 
 class ClimateDrivers:
@@ -110,6 +169,12 @@ class ClimateDrivers:
     loc:
         Location index written to column 1 of v1 climate files (memory-backed
         only).  SIPNET ignores this value; it exists for backward compatibility.
+    time_zone:
+        The clock the ``year`` / ``day_of_year`` / ``hour_of_day`` labels are
+        on: ``"UTC"`` or a fixed offset such as ``"UTC-07:00"``.  Metadata
+        only, recorded on the time axis of these drivers and of any output run
+        on them; nothing is converted.  ``None`` (the default) leaves it
+        undeclared.  See the module docstring.
     """
 
     def __init__(
@@ -119,6 +184,7 @@ class ClimateDrivers:
         source_path: Path | None = None,
         n_columns: Literal[12, 14] = 14,
         loc: int = 0,
+        time_zone: str | None = None,
     ) -> None:
         if (data is None) == (source_path is None):
             raise ValueError(
@@ -128,13 +194,20 @@ class ClimateDrivers:
         self.source_path: Path | None = source_path
         self.n_columns: Literal[12, 14] = n_columns
         self.loc: int = loc
+        self.time_zone: str | None = normalize_time_zone(time_zone)
         self._n_timesteps: int | None = None
         self._date_range: tuple[tuple[int, int], tuple[int, int]] | None = None
 
     # ── Construction ───────────────────────────────────────────────────────────
 
     @classmethod
-    def from_file(cls, path: str | Path, n_columns: Literal[12, 14] = 14) -> ClimateDrivers:
+    def from_file(
+        cls,
+        path: str | Path,
+        n_columns: Literal[12, 14] = 14,
+        *,
+        time_zone: str | None = None,
+    ) -> ClimateDrivers:
         """Read a SIPNET climate file fully into memory.
 
         Parameters
@@ -144,10 +217,13 @@ class ClimateDrivers:
         n_columns:
             Which layout to expect.  ``14`` expects 14 columns (site index
             in col 1, soil-wetness in col 14); ``12`` expects 12 columns.
+        time_zone:
+            The clock the file's labels are on; see the class docstring.  A
+            ``.clim`` file cannot say, so only the caller can.
         """
         from pysipnet.io.clim_io import read_clim_file
 
-        return read_clim_file(Path(path), n_columns=n_columns)
+        return read_clim_file(Path(path), n_columns=n_columns, time_zone=time_zone)
 
     @classmethod
     def from_dataframe(
@@ -155,6 +231,8 @@ class ClimateDrivers:
         df: pd.DataFrame,
         n_columns: Literal[12, 14] = 14,
         loc: int = 0,
+        *,
+        time_zone: str | None = None,
     ) -> ClimateDrivers:
         """Construct from a pre-built DataFrame.
 
@@ -171,17 +249,27 @@ class ClimateDrivers:
             Which layout to use when this object is written to a file.
         loc:
             Location index (v1 only).
+        time_zone:
+            The clock the labels are on; see the class docstring.
         """
         df = _rename_aliases(df)
         missing = set(CLIMATE_COLUMNS) - set(df.columns)
         if missing:
             raise ValueError(f"DataFrame is missing required columns: {sorted(missing)}")
-        obj = cls(data=df[CLIMATE_COLUMNS].copy(), n_columns=n_columns, loc=loc)
+        obj = cls(
+            data=df[CLIMATE_COLUMNS].copy(), n_columns=n_columns, loc=loc, time_zone=time_zone
+        )
         obj.validate()
         return obj
 
     @classmethod
-    def from_path(cls, path: str | Path, n_columns: Literal[12, 14] = 14) -> ClimateDrivers:
+    def from_path(
+        cls,
+        path: str | Path,
+        n_columns: Literal[12, 14] = 14,
+        *,
+        time_zone: str | None = None,
+    ) -> ClimateDrivers:
         """Create a file-backed instance without loading data into memory.
 
         The file is not read until :attr:`pandas` is accessed.  Lightweight
@@ -200,6 +288,8 @@ class ClimateDrivers:
             Path to an existing ``.clim`` file.
         n_columns:
             Which layout to expect.
+        time_zone:
+            The clock the file's labels are on; see the class docstring.
         """
         from pysipnet.io.clim_io import peek_clim_file
 
@@ -208,7 +298,7 @@ class ClimateDrivers:
             raise FileNotFoundError(f"Climate file not found: {path}")
 
         n_rows, start, end = peek_clim_file(path, n_columns=n_columns)
-        obj = cls(source_path=path, n_columns=n_columns)
+        obj = cls(source_path=path, n_columns=n_columns, time_zone=time_zone)
         obj._n_timesteps = n_rows
         obj._date_range = (start, end)
         return obj
@@ -230,16 +320,20 @@ class ClimateDrivers:
                 raise ValueError(
                     "This ClimateDrivers has neither loaded data nor a file to read from."
                 )
-            self._data = read_clim_file(self.source_path, n_columns=self.n_columns).pandas
+            self._data = read_clim_file(
+                self.source_path, n_columns=self.n_columns, time_zone=self.time_zone
+            ).pandas
         return self._data
 
     @property
     def xarray(self) -> xr.Dataset:
         """The drivers as an :class:`xarray.Dataset` on the same ``time`` axis as outputs.
 
-        ``time`` is the end of each step, as for outputs; ``time_step_start``,
-        ``time_step_length`` and ``time_bounds`` are coordinates; every variable
-        carries its units, description and time reference from
+        ``time`` is the end of each step, as for outputs, and an output run on
+        these drivers has exactly this axis; ``time_step_start``,
+        ``time_step_length`` and ``time_bounds`` are coordinates; ``time``
+        carries the declared ``time_zone``; every variable carries its units,
+        description and time reference from
         :data:`pysipnet.variables.CLIMATE_VARIABLES`.
         """
         from pysipnet.dataset import build_xarray_dataset
@@ -247,7 +341,7 @@ class ClimateDrivers:
         return build_xarray_dataset(
             self.pandas,
             attributes_for=_attributes_for,
-            time_step_length=self.pandas["time_step_length"].to_numpy(),
+            time_zone=self.time_zone,
             source="SIPNET climate drivers, via pySIPNET",
         )
 
@@ -263,11 +357,20 @@ class ClimateDrivers:
         ------
         ValueError
             On any condition that would cause SIPNET to crash or produce
-            silently wrong results.
+            silently wrong results, including labels that disagree with the
+            step lengths: a row that starts before the previous one ends, or
+            labels that drift from the running sum of the lengths.
+
+        Warns
+        -----
+        UserWarning
+            On a gap in the record, and on non-positive vapor pressure deficit
+            or wind speed.
         """
         self._check_no_nulls()
         self._check_positive_length()
         self._check_monotonic_time()
+        self._check_step_continuity()
         self._check_vpd_wind()
 
     def _check_no_nulls(self) -> None:
@@ -292,6 +395,33 @@ class ClimateDrivers:
             raise ValueError(
                 "Climate timesteps are not in chronological order. "
                 "Rows must be sorted by (year, day_of_year, hour_of_day)."
+            )
+
+    def _check_step_continuity(self) -> None:
+        import warnings
+
+        from pysipnet.dataset import (
+            check_step_continuity,
+            days_to_timedelta,
+            describe_duration,
+            timestep_start,
+        )
+
+        d = self.pandas
+        start = timestep_start(d)
+        length = days_to_timedelta(d["time_step_length"].to_numpy())
+        gaps = check_step_continuity(start, length)
+        if len(gaps):
+            row = int(gaps[0])
+            end = start[row] + length[row]
+            missing = describe_duration(start[row + 1] - end)
+            warnings.warn(
+                f"{len(gaps)} gap(s) in the climate record. The first follows row {row}, which "
+                f"ends at {end}, and row {row + 1} starts {missing} later, at {start[row + 1]}. "
+                "SIPNET does not see gaps: it runs the next row from the state the previous one "
+                "left, so no time passes for the model across one. The time axis shows it as a "
+                "gap between time_bounds.",
+                stacklevel=3,
             )
 
     def _check_vpd_wind(self) -> None:
@@ -362,10 +492,11 @@ class ClimateDrivers:
 
     def __repr__(self) -> str:
         (y0, d0), (y1, d1) = self.date_range
+        zone = "" if self.time_zone is None else f", time_zone={self.time_zone!r}"
         return (
             f"ClimateDrivers(n_columns={self.n_columns!r}, "
             f"timesteps={self.n_timesteps}, "
-            f"range={y0}-{d0:03d} to {y1}-{d1:03d})"
+            f"range={y0}-{d0:03d} to {y1}-{d1:03d}{zone})"
         )
 
 

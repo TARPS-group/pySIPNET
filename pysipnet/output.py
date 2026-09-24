@@ -47,6 +47,15 @@ row covers, and every data variable has ``kind`` and ``time_reference``
 attributes in words.  See :mod:`pysipnet.dataset` for the reasoning, and
 :func:`pysipnet.resample.resample` for combining steps into coarser ones.
 
+An output that knows the :class:`~pysipnet.climate.ClimateDrivers` it was run
+on — every output a :class:`~pysipnet.runner.SIPNETRunner` returns — takes its
+time axis from them, row for row: their start times, their step lengths and
+their declared clock.  SIPNET's own labels are rounded to 0.01 h, so the
+drivers' are the exact version of the same thing.  Built from a file or frame
+alone, the output falls back to the labels SIPNET printed; the Dataset's
+``time_axis_source`` attribute says which.  SIPNET has no time zone, so
+neither is on any clock but the drivers'.
+
 Flag-dependent variables
 ------------------------
 SIPNET writes some columns as constant zero unless the matching model flag is
@@ -78,6 +87,7 @@ if TYPE_CHECKING:
     import pandas as pd
     import xarray as xr
 
+    from pysipnet.climate import ClimateDrivers
     from pysipnet.parameters.model import ModelFlags
 
 
@@ -100,12 +110,21 @@ class SIPNETOutput:
     source_path:
         Path to a persistent ``.out`` file. Mutually exclusive with *data*.
         The file is checked for existence at construction time.
+    climate:
+        The :class:`~pysipnet.climate.ClimateDrivers` the run was driven by.
+        The Dataset's time axis is then theirs: their start times, their step
+        lengths and their ``time_zone``.  A file-backed climate is not read
+        until a Dataset is built.  The output must have exactly one row per
+        climate row, with labels SIPNET could have printed from them, or
+        building the Dataset raises.
     time_step_length:
-        Length of each timestep in days, one value per row, taken from the
-        climate drivers, or a zero-argument callable returning that array so a
-        file-backed climate is not read until the Dataset needs it.  Optional;
-        when omitted the lengths are inferred from consecutive timestamps and
-        the Dataset's ``time_step_length_source`` attribute says so.
+        Length of each timestep in days, one value per row, or a zero-argument
+        callable returning that array, for an output whose drivers are not at
+        hand.  The starts then come from the labels SIPNET printed.  Mutually
+        exclusive with *climate*, which carries its own lengths.  When both
+        are omitted the lengths are inferred from consecutive timestamps; the
+        Dataset's ``time_axis_source`` and ``time_step_length_source``
+        attributes say what happened.
     flags:
         The :class:`~pysipnet.parameters.model.ModelFlags` the run used, so that
         selecting a variable SIPNET wrote as constant zero can be refused.
@@ -118,6 +137,7 @@ class SIPNETOutput:
         *,
         data: pd.DataFrame | None = None,
         source_path: Path | None = None,
+        climate: ClimateDrivers | None = None,
         time_step_length: TimeStepLengths | None = None,
         flags: ModelFlags | None = None,
         run_id: str | None = None,
@@ -126,6 +146,12 @@ class SIPNETOutput:
             raise ValueError(
                 "Exactly one of 'data' or 'source_path' must be provided, not both or neither."
             )
+        if climate is not None and time_step_length is not None:
+            raise ValueError(
+                "Pass climate or time_step_length, not both: the climate drivers carry their "
+                "own step lengths."
+            )
+        self.climate = climate
         self.source_path: Path | None = source_path
         self.flags = flags
         self.run_id = run_id
@@ -145,6 +171,7 @@ class SIPNETOutput:
         cls,
         path: str | Path,
         *,
+        climate: ClimateDrivers | None = None,
         time_step_length: TimeStepLengths | None = None,
         flags: ModelFlags | None = None,
         run_id: str | None = None,
@@ -163,6 +190,8 @@ class SIPNETOutput:
             directory that will be deleted; use
             :attr:`~pysipnet.runner.SIPNETRunner.output_dir` to have the file
             copied to a stable location first.
+        climate:
+            The climate drivers the run used; see the class docstring.
         time_step_length:
             Timestep lengths in days, one per row; see the class docstring.
         flags:
@@ -177,13 +206,20 @@ class SIPNETOutput:
                 "Ensure the file is in a stable location outside the run's working "
                 "directory, which is deleted after each run."
             )
-        return cls(source_path=path, time_step_length=time_step_length, flags=flags, run_id=run_id)
+        return cls(
+            source_path=path,
+            climate=climate,
+            time_step_length=time_step_length,
+            flags=flags,
+            run_id=run_id,
+        )
 
     @classmethod
     def from_dataframe(
         cls,
         df: pd.DataFrame,
         *,
+        climate: ClimateDrivers | None = None,
         time_step_length: TimeStepLengths | None = None,
         flags: ModelFlags | None = None,
         run_id: str | None = None,
@@ -194,6 +230,8 @@ class SIPNETOutput:
         ----------
         df:
             DataFrame returned by :func:`~pysipnet.io.output_reader.read_output_file`.
+        climate:
+            The climate drivers the run used; see the class docstring.
         time_step_length:
             Timestep lengths in days, one per row; see the class docstring.
         flags:
@@ -201,7 +239,9 @@ class SIPNETOutput:
         run_id:
             Identifier of the run, recorded in the Dataset's attributes.
         """
-        return cls(data=df, time_step_length=time_step_length, flags=flags, run_id=run_id)
+        return cls(
+            data=df, climate=climate, time_step_length=time_step_length, flags=flags, run_id=run_id
+        )
 
     # ── Data access ────────────────────────────────────────────────────────────
 
@@ -283,7 +323,8 @@ class SIPNETOutput:
             **end** of each timestep as ``datetime64``; ``time_step_start``,
             ``time_step_length`` and a CF ``time_bounds`` variable describing
             the interval each row covers; ``year``, ``day_of_year`` and
-            ``hour_of_day`` as SIPNET labeled the row, i.e. the start; and one
+            ``hour_of_day`` for the start of the step, from the climate
+            drivers when this output has them; and one
             data variable per selected column, carrying the attributes from
             :meth:`~pysipnet.variables.VariableSpec.xarray_attributes`. Columns
             the registry does not know become variables with no attributes.
@@ -327,10 +368,14 @@ class SIPNETOutput:
     def time_step_length(self) -> np.ndarray | None:
         """Timestep lengths in days, one per row, or ``None`` when not supplied.
 
-        Resolved on first access when a callable was given, which is what lets
-        a file-backed climate stay unread until the Dataset is built. ``None``
-        means the Dataset will infer the lengths from the timestamps instead.
+        The climate drivers' lengths when this output has them, which reads a
+        file-backed climate. Otherwise whatever was passed as
+        ``time_step_length``, resolved on first access when it was a callable.
+        ``None`` means the Dataset will infer the lengths from the timestamps
+        instead.
         """
+        if self.climate is not None:
+            return self.climate.pandas["time_step_length"].to_numpy(dtype=float)
         if callable(self._time_step_length):
             self._time_step_length = np.asarray(self._time_step_length(), dtype=float)
         elif self._time_step_length is not None:
@@ -473,9 +518,17 @@ class SIPNETOutput:
         reused by the rest.
         """
         if self._axis is None:
-            self._axis = build_time_axis(
-                df, attributes_for=_attributes_for, time_step_length=self.time_step_length
-            )
+            if self.climate is not None:
+                self._axis = build_time_axis(
+                    df,
+                    attributes_for=_attributes_for,
+                    drivers=self.climate.pandas,
+                    time_zone=self.climate.time_zone,
+                )
+            else:
+                self._axis = build_time_axis(
+                    df, attributes_for=_attributes_for, time_step_length=self.time_step_length
+                )
         return self._axis
 
     def _build_dataset(self, df: pd.DataFrame) -> xr.Dataset:
