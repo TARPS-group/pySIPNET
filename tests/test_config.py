@@ -385,3 +385,39 @@ class TestFromResult:
         assert config.flags == ModelFlags(litter_pool=True)
         assert config.events is not None
         assert len(config.events) == 1
+
+
+# ---------------------------------------------------------------------------
+# The climate file's layout survives a save and load
+# ---------------------------------------------------------------------------
+
+
+class TestClimateLayout:
+    """The layout is read back from the file, so neither layout is lost in a config.
+
+    A config used to reload every climate as 14 columns, so one saved with
+    12-column drivers loaded without complaint and failed on first read.
+    """
+
+    @pytest.mark.parametrize("n_columns", [12, 14])
+    def test_copy_mode(self, tmp_path, minimal_params, in_memory_climate, n_columns):
+        climate = ClimateDrivers.from_dataframe(in_memory_climate.pandas, n_columns=n_columns)
+        RunConfig(flags=ModelFlags.standard(), params=minimal_params, climate=climate).save(
+            tmp_path / "run"
+        )
+        loaded = RunConfig.load(tmp_path / "run").climate
+        assert loaded.n_columns == n_columns
+        pd.testing.assert_frame_equal(loaded.pandas, climate.pandas, check_exact=False)
+
+    @pytest.mark.parametrize("n_columns", [12, 14])
+    def test_reference_mode(self, tmp_path, minimal_params, in_memory_climate, n_columns):
+        source = tmp_path / "source.clim"
+        ClimateDrivers.from_dataframe(in_memory_climate.pandas, n_columns=n_columns).to_file(source)
+        RunConfig(
+            flags=ModelFlags.standard(),
+            params=minimal_params,
+            climate=ClimateDrivers.from_path(source),
+        ).save(tmp_path / "run", reference_only=True)
+        loaded = RunConfig.load(tmp_path / "run").climate
+        assert loaded.n_columns == n_columns
+        assert len(loaded.pandas) == _CLIM_ROWS

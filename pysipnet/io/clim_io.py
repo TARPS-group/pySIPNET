@@ -6,23 +6,35 @@ single source of truth for column counts and the positions of the year and day
 columns; all readers, writers, and peeks in this module derive their structure
 from those constants rather than encoding it locally.
 
-14-column layout
-----------------
-Two column-count variants are accepted on read:
+Layouts
+-------
+The pinned SIPNET reads two layouts, carrying the same 12 values:
 
-* **14 columns (what the writer produces)**: ``loc | year | day | time | length | tair |
-  tsoil | par | precip | vpd | vpdSoil | vPress | wspd | soilWetness`` (SIPNET's
-  names; the Python column names are the registry names in
-  :data:`pysipnet.variables.CLIMATE_VARIABLES`, e.g. ``air_temperature`` for ``tair``).
-* **13 columns**: the same layout without the leading ``loc`` column.
+* **12 columns**, the standard since SIPNET v2.0.0: ``year | day | time |
+  length | tair | tsoil | par | precip | vpd | vpdSoil | vPress | wspd``
+  (SIPNET's names; the Python column names are the registry names in
+  :data:`pysipnet.variables.CLIMATE_VARIABLES`, e.g. ``air_temperature`` for
+  ``tair``).
+* **14 columns**, the legacy layout: the same 12 wrapped in a leading ``loc``
+  (site identifier) and a trailing ``soilWetness``.  SIPNET v2.0.0 removed
+  multi-site runs and the soil-wetness mode, so it reads both and ignores
+  them, with a log line — except that it still errors if ``loc`` changes
+  between rows.
 
-The writer always produces 14 columns.  The ``loc`` column (col 1) and the
-``soil_wetness`` column (col 14) carry no information SIPNET uses. Note SIPNET does
-read ``loc``: it errors if the value changes between rows, so the writer emits
-a constant. See :data:`_SOIL_WETNESS_FILL` for the soil-wetness filler.
+**The file says which layout it is.**  SIPNET counts the fields on the first
+line (``readClimData`` in ``src/sipnet/sipnet.c``) and accepts exactly 12 or
+14; anything else, 13 included, is a hard error.  :func:`detect_clim_layout`
+does the same, and every reader here uses it, so a caller never states the
+layout of a file it is reading.  The layout pySIPNET *writes* is a separate
+choice, :attr:`~pysipnet.climate.ClimateDrivers.n_columns`: 12 for new drivers,
+and the file's own layout for drivers read from one, because the runner
+stages a file-backed climate by copying it unchanged.
+
+When writing 14 columns, ``loc`` is the drivers' :attr:`~pysipnet.climate.ClimateDrivers.loc`,
+constant, and ``soilWetness`` a placeholder; see :data:`_SOIL_WETNESS_FILL`.
 
 Column 8 (``par``) units
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
 ``photosynthetically_active_radiation`` is the **total** PAR over the timestep
 in Einstein m⁻². SIPNET divides by ``time_step_length`` to obtain the per-day
 rate. Ensure values are consistent with the timestep length.
@@ -32,12 +44,6 @@ Column 10 (``vpd``) and column 13 (``wspd``)
 SIPNET requires ``vapor_pressure_deficit`` > 0 and ``wind_speed`` > 0. Values ≤ 0 are
 silently clamped by SIPNET internally.  :class:`~pysipnet.climate.ClimateDrivers` warns but does
 not error on non-positive values, matching SIPNET's own tolerance.
-
-12-column layout
-----------------
-The ``loc`` and ``soil_wetness`` columns are absent. The remaining 12 values
-and their order are unchanged. This is what current SIPNET writes and the
-leaner choice for new files.
 """
 
 from __future__ import annotations
@@ -55,27 +61,23 @@ from pysipnet.climate import CLIMATE_COLUMNS, ClimateDrivers
 # the first line, so the column count is the thing that identifies a layout and
 # these constants are named for it.
 #
-# All three carry the same 12 values. They differ only in what is wrapped
-# around them:
-#
 #   12 columns  year day time length tair tsoil par precip vpd vpdSoil vPress wspd
-#   13 columns  the 12 above, plus a trailing soil wetness value SIPNET ignores
-#   14 columns  the 13 above, plus a leading site identifier SIPNET ignores
+#   14 columns  loc, the 12 above, soilWetness
+
+ClimLayout = Literal[12, 14]
 
 _N_COLS_12 = 12
-_N_COLS_13 = 13
 _N_COLS_14 = 14
 
 # Zero-indexed positions of year and day, which differ between layouts because
 # of the leading site-identifier column.
 _YEAR_COL_IN_14 = 1
 _DAY_COL_IN_14 = 2
-_YEAR_COL_IN_13 = 0
-_DAY_COL_IN_13 = 1
 _YEAR_COL_IN_12 = 0
 _DAY_COL_IN_12 = 1
 
 # Slice of a 14-column row holding the 12 values we actually use.
+_LOC_COL_IN_14 = 0
 _DATA_START_IN_14 = 1
 _DATA_END_IN_14 = 13
 
@@ -108,97 +110,114 @@ def write_clim_file(climate: ClimateDrivers, path: Path) -> None:
         )
 
 
-def peek_clim_file(
-    path: Path, n_columns: Literal[12, 14] = 14
-) -> tuple[int, tuple[int, int], tuple[int, int]]:
-    """Read only the first and last rows of a climate file plus the row count.
+def detect_clim_layout(path: Path) -> ClimLayout:
+    """Which layout a climate file is in, from the fields on its first line.
 
-    This is a lightweight alternative to a full read, used by
-    :meth:`~pysipnet.climate.ClimateDrivers.from_path` to populate metadata
-    without loading the whole file.
+    The same test SIPNET makes (``countFields`` on the first line in
+    ``readClimData``), so a file this accepts is one SIPNET reads, and a file
+    it refuses is one SIPNET would refuse.
+    """
+    with path.open() as fh:
+        first_line = fh.readline()
+    n_fields = len(first_line.split())
+    if n_fields in (_N_COLS_12, _N_COLS_14):
+        return n_fields  # type: ignore[return-value]
+    if n_fields == 0:
+        raise ValueError(
+            f"{path} is empty or starts with a blank line. SIPNET reads the layout from the "
+            "first line, so it refuses both."
+        )
+    if n_fields == 13:
+        raise ValueError(
+            f"{path} has 13 columns. The pinned SIPNET reads only 12 or 14 and refuses 13, "
+            "though an earlier version accepted it. A 13-column file is normally the legacy "
+            "14-column layout without its leading site column; drop the trailing soil-wetness "
+            "column to make it the standard 12-column layout."
+        )
+    raise ValueError(
+        f"{path} has {n_fields} columns on its first line. SIPNET reads a climate file only "
+        f"in the {_N_COLS_12}-column layout or the legacy {_N_COLS_14}-column one."
+    )
 
-    SIPNET climate files have no header row, so every line in the file is a
-    data row.  The row count returned is therefore exact.
 
-    The year and day column positions are determined by the module-level format
-    constants (:data:`_YEAR_COL_IN_14`, :data:`_DAY_COL_IN_14`, etc.); this function
-    does not encode that structure locally.
+def peek_clim_file(path: Path) -> tuple[ClimLayout, int, tuple[int, int], tuple[int, int]]:
+    """The layout, the row count and the first and last dates, without a full read.
 
-    Parameters
-    ----------
-    path:
-        Path to the ``.clim`` file.
-    n_columns:
-        Which file layout to expect: 12 or 14 columns.
+    Used by :meth:`~pysipnet.climate.ClimateDrivers.from_path` to populate
+    metadata without loading the whole file.  SIPNET climate files have no
+    header row, so every non-blank line is a data row and the count is exact.
 
     Returns
     -------
     tuple
-        ``(n_rows, (start_year, start_doy), (end_year, end_doy))``.
+        ``(n_columns, n_rows, (start_year, start_doy), (end_year, end_doy))``.
     """
+    n_columns = detect_clim_layout(path)
     with path.open() as fh:
         n_rows = sum(1 for line in fh if line.strip())
-
-    if n_rows == 0:
-        raise ValueError(f"Climate file is empty: {path}")
 
     first = pd.read_csv(path, sep=r"\s+", header=None, nrows=1, dtype=float)
     last = pd.read_csv(path, sep=r"\s+", header=None, skiprows=n_rows - 1, nrows=1, dtype=float)
 
-    n_cols = first.shape[1]
-
-    if n_columns == 14:
-        if n_cols == _N_COLS_14:
-            year_col, day_col = _YEAR_COL_IN_14, _DAY_COL_IN_14
-        elif n_cols == _N_COLS_13:
-            year_col, day_col = _YEAR_COL_IN_13, _DAY_COL_IN_13
-        else:
-            raise ValueError(
-                f"Expected {_N_COLS_13} or {_N_COLS_14} columns in a 14-column-layout climate "
-                f"file at {path}, got {n_cols}."
-            )
-    elif n_columns == 12:
-        if n_cols != _N_COLS_12:
-            raise ValueError(
-                f"Expected {_N_COLS_12} columns in a 12-column-layout climate file "
-                f"at {path}, got {n_cols}."
-            )
-        year_col, day_col = _YEAR_COL_IN_12, _DAY_COL_IN_12
+    if n_columns == _N_COLS_14:
+        year_col, day_col = _YEAR_COL_IN_14, _DAY_COL_IN_14
     else:
-        raise ValueError(
-            f"Unsupported climate file layout: {n_columns} columns. "
-            "SIPNET reads 12- or 14-column files."
-        )
+        year_col, day_col = _YEAR_COL_IN_12, _DAY_COL_IN_12
 
     start = (int(first.iloc[0, year_col]), int(first.iloc[0, day_col]))
     end = (int(last.iloc[0, year_col]), int(last.iloc[0, day_col]))
-    return n_rows, start, end
+    return n_columns, n_rows, start, end
 
 
-def read_clim_file(
-    path: Path, n_columns: Literal[12, 14] = 14, *, time_zone: str | None = None
-) -> ClimateDrivers:
-    """Read a SIPNET climate file.
+def read_clim_file(path: Path, *, time_zone: str | None = None) -> ClimateDrivers:
+    """Read a SIPNET climate file, in whichever layout it is.
+
+    The layout is detected from the file (:func:`detect_clim_layout`) and
+    becomes the drivers' :attr:`~pysipnet.climate.ClimateDrivers.n_columns`, so
+    writing them out again reproduces it.  A 14-column file's ``loc`` becomes
+    their :attr:`~pysipnet.climate.ClimateDrivers.loc`.
 
     Parameters
     ----------
     path:
         Path to the ``.clim`` file.
-    n_columns:
-        Which file layout to expect. 14 also accepts a 13-column file, which
-        is the same layout without the leading site-identifier column.
     time_zone:
         The clock the file's labels are on, which the file itself cannot say;
         see :class:`~pysipnet.climate.ClimateDrivers`.
+
+    Raises
+    ------
+    ValueError
+        If the file is in neither layout, if a 14-column file names more than
+        one location (SIPNET refuses both), or if the data fails
+        :meth:`~pysipnet.climate.ClimateDrivers.validate`.
     """
-    if n_columns == 14:
-        return _read_14_column(path, time_zone)
-    if n_columns == 12:
-        return _read_12_column(path, time_zone)
-    raise ValueError(
-        f"Unsupported climate file layout: {n_columns} columns. "
-        "SIPNET reads 12- or 14-column files."
-    )
+    n_columns = detect_clim_layout(path)
+    raw = pd.read_csv(path, sep=r"\s+", header=None, dtype=float)
+    if raw.shape[1] != n_columns:
+        raise ValueError(
+            f"{path} starts with {n_columns} columns but has {raw.shape[1]} in a later row; "
+            "every row must have the same layout."
+        )
+
+    loc = 0
+    if n_columns == _N_COLS_14:
+        locations = raw.iloc[:, _LOC_COL_IN_14].unique()
+        if len(locations) > 1:
+            raise ValueError(
+                f"{path} names {len(locations)} locations in its site column "
+                f"({sorted(locations)[:5]}). SIPNET runs one site per file and refuses a "
+                "legacy climate file whose site identifier changes between rows."
+            )
+        loc = int(locations[0])
+        data = raw.iloc[:, _DATA_START_IN_14:_DATA_END_IN_14].copy()
+    else:
+        data = raw.copy()
+
+    data.columns = CLIMATE_COLUMNS
+    for col in ("year", "day_of_year"):
+        data[col] = data[col].astype(int)
+    return ClimateDrivers.from_dataframe(data, n_columns=n_columns, loc=loc, time_zone=time_zone)
 
 
 def _write_14_column(climate: ClimateDrivers, path: Path) -> None:
@@ -245,36 +264,3 @@ def _write_12_column(climate: ClimateDrivers, path: Path) -> None:
         ]
         rows.append(" ".join(parts))
     path.write_text("\n".join(rows) + "\n")
-
-
-def _read_14_column(path: Path, time_zone: str | None) -> ClimateDrivers:
-    raw = pd.read_csv(path, sep=r"\s+", header=None, dtype=float)
-    n_cols = raw.shape[1]
-    if n_cols == _N_COLS_14:
-        data = raw.iloc[:, _DATA_START_IN_14:_DATA_END_IN_14].copy()
-    elif n_cols == _N_COLS_13:
-        data = raw.iloc[:, :12].copy()
-    else:
-        raise ValueError(
-            f"Expected {_N_COLS_13} or {_N_COLS_14} columns in a 14-column-layout climate file, "
-            f"got {n_cols}. Expected the 14- or 13-column layout."
-        )
-    data.columns = CLIMATE_COLUMNS
-    for col in ("year", "day_of_year"):
-        data[col] = data[col].astype(int)
-    return ClimateDrivers.from_dataframe(data, n_columns=14, time_zone=time_zone)
-
-
-def _read_12_column(path: Path, time_zone: str | None) -> ClimateDrivers:
-    raw = pd.read_csv(path, sep=r"\s+", header=None, dtype=float)
-    n_cols = raw.shape[1]
-    if n_cols != _N_COLS_12:
-        raise ValueError(
-            f"Expected {_N_COLS_12} columns in a 12-column-layout climate file, got {n_cols}. "
-            "Expected the 12-column layout."
-        )
-    data = raw.copy()
-    data.columns = CLIMATE_COLUMNS
-    for col in ("year", "day_of_year"):
-        data[col] = data[col].astype(int)
-    return ClimateDrivers.from_dataframe(data, n_columns=12, time_zone=time_zone)

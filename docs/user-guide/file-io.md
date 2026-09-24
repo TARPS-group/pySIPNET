@@ -84,12 +84,19 @@ page (`air_temperature`, `vapor_pressure_deficit`, `time_step_length`, ...).
 SIPNET's own column names (`tair`, `vpdSoil`, `length`) and renames them; the
 stored columns are always the full names.
 
+A `.clim` file's layout — the standard 12 columns, or the legacy 14 that wrap
+the same values in a site identifier and a soil-wetness column — is read from
+the file, the way SIPNET reads it, so no reader asks for it; a file SIPNET
+would refuse (13 columns, say) is refused on reading. `climate.n_columns` says
+which layout the drivers are in. Drivers you build with `from_dataframe` are
+written in the 12-column layout unless you pass `n_columns=14`.
+
 `data/my_site.clim` here and below stands in for your own climate file; the
 [Quickstart](quickstart.md) runs on the Niwot Ridge year this repository ships.
 
 ```python
 # Full data in memory — good for interactive use and data manipulation
-climate = ClimateDrivers.from_file("data/my_site.clim", n_columns=14)
+climate = ClimateDrivers.from_file("data/my_site.clim")
 climate.pandas      # DataFrame always available
 climate.xarray      # the same on an xarray `time` axis shared with outputs
 ```
@@ -107,7 +114,7 @@ original file directly, skipping the read-then-write cycle entirely.
 
 ```python
 # No data loaded — good for ensemble workflows with pre-existing files
-climate = ClimateDrivers.from_path("data/my_site.clim", n_columns=14)
+climate = ClimateDrivers.from_path("data/my_site.clim")
 
 print(climate.n_timesteps)  # available without loading data
 print(climate.date_range)   # also available without loading data

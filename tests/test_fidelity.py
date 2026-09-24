@@ -104,7 +104,7 @@ def _load_reference_climate():
     # property of the upstream data, not something under test here.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return read_clim_file(REFERENCE_CLIM, n_columns=14)
+        return read_clim_file(REFERENCE_CLIM)
 
 
 class TestWrapperFidelity:
