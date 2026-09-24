@@ -500,6 +500,13 @@ Units are UDUNITS strings (`"g m-2"`, `"cm d-1"`, `"1"`) validated at import by
 `pysipnet/units.py`; the substance goes in `constituent` (`"C"`, `"N"`,
 `"H2O"`), never in the string, because Pint reads `g C` as gram·coulomb without
 error.
+`conversion_factor()` / `convert()` in the same module take the constituent
+as an argument beside each unit string and add the chemistry Pint lacks:
+`MOLAR_MASS` for mass↔amount, `DENSITY` (H2O only) for depth↔mass, and
+`ATOMS_PER_MOLECULE` (C–CO2, C–CH4, N–N2O) for a change of constituent on an
+amount basis. Anything else is refused. `photons` is in
+`AMOUNT_ONLY_CONSTITUENTS`, and `tests/test_units.py` fails if a registry
+declares a constituent the tables do not know.
 
 `SIPNETOutput` exposes `.pandas` (DataFrame), `.xarray` (xarray Dataset, one
 `time` dimension = step **end**), `["nee"]` (DataArray by name or alias),
