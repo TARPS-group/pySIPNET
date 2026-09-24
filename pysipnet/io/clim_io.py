@@ -175,7 +175,9 @@ def peek_clim_file(
     return n_rows, start, end
 
 
-def read_clim_file(path: Path, n_columns: Literal[12, 14] = 14) -> ClimateDrivers:
+def read_clim_file(
+    path: Path, n_columns: Literal[12, 14] = 14, *, time_zone: str | None = None
+) -> ClimateDrivers:
     """Read a SIPNET climate file.
 
     Parameters
@@ -185,11 +187,14 @@ def read_clim_file(path: Path, n_columns: Literal[12, 14] = 14) -> ClimateDriver
     n_columns:
         Which file layout to expect. 14 also accepts a 13-column file, which
         is the same layout without the leading site-identifier column.
+    time_zone:
+        The clock the file's labels are on, which the file itself cannot say;
+        see :class:`~pysipnet.climate.ClimateDrivers`.
     """
     if n_columns == 14:
-        return _read_14_column(path)
+        return _read_14_column(path, time_zone)
     if n_columns == 12:
-        return _read_12_column(path)
+        return _read_12_column(path, time_zone)
     raise ValueError(
         f"Unsupported climate file layout: {n_columns} columns. "
         "SIPNET reads 12- or 14-column files."
@@ -242,7 +247,7 @@ def _write_12_column(climate: ClimateDrivers, path: Path) -> None:
     path.write_text("\n".join(rows) + "\n")
 
 
-def _read_14_column(path: Path) -> ClimateDrivers:
+def _read_14_column(path: Path, time_zone: str | None) -> ClimateDrivers:
     raw = pd.read_csv(path, sep=r"\s+", header=None, dtype=float)
     n_cols = raw.shape[1]
     if n_cols == _N_COLS_14:
@@ -257,10 +262,10 @@ def _read_14_column(path: Path) -> ClimateDrivers:
     data.columns = CLIMATE_COLUMNS
     for col in ("year", "day_of_year"):
         data[col] = data[col].astype(int)
-    return ClimateDrivers.from_dataframe(data, n_columns=14)
+    return ClimateDrivers.from_dataframe(data, n_columns=14, time_zone=time_zone)
 
 
-def _read_12_column(path: Path) -> ClimateDrivers:
+def _read_12_column(path: Path, time_zone: str | None) -> ClimateDrivers:
     raw = pd.read_csv(path, sep=r"\s+", header=None, dtype=float)
     n_cols = raw.shape[1]
     if n_cols != _N_COLS_12:
@@ -272,4 +277,4 @@ def _read_12_column(path: Path) -> ClimateDrivers:
     data.columns = CLIMATE_COLUMNS
     for col in ("year", "day_of_year"):
         data[col] = data[col].astype(int)
-    return ClimateDrivers.from_dataframe(data, n_columns=12)
+    return ClimateDrivers.from_dataframe(data, n_columns=12, time_zone=time_zone)

@@ -14,17 +14,16 @@ import xarray as xr
 
 from pysipnet import resample
 from pysipnet.climate import ClimateDrivers
-from pysipnet.io.reference import niwot_reference_climate, niwot_reference_files
-from pysipnet.output import build_output_dataset
+from pysipnet.io.reference import niwot_reference_output
 from pysipnet.variables import RESAMPLED_KIND, RESAMPLING_METHODS_FOR_KIND, VariableKind
 
 
 @pytest.fixture(scope="module")
 def niwot() -> tuple[pd.DataFrame, np.ndarray, xr.Dataset]:
-    frame = pd.read_csv(niwot_reference_files().output)
-    climate = niwot_reference_climate()
-    length = climate.pandas["time_step_length"].to_numpy()[: len(frame)]
-    return frame, length, build_output_dataset(frame, time_step_length=length)
+    output = niwot_reference_output()
+    length = output.time_step_length
+    assert length is not None
+    return output.pandas, length, output.xarray
 
 
 def _daily_key(ds: xr.Dataset) -> np.ndarray:

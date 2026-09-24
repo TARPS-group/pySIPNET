@@ -43,6 +43,7 @@ import numpy as np
 from pysipnet.dataset import (
     BOUNDS_DIMENSION,
     TIME_DIMENSION,
+    TIME_ZONE_UNDECLARED,
     assemble_time_coords,
     unfilled_coordinates,
 )
@@ -218,6 +219,7 @@ def resample(
         length=np.rint(length_days.values[keep] * 86_400e9).astype("int64").view("timedelta64[ns]"),
         attributes_for=attributes_for,
         length_source=STEP_LENGTH_RESAMPLED,
+        time_zone=data[TIME_DIMENSION].attrs.get("time_zone", TIME_ZONE_UNDECLARED),
     )
 
     data_vars = {

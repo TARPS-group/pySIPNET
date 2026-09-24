@@ -656,17 +656,16 @@ class SIPNETRunner:
     ) -> SIPNETOutput:
         """Copy or parse the output file and return an appropriate SIPNETOutput.
 
-        The timestep lengths come from the climate drivers; SIPNET does not
-        write them, and the Dataset would otherwise have to reconstruct the
-        interval each row covers from the timestamps.  They are handed over as a
-        callable so a file-backed climate is not read just to build a result
-        nobody has asked for the Dataset of.
+        The output carries the climate drivers, whose rows it has one of each,
+        and takes its time axis from them: SIPNET writes no step lengths and
+        prints its labels to 0.01 h, so its own output could only approximate
+        the axis the drivers state exactly.  A file-backed climate is not read
+        until someone asks for a Dataset.
 
         The flags travel with the output so that selecting a variable this run
         wrote as constant zero is refused rather than silently answered, and the
         run id so that a Dataset saved to disk says which run produced it.
         """
-        import numpy as np
         import pandas as pd
 
         from pysipnet.io.output_reader import read_output_file
@@ -675,22 +674,19 @@ class SIPNETRunner:
         if not (provenance.returncode == 0 and out_src.exists()):
             return SIPNETOutput.from_dataframe(pd.DataFrame())
 
-        def step_length() -> np.ndarray:
-            return climate.pandas["time_step_length"].to_numpy()
-
         if effective_output_dir is not None:
             dest = self._output_path(effective_output_dir, run_id)
             self._publish_output(out_src, dest, run_id, overwrite)
             return SIPNETOutput.from_path(
                 dest,
-                time_step_length=step_length,
+                climate=climate,
                 flags=provenance.flags,
                 run_id=run_id,
             )
 
         return SIPNETOutput.from_dataframe(
             read_output_file(out_src),
-            time_step_length=step_length,
+            climate=climate,
             flags=provenance.flags,
             run_id=run_id,
         )

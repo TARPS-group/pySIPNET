@@ -343,6 +343,53 @@ SIPNET performs no validation beyond the column count and the loc check — no
 NaN, monotonicity or range checks — so our strict pre-write validation is doing
 real work.
 
+**SIPNET has no time zone, and never checks labels against lengths.**
+`readClimData` reads every row into a linked list and never compares
+`time + length` with the next row's `time`; all physics is integrated on
+`length`. There is no solar geometry. `climate->time` is read only by
+`outputState`, by the `leafOnDay`/`leafOffDay` comparisons in
+`pastLeafGrowth`/`pastLeafFall`, by the restart boundary checks in
+`restart.c`, and in log messages. So a row's labels are the start of its step
+**on whatever clock the climate drivers use**, and it is the `ClimateDrivers`
+that declare which: `time_zone="UTC"` or a fixed offset `"UTC±HH:MM"`,
+undeclared by default, metadata only (nothing is converted). Named zones are
+refused because daylight saving time would make the labels jump. The
+declaration is written to the `time` attributes of `ClimateDrivers.xarray` and
+of every output Dataset run on those drivers, and into `RunConfig`'s
+`config.json`, since a `.clim` file cannot hold it.
+
+`ClimateDrivers.validate()` checks labels against lengths
+(`dataset.check_step_continuity`), because the files that prompted it — ERA5
+drivers whose `time` column was `linspace(0, 24n - 1, 8n) % 24`, drifting
+2.46 s per 3-hour step and 2 h by 31 December — ran through SIPNET silently:
+
+- **overlap** (next row starts more than 60 s before this one ends): error;
+- **drift** (a label more than 5 min from the previous gap's row plus the
+  running sum of the declared lengths): error. A per-step tolerance loose
+  enough for rounded lengths cannot see 2.46 s per step; the running sum does,
+  after 122 steps. It also refuses hourly lengths written as `0.042`, which
+  integrate 24.19 h of forcing per day;
+- **gap** (next row starts more than 60 s after this one ends): a warning. It
+  restarts the drift reconstruction and shows as a gap between `time_bounds`.
+
+Niwot's rounded lengths (`0.292` for exactly 7 h) peak at 43.2 s per step and
+100.8 s cumulative over 800 rows; `tests/test_time_axis.py` pins both.
+
+**Validation runs exactly once per set of data, when it is loaded.** Every
+path that puts data into a `ClimateDrivers` goes through `__init__(data=...)`,
+which normalizes the columns (aliases renamed, extras dropped, copied) and runs
+the checks: `from_dataframe`, `from_file`, the direct constructor, and a
+`from_path` instance's first read of `.pandas`. Nothing downstream repeats
+them — not the runner, not `climate.xarray`, not an output's axis — so the
+frame behind `.pandas` must not be modified in place. `validate()` on
+unloaded data just loads it; on loaded data it re-runs the checks, on request.
+`head(n)` returns a prefix without re-checking, since every check holds for a
+prefix of a checked record (the drift reconstruction starts from the same
+row). **`from_path` defers validation along with the read**: the runner
+copies or symlinks the file without reading it, so a file that fails the
+checks still runs, and the failure surfaces on the first read, typically
+`result.outputs["nee"]`. Call `climate.validate()` to check it up front.
+
 ### `events.in` (optional)
 
 Read from the working directory only when `EVENTS` is on. The name comes
@@ -394,7 +441,11 @@ the registry at build time (`docs/gen_variable_tables.py`).
 Facts read from `outputState()` / `updateTrackers()` that the registry encodes
 and that SIPNET's own docs get wrong or omit:
 
-- `year`/`day`/`time` are the **start** of the step; pools (`envi.*`) are
+- `year`/`day`/`time` are the **start** of the step on the climate drivers'
+  clock — SIPNET has none of its own and echoes each climate row's labels, one
+  output row per climate row (a restart does not change that: loading a
+  checkpoint only validates, it never advances the climate list). `time` is
+  printed `%5.2f`, i.e. rounded to 0.01 h. Pools (`envi.*`) are
   written **after** `updateState()`, so they are end-of-step values; trackers
   are `flux × length`, i.e. totals over the step.
 - `fluxestranspiration` prints `fluxes.transpiration` **without** `× length`.
@@ -446,10 +497,39 @@ start-of-step value, which it is not. The Dataset states the interval each row
 covers: `time_step_start`, `time_step_length` and a CF `time_bounds` variable
 named by `time`'s `bounds` attribute, so `[time_step_start, time]` is
 machine-readable — which is what an observation operator needs in order to
-decide which steps an observation spans. `year`/`day_of_year`/`hour_of_day`
-stay as SIPNET wrote them, i.e. the start. A declared end within a minute of
-the next row's start snaps to it, so three-decimal `.clim` lengths do not put
-`time` seconds off the clock; `time_step_length` itself is never adjusted.
+decide which steps an observation spans.
+
+**The axis comes from the climate drivers, not from SIPNET's printed labels.**
+Every output the runner returns carries its `ClimateDrivers`
+(`SIPNETOutput(climate=...)`), and its axis is theirs row for row: their
+starts, their lengths, their `time_zone`. The printed labels are rounded to
+0.01 h, which put the output axis up to ±18 s off `climate.xarray` for the same
+run and could not represent a 20-minute step at all. An output whose row count
+differs from the drivers', or whose printed labels do not round from them, is
+refused. `year`/`day_of_year`/`hour_of_day` coordinates carry the drivers'
+unrounded values; `.pandas` keeps the printed ones, being a view of the file.
+Without drivers (an output file re-opened with `from_path`/`from_dataframe`
+and no `climate`) the axis falls back to the printed labels and the lengths
+are inferred from them, so there is nothing to check labels against; the
+Dataset's `time_axis_source` and `time_step_length_source` say so. The old
+`time_step_length=` argument is gone: it was a third mode (printed starts,
+supplied lengths) that the runner no longer used, and it needed its own looser
+tolerance. Pass `climate=` instead — `climate.head(n)` for the first `n`
+rows. `SIPNETOutput.time_step_length` remains, read from the climate.
+
+`build_time_axis` takes lengths from exactly one place: a `ClimateDrivers`
+(already checked, not re-checked), a bare frame's own `time_step_length`
+column (checked there, since nothing else has), or inference from the labels
+(consistent by construction).
+
+A declared end within 60 s of the next row's start snaps to it, so
+three-decimal `.clim` lengths do not put `time` seconds off the clock;
+`time_step_length` itself is never adjusted. The snap is still needed for
+that, but it no longer hides anything: it shares its tolerance with the
+continuity check, which has already refused any overlap or drift it could
+absorb. (It used to absorb the 2.46 s-per-step drift silently — though nothing
+would have flagged the drift without it either, and the 2 h year-boundary
+overlap in those files passed with no snap involved.)
 Cumulative columns carry no `cell_methods` (their interval is the run so far,
 which CF cannot express in that attribute) and `soil_wetness_fraction`'s says
 it is a two-point mean. The Dataset declares `Conventions = "CF-1.11"`, `time`
@@ -470,8 +550,8 @@ Step lengths come from the climate's `time_step_length`
 column; when the output has no climate attached they are **inferred** from
 consecutive timestamps (exact except for the last step, which repeats its
 predecessor), and `time_step_length_source` in the Dataset's attributes says
-which happened. `time_zone` records that the axis is naive, since SIPNET has no
-time zone and the convention is whatever the `.clim` used. `run_id` and
+which happened. `time_zone` is the drivers' declaration, or `"undeclared"`.
+`run_id` and
 `model_flags` (JSON) travel as attributes too, so an archived prediction says
 which run produced it.
 
@@ -640,7 +720,7 @@ different parameters depending on `sipnet.in`. `ModelFlags` mirrors this in
 
 4. **Model options are runtime, and they change which parameters are required.** All ten (`GDD`, `SNOW`, `WATER_HRESP`, `GROWTH_RESP`, `LEAF_WATER`, `LITTER_POOL`, `SOIL_PHENOL`, `NITROGEN_CYCLE`, `ANAEROBIC`, `FLOODING`) are set in `sipnet.in`. One binary, `make sipnet`, no `-D` flags, no source patch. Because they change the required parameter set, the flags are part of the run specification, not a build detail — which is why `ModelFlags` is serialized into `RunConfig` and `RunProvenance`. SIPNET rejects four combinations (`validateContext()`); `ModelFlags` rejects them first.
 
-5. **No missing climate values.** Climate validation must be strict: every row must be complete, timesteps must be monotonically increasing, and the start/end dates must bracket the intended simulation period.
+5. **No missing climate values.** Climate validation must be strict: every row must be complete, timesteps must be monotonically increasing, each label must agree with the previous row's start plus its length (no overlap, no drift; a gap warns), and the start/end dates must bracket the intended simulation period.
 
 6. **Events file.** SIPNET defaults to `EVENTS=1` (looks for `events.in`). The runner writes `EVENTS = 0` in `sipnet.in` to suppress this for basic runs. Note that this is belt-and-braces: a *missing* `events.in` is already harmless (`access` guard, `logInfo` only), so `EVENTS = 0` mainly guards against a stale file in the working directory. When events are used, the file must be in the working directory.
 
@@ -715,6 +795,7 @@ pySIPNET/
 │   ├── test_variables.py         # the .out header contract and the registry's own rules
 │   ├── test_download.py          # prebuilt-binary download and its verification
 │   ├── test_fidelity.py          # wrapper output == bare binary output
+│   ├── test_time_axis.py         # axis from the drivers, label/length continuity, time_zone
 │   ├── test_golden.py            # frozen numeric baseline
 │   ├── test_reference.py         # bundled data ships in the wheel and matches the submodule
 │   ├── test_bundle_hook.py       # platform wheels carry the binary and the right tag
@@ -776,6 +857,12 @@ Worth knowing which test to look at when something breaks:
   for byte, and the two inputs are still identical to the submodule's smoke
   fixtures. Catches a packaging change that drops them (reading the source
   tree would not) and any re-save or reformat of upstream-authored data.
+- `test_time_axis.py` — a run's axis is its climate's exactly (20-minute
+  steps, which SIPNET cannot print), a row-count or label mismatch is refused,
+  drifted and overlapping drivers are refused while Niwot passes with margin,
+  and `time_zone` survives the run, `RunConfig` and `resample`. Catches the
+  axis silently reverting to SIPNET's rounded labels, and a tolerance change
+  that would start accepting drift or refusing Niwot.
 - `test_integration.py` — end-to-end behavior, including that flags visibly
   change results and that SIPNET's own mass-balance errors stay near zero.
 

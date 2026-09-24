@@ -151,9 +151,10 @@ def niwot_reference_climate() -> ClimateDrivers:
 def niwot_reference_output() -> SIPNETOutput:
     """The golden baseline as a memory-backed :class:`~pysipnet.output.SIPNETOutput`.
 
-    The step lengths come from the bundled climate, so the Dataset's time axis
-    is the one a real run would carry rather than one inferred from
-    timestamps, and the flags are :meth:`~pysipnet.parameters.model.ModelFlags.standard`,
+    It carries the first rows of the bundled climate, so the Dataset's time
+    axis is the one a real run would carry, the climate's own, rather than one
+    rebuilt from SIPNET's printed labels, and the flags are
+    :meth:`~pysipnet.parameters.model.ModelFlags.standard`,
     the flags the baseline was produced under, so selecting a variable SIPNET
     wrote as constant zero is refused as it would be for a live run.
 
@@ -162,21 +163,12 @@ def niwot_reference_output() -> SIPNETOutput:
     from pysipnet.output import SIPNETOutput
     from pysipnet.parameters.model import ModelFlags
 
-    paths = niwot_reference_files()
-    frame = pd.read_csv(paths.output)
-    climate = niwot_reference_climate().pandas.head(len(frame))
-
-    time_columns = ["year", "day_of_year", "hour_of_day"]
-    if not frame[time_columns].to_numpy().tolist() == climate[time_columns].to_numpy().tolist():
-        raise RuntimeError(
-            f"{paths.output.name} does not start where {paths.clim.name} starts, so its step "
-            "lengths cannot be taken from the climate. The bundled data is inconsistent; "
-            "regenerate the baseline with 'python -m tests.test_golden'."
-        )
-
+    frame = pd.read_csv(niwot_reference_files().output)
+    # A frame that does not start where the climate starts is refused when the
+    # Dataset is built, which is where rows are matched against their drivers.
     return SIPNETOutput.from_dataframe(
         frame,
-        time_step_length=climate["time_step_length"].to_numpy(),
+        climate=niwot_reference_climate().head(len(frame)),
         flags=ModelFlags.standard(),
         run_id=NIWOT_OUTPUT_RUN_ID,
     )
