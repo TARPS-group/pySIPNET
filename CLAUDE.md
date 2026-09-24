@@ -719,6 +719,7 @@ pySIPNET/
 │   ├── test_reference.py         # bundled data ships in the wheel and matches the submodule
 │   ├── test_bundle_hook.py       # platform wheels carry the binary and the right tag
 │   ├── test_cli.py               # the pysipnet command
+│   ├── test_exceptions.py        # every exception pickles and crosses a process boundary
 │   └── test_build.py             # search order, compile fallback, runtime pin check
 ├── data/                         # (gitignored) sample data
 ├── docs/
@@ -793,3 +794,10 @@ treatment.
 - **Type hints everywhere.**
 - All file I/O is in the `pysipnet/io/` subpackage. The rest of the package never touches the filesystem directly.
 - Tests use real SIPNET binaries where possible (integration tests), not mocks.
+- **Exceptions must pickle.** Ensemble runners send failures back from worker
+  processes through pickle, and `BaseException` rebuilds from `cls(*self.args)`.
+  An exception whose `__init__` takes more than the message needs a
+  `__reduce__`, as `SIPNETRunError` has; without one it pickles and then fails
+  to unpickle, which in a `ProcessPoolExecutor` breaks the pool.
+  `tests/test_exceptions.py` round-trips every exception class in the package
+  and fails when one is added without an example.

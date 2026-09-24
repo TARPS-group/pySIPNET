@@ -844,9 +844,9 @@ class TestFailedRunsRaise:
     @pytest.fixture
     def broken_climate(self):
         """A climate frame SIPNET refuses: no rows to read."""
-        from pysipnet.climate import ClimateDrivers
+        from tests.helpers import empty_climate
 
-        return ClimateDrivers.from_dataframe(_make_climate().pandas.head(0).copy())
+        return empty_climate()
 
     def test_a_failed_run_raises(self, minimal_params, broken_climate):
         from pysipnet.runner import SIPNETRunError
@@ -864,6 +864,25 @@ class TestFailedRunsRaise:
         combined = exc.value.stdout + exc.value.stderr
         assert combined.strip(), "the error carried neither stdout nor stderr"
         assert "climate" in str(exc.value).lower()
+
+    def test_the_error_crosses_a_process_boundary(self, minimal_params):
+        """An ensemble worker's failure reaches the driver as the real error."""
+        import multiprocessing
+        from concurrent.futures import ProcessPoolExecutor
+
+        from pysipnet.runner import SIPNETRunError
+        from tests.helpers import WORKER_TIMEOUT_SECONDS, run_with_no_climate_rows
+
+        spawn = multiprocessing.get_context("spawn")
+        with ProcessPoolExecutor(max_workers=1, mp_context=spawn) as pool:
+            future = pool.submit(run_with_no_climate_rows, minimal_params)
+            err = future.exception(timeout=WORKER_TIMEOUT_SECONDS)
+
+        assert isinstance(err, SIPNETRunError)
+        assert err.returncode != 0
+        assert (err.stdout + err.stderr).strip()
+        assert isinstance(err.workdir, Path)
+        assert "climate" in str(err).lower()
 
     def test_check_false_returns_a_result_instead(self, minimal_params, broken_climate):
         """Opt-out for ensembles, where one failure should not stop the rest."""

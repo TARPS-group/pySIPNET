@@ -7,11 +7,64 @@ imported as plain functions from any test module.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pysipnet.version import SIPNET_NUMERIC_VERSION, SIPNET_PINNED_TAG
 
+if TYPE_CHECKING:
+    from pysipnet.climate import ClimateDrivers
+    from pysipnet.parameters.model import SIPNETParameters
+    from pysipnet.runner import SIPNETRunError
+
 PINNED_VERSION_LINE = f"SIPNET version {SIPNET_NUMERIC_VERSION} ({SIPNET_PINNED_TAG})"
 """What the pinned SIPNET answers to ``--version``."""
+
+WORKER_TIMEOUT_SECONDS = 120.0
+"""How long a test waits on a worker process before failing instead of hanging."""
+
+
+def make_run_error(returncode: int = 3, cls: type[SIPNETRunError] | None = None) -> SIPNETRunError:
+    """A ``SIPNETRunError`` (or subclass *cls*) with attributes derived from *returncode*."""
+    from pysipnet.runner import SIPNETRunError
+
+    return (cls or SIPNETRunError)(
+        f"SIPNET exited with code {returncode}",
+        returncode=returncode,
+        stdout="out",
+        stderr="err",
+        workdir=Path(f"/scratch/run-{returncode}"),
+    )
+
+
+# The functions below run in spawned worker processes, which find them by
+# module name. They live here rather than in a test module because a test
+# module's name is only importable under pytest's default import mode.
+
+
+def raise_run_error(returncode: int) -> None:
+    raise make_run_error(returncode)
+
+
+def return_value(value: int) -> int:
+    return value
+
+
+def empty_climate() -> ClimateDrivers:
+    """A climate with every column and no rows, which SIPNET refuses to run."""
+    import pandas as pd
+
+    from pysipnet.climate import CLIMATE_COLUMNS, ClimateDrivers
+
+    return ClimateDrivers.from_dataframe(
+        pd.DataFrame({name: pd.Series(dtype=float) for name in CLIMATE_COLUMNS})
+    )
+
+
+def run_with_no_climate_rows(params: SIPNETParameters) -> None:
+    from pysipnet.parameters.model import ModelFlags
+    from pysipnet.runner import SIPNETRunner
+
+    SIPNETRunner(flags=ModelFlags.standard()).run(params, empty_climate())
 
 
 def fake_sipnet_binary(path: Path, version_line: str = PINNED_VERSION_LINE) -> Path:

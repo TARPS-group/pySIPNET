@@ -61,13 +61,14 @@ allowed to change what the first one's lazily-read result answers with; pass
 
 from __future__ import annotations
 
+import functools
 import re
 import subprocess
 import tempfile
 import uuid
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from pysipnet.build import (
     BINARY_NAME,
@@ -121,6 +122,11 @@ class SIPNETRunError(RuntimeError):
     Carries everything needed to diagnose the run without re-running it. The
     binary writes the actual reason to stdout or stderr — a missing parameter,
     an unreadable climate file — so those are the first place to look.
+
+    Survives pickling and :mod:`copy`, so an error raised in a worker process
+    reaches the driver as a ``SIPNETRunError`` with every attribute intact. A
+    subclass that changes the constructor's signature must define its own
+    :meth:`__reduce__`.
     """
 
     def __init__(
@@ -137,6 +143,21 @@ class SIPNETRunError(RuntimeError):
         self.stdout = stdout
         self.stderr = stderr
         self.workdir = workdir
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        # BaseException rebuilds from cls(*self.args), and args holds only the
+        # message, so the keyword-only arguments would be missing on unpickle.
+        # A partial of the class keeps the pickle free of private names. args
+        # travels in the state, which BaseException.__setstate__ assigns back,
+        # because a caller may have replaced it with other than one message.
+        rebuild = functools.partial(
+            type(self),
+            returncode=self.returncode,
+            stdout=self.stdout,
+            stderr=self.stderr,
+            workdir=self.workdir,
+        )
+        return (rebuild, (str(self),), {**self.__dict__, "args": self.args})
 
 
 _SAFE_RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
