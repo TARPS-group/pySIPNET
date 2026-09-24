@@ -19,7 +19,7 @@ run a different site.
 ```python
 from pysipnet import ClimateDrivers
 
-climate = ClimateDrivers.from_file("docs/examples/data/niwot_1999_daily.clim", n_columns=14)
+climate = ClimateDrivers.from_file("docs/examples/data/niwot_1999_daily.clim")
 print(climate)
 # ClimateDrivers(n_columns=14, timesteps=365, range=1999-001 to 1999-365)
 ```

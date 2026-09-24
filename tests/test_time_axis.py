@@ -321,13 +321,13 @@ class TestValidatesOnce:
     def test_a_file_is_checked_once_on_read(self, count_checks, tmp_path):
         path = tmp_path / "site.clim"
         _write_unchecked_clim(_climate_frame("2012-06-01", 10, pd.Timedelta(hours=3)), path)
-        ClimateDrivers.from_file(path, n_columns=12)
+        ClimateDrivers.from_file(path)
         assert count_checks["n"] == 1
 
     def test_a_file_backed_climate_is_checked_when_first_loaded(self, count_checks, tmp_path):
         path = tmp_path / "site.clim"
         _write_unchecked_clim(_climate_frame("2012-06-01", 10, pd.Timedelta(hours=3)), path)
-        climate = ClimateDrivers.from_path(path, n_columns=12)
+        climate = ClimateDrivers.from_path(path)
         assert count_checks["n"] == 0
         _ = climate.pandas
         _ = climate.xarray
@@ -337,7 +337,7 @@ class TestValidatesOnce:
     def test_a_file_backed_climate_defers_the_failure_until_loaded(self, tmp_path):
         path = tmp_path / "drifted.clim"
         _write_unchecked_clim(_drifted_frame([2012]), path)
-        climate = ClimateDrivers.from_path(path, n_columns=12)
+        climate = ClimateDrivers.from_path(path)
         assert climate.n_timesteps == 8 * 366
         with pytest.raises(ValueError, match="labels drift"):
             climate.validate()
@@ -482,7 +482,7 @@ class TestRuns:
         path = tmp_path / "drifted.clim"
         drifted = _drifted_frame([2012])
         _write_unchecked_clim(drifted, path)
-        climate = ClimateDrivers.from_path(path, n_columns=12)
+        climate = ClimateDrivers.from_path(path)
         result = SIPNETRunner(flags=ModelFlags.standard()).run(niwot_params, climate)
 
         assert result.provenance.success

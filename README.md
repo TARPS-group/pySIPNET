@@ -66,8 +66,8 @@ Python ≥ 3.11, [uv](https://docs.astral.sh/uv/), `gcc`/`clang` and `make`.
 from pysipnet import SIPNETRunner, SIPNETModel, ModelFlags, ClimateDrivers, SIPNETParameters
 from pysipnet.parameters import PhotosynthesisParams, RespirationParams
 
-climate    = ClimateDrivers.from_file("site1.clim", n_columns=14)
-other_site = ClimateDrivers.from_file("site2.clim", n_columns=14)
+climate    = ClimateDrivers.from_file("site1.clim")
+other_site = ClimateDrivers.from_file("site2.clim")
 
 params = SIPNETParameters(
     photosynthesis=PhotosynthesisParams(max_photosynthesis_rate=112.0, optimum_photosynthesis_temperature=24.0),

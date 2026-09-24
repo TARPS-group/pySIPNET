@@ -145,7 +145,7 @@ def niwot_reference_climate() -> ClimateDrivers:
     """
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message=_KNOWN_UPSTREAM_DATA_WARNING)
-        return read_clim_file(niwot_reference_files().clim, n_columns=14)
+        return read_clim_file(niwot_reference_files().clim)
 
 
 def niwot_reference_output() -> SIPNETOutput:

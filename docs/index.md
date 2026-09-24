@@ -44,7 +44,7 @@ params = SIPNETParameters(
     # ... and the five remaining groups
 )
 
-climate = ClimateDrivers.from_file("data/my_site.clim", n_columns=14)
+climate = ClimateDrivers.from_file("data/my_site.clim")
 runner  = SIPNETRunner(flags=ModelFlags.standard())
 result  = runner.run(params, climate)
 

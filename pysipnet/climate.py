@@ -1,8 +1,10 @@
 """Climate driver data structure and I/O.
 
 The :class:`ClimateDrivers` class holds the meteorological forcing time series
-required by SIPNET.  It is layout-aware: the number of columns differs between
-the 14-column and 12-column layouts, both of which the pinned SIPNET reads.
+required by SIPNET.  SIPNET reads two file layouts carrying the same values, the
+standard 12-column one and a legacy 14-column one; a file's layout is read from
+the file, and :attr:`ClimateDrivers.n_columns` records it, or chooses it for
+drivers built in memory.  See :mod:`pysipnet.io.clim_io`.
 
 Column conventions
 ------------------
@@ -109,6 +111,9 @@ if TYPE_CHECKING:
 # they are written/read by the IO layer as padding, not stored in the DataFrame.
 CLIMATE_COLUMNS: list[str] = list(CLIMATE_COLUMN_NAMES)
 
+#: The two ``.clim`` layouts SIPNET reads, named by column count.
+ClimLayout = Literal[12, 14]
+
 _UTC_OFFSET = re.compile(r"UTC(?:([+-])(\d{2}):(\d{2}))?")
 
 
@@ -173,13 +178,19 @@ class ClimateDrivers:
         validated.  Mutually exclusive with *source_path*.
     source_path:
         Path to an existing ``.clim`` file.  Mutually exclusive with *data*.
+        Its layout, row count and date range are read from its first and last
+        lines, as :meth:`from_path` describes.
     n_columns:
-        Which climate file layout this object writes: 12 or 14 columns. Both
-        carry the same 12 values; the 14-column layout adds two SIPNET
-        ignores.
+        The file layout, 12 or 14 columns.  Both carry the same 12 values; the
+        legacy 14-column layout wraps them in a site identifier and a soil
+        wetness value that SIPNET ignores.  For *data* it is the layout the
+        drivers are written in, 12 unless you ask for 14.  For a
+        *source_path* it is the file's own layout, read from the file, and
+        must not be passed: the runner stages that file unchanged.
     loc:
-        Location index written to column 1 of v1 climate files (memory-backed
-        only).  SIPNET ignores this value; it exists for backward compatibility.
+        Site identifier written to column 1 of the 14-column layout; SIPNET
+        ignores it apart from requiring it to be constant.  Read from the file
+        when the drivers come from a 14-column one.
     time_zone:
         The clock the ``year`` / ``day_of_year`` / ``hour_of_day`` labels are
         on: ``"UTC"`` or a fixed offset such as ``"UTC-07:00"``.  Metadata
@@ -192,8 +203,8 @@ class ClimateDrivers:
         self,
         *,
         data: pd.DataFrame | None = None,
-        source_path: Path | None = None,
-        n_columns: Literal[12, 14] = 14,
+        source_path: str | Path | None = None,
+        n_columns: ClimLayout | None = None,
         loc: int = 0,
         time_zone: str | None = None,
     ) -> None:
@@ -201,49 +212,63 @@ class ClimateDrivers:
             raise ValueError(
                 "Exactly one of 'data' or 'source_path' must be provided, not both or neither."
             )
-        self.source_path: Path | None = source_path
-        self.n_columns: Literal[12, 14] = n_columns
+        self.source_path: Path | None = None if source_path is None else Path(source_path)
         self.loc: int = loc
         self.time_zone: str | None = normalize_time_zone(time_zone)
         self._n_timesteps: int | None = None
         self._date_range: tuple[tuple[int, int], tuple[int, int]] | None = None
         self._data: pd.DataFrame | None = None
-        if data is not None:
+
+        if self.source_path is not None:
+            from pysipnet.io.clim_io import peek_clim_file
+
+            if n_columns is not None:
+                raise ValueError(
+                    "n_columns is read from the file for a file-backed ClimateDrivers; do not "
+                    "pass it. The runner stages the file unchanged, so its own layout is the "
+                    "only one it can have."
+                )
+            layout, n_rows, start, end = peek_clim_file(self.source_path)
+            self.n_columns: ClimLayout = layout
+            self._n_timesteps = n_rows
+            self._date_range = (start, end)
+        else:
+            assert data is not None
+            if n_columns not in (None, 12, 14):
+                raise ValueError(
+                    f"n_columns must be 12 or 14, not {n_columns!r}: SIPNET reads only those "
+                    "two climate file layouts."
+                )
+            self.n_columns = 12 if n_columns is None else n_columns
             self._data = _standard_columns(data)
             self._run_checks()
 
     # ── Construction ───────────────────────────────────────────────────────────
 
     @classmethod
-    def from_file(
-        cls,
-        path: str | Path,
-        n_columns: Literal[12, 14] = 14,
-        *,
-        time_zone: str | None = None,
-    ) -> ClimateDrivers:
+    def from_file(cls, path: str | Path, *, time_zone: str | None = None) -> ClimateDrivers:
         """Read a SIPNET climate file fully into memory.
+
+        The layout, 12 or 14 columns, is read from the file and kept as
+        :attr:`n_columns`, so writing the drivers out again reproduces it.
 
         Parameters
         ----------
         path:
             Path to the ``.clim`` file.
-        n_columns:
-            Which layout to expect.  ``14`` expects 14 columns (site index
-            in col 1, soil-wetness in col 14); ``12`` expects 12 columns.
         time_zone:
             The clock the file's labels are on; see the class docstring.  A
             ``.clim`` file cannot say, so only the caller can.
         """
         from pysipnet.io.clim_io import read_clim_file
 
-        return read_clim_file(Path(path), n_columns=n_columns, time_zone=time_zone)
+        return read_clim_file(Path(path), time_zone=time_zone)
 
     @classmethod
     def from_dataframe(
         cls,
         df: pd.DataFrame,
-        n_columns: Literal[12, 14] = 14,
+        n_columns: ClimLayout = 12,
         loc: int = 0,
         *,
         time_zone: str | None = None,
@@ -260,27 +285,23 @@ class ClimateDrivers:
         df:
             Input DataFrame with climate variables.
         n_columns:
-            Which layout to use when this object is written to a file.
+            Which layout to write the drivers in: 12, the standard, or the
+            legacy 14.
         loc:
-            Location index (v1 only).
+            Site identifier for the 14-column layout.
         time_zone:
             The clock the labels are on; see the class docstring.
         """
         return cls(data=df, n_columns=n_columns, loc=loc, time_zone=time_zone)
 
     @classmethod
-    def from_path(
-        cls,
-        path: str | Path,
-        n_columns: Literal[12, 14] = 14,
-        *,
-        time_zone: str | None = None,
-    ) -> ClimateDrivers:
+    def from_path(cls, path: str | Path, *, time_zone: str | None = None) -> ClimateDrivers:
         """Create a file-backed instance without loading data into memory.
 
-        The file is not read until :attr:`pandas` is accessed.  Lightweight
-        validation checks the column count of the first and last rows, and
-        caches :attr:`n_timesteps` and :attr:`date_range` from those rows.
+        The file is not read until :attr:`pandas` is accessed.  Only its first
+        and last lines are read now: the first for its layout, which becomes
+        :attr:`n_columns` and is refused unless SIPNET reads it, and both for
+        :attr:`n_timesteps` and :attr:`date_range`.
 
         .. note::
             **Validation is deferred along with the read.**  The full checks in
@@ -296,22 +317,10 @@ class ClimateDrivers:
         ----------
         path:
             Path to an existing ``.clim`` file.
-        n_columns:
-            Which layout to expect.
         time_zone:
             The clock the file's labels are on; see the class docstring.
         """
-        from pysipnet.io.clim_io import peek_clim_file
-
-        path = Path(path)
-        if not path.exists():
-            raise FileNotFoundError(f"Climate file not found: {path}")
-
-        n_rows, start, end = peek_clim_file(path, n_columns=n_columns)
-        obj = cls(source_path=path, n_columns=n_columns, time_zone=time_zone)
-        obj._n_timesteps = n_rows
-        obj._date_range = (start, end)
-        return obj
+        return cls(source_path=Path(path), time_zone=time_zone)
 
     # ── Data access ────────────────────────────────────────────────────────────
 
@@ -332,9 +341,10 @@ class ClimateDrivers:
                 raise ValueError(
                     "This ClimateDrivers has neither loaded data nor a file to read from."
                 )
-            self._data = read_clim_file(
-                self.source_path, n_columns=self.n_columns, time_zone=self.time_zone
-            ).pandas
+            loaded = read_clim_file(self.source_path, time_zone=self.time_zone)
+            self.n_columns = loaded.n_columns
+            self.loc = loaded.loc
+            self._data = loaded.pandas
         return self._data
 
     @property

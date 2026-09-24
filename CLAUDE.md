@@ -292,6 +292,13 @@ counts the columns on the first line to decide which layout it has; anything
 other than 12 or 14 is a hard error. **A 13-column file is rejected** at this
 pin, though the previous pin accepted it.
 
+The 14-column layout is the pre-v2.0.0 one: SIPNET v2.0.0 removed multi-site
+runs and the soil-wetness mode (upstream #92, #127), which left the leading
+`loc` and trailing `soilWetness` columns with nothing to do, and 12 columns
+became the standard. Both carry the same 12 values;
+`tests/test_clim_layout_contract.py` runs the binary on both and gets identical
+output.
+
 No header, no comment character. Whitespace-delimited, one row per timestep.
 
 The table uses SIPNET's column names. The Python column names are the
@@ -324,12 +331,29 @@ docs page `reference/climate-drivers.md` is generated from the registry.
 | 12 | 13 | wspd | m s⁻¹ | clamped ≥ 1e-6 |
 | — | 14 | soilWetness | fraction | ignored |
 
-**pySIPNET's writer still emits 14 columns**, which SIPNET accepts via the
-legacy path with an informational log line. Switching to 12 is optional
-cleanup; `pysipnet/io/clim_io.py` already supports both. In that module the
-layouts are named by column count (`_N_COLS_12/13/14`, `_write_14_column`), and
-the public discriminator is `n_columns: Literal[12, 14]` — never "v1"/"v2",
-since one SIPNET version reads both.
+**pySIPNET reads the layout from the file, exactly as SIPNET does, and never
+asks the caller.** `detect_clim_layout()` in `pysipnet/io/clim_io.py` counts the
+first line's fields and accepts 12 or 14; every reader (`read_clim_file`,
+`peek_clim_file`, `from_file`, `from_path`, `ClimateDrivers(source_path=...)`)
+uses it, and none takes an `n_columns`. It refuses what SIPNET refuses: 13 or
+any other count, a leading blank line, and a 14-column file whose `loc`
+changes between rows. `tests/test_clim_layout_contract.py` runs the binary on
+each variant and asserts that pySIPNET accepts exactly what SIPNET accepts.
+
+This replaced a caller-supplied `n_columns` on every reader, defaulting to 14,
+which was the root cause of `RunConfig.load()` failing on a config saved with
+12-column drivers (the layout was saved in the file but never asked of it), and
+which let pySIPNET read a 13-column file that `from_path` would then stage
+unchanged for SIPNET to refuse.
+
+`ClimateDrivers.n_columns` is now only the layout the drivers are *written*
+in: **12 for drivers built in memory** (the standard; pass `n_columns=14` for
+the legacy layout), and **the file's own layout for drivers read from one**,
+because the runner stages a file-backed climate by copying it unchanged and
+`RunConfig` rewrites it in the same layout. A 14-column file's `loc` becomes
+`ClimateDrivers.loc`. The layouts are named by column count (`_N_COLS_12`,
+`_N_COLS_14`, `ClimLayout = Literal[12, 14]`), never "v1"/"v2", since one
+SIPNET version reads both.
 
 Other format details, all still true:
 
@@ -337,7 +361,9 @@ Other format details, all still true:
   first row's.
 - **`length < 0` means seconds.** Undocumented outside the source.
 - **First line via `getline`, rest via `fscanf`.** A leading blank line is
-  fatal; interior blank lines are tolerated. We forbid both.
+  fatal; interior blank lines are tolerated. pySIPNET behaves the same (its
+  reader refuses the first and skips the second), and its writer writes
+  neither.
 
 SIPNET performs no validation beyond the column count and the loc check — no
 NaN, monotonicity or range checks — so our strict pre-write validation is doing
@@ -775,7 +801,7 @@ pySIPNET/
 │   ├── events.py                 # management events (arity checked against SIPNET)
 │   ├── io/
 │   │   ├── param_io.py           # read/write .param
-│   │   ├── clim_io.py            # read/write .clim (12- and 14-column layouts)
+│   │   ├── clim_io.py            # read/write .clim; layout detected as SIPNET detects it
 │   │   ├── output_reader.py      # read .out, header detected by content
 │   │   └── reference.py          # locate and load the bundled Niwot data (importlib.resources)
 │   ├── data/niwot/               # shipped in the wheel: SIPNET-authored .param/.clim, golden output, README
@@ -790,6 +816,7 @@ pySIPNET/
 │   ├── test_sipnet_in.py         # the sipnet.in contract, incl. SIPNET's config dump
 │   ├── test_param_file_contract.py  # the .param contract across flag combinations
 │   ├── test_events_contract.py   # the events.in contract, incl. arities
+│   ├── test_clim_layout_contract.py  # pySIPNET reads exactly the .clim layouts SIPNET reads
 │   ├── test_param_name_mapping.py   # the Python→SIPNET parameter map, stated by hand
 │   ├── test_integration.py       # end-to-end behavior, flags, mass balance, snow flag
 │   ├── test_variables.py         # the .out header contract and the registry's own rules
@@ -842,6 +869,10 @@ Worth knowing which test to look at when something breaks:
 - `test_param_file_contract.py` — SIPNET recognized every parameter name and
   found everything it required, across six flag combinations. Catches a
   renamed or dropped parameter.
+- `test_clim_layout_contract.py` — pySIPNET accepts exactly the `.clim`
+  layouts SIPNET accepts (12 and 14; not 13, 11, or a 14 whose site changes),
+  for the reasons SIPNET gives, and the two accepted layouts give identical
+  model output. Catches the layout detection drifting from SIPNET's.
 - `test_variables.py` — the binary's output header equals the variable
   registry, token for token and in order. Catches a column added, dropped or
   renamed upstream, which the reader would otherwise pass through with only a

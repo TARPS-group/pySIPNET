@@ -141,8 +141,8 @@ from pysipnet import ClimateDrivers, SIPNETModel
 from pysipnet.ensemble import sipnet_site_fields, sipnet_member_fields
 
 # ── Data ──────────────────────────────────────────────────────────────────────
-clim_hf = ClimateDrivers.from_file("data/harvard_forest.clim", n_columns=14)
-clim_nr = ClimateDrivers.from_file("data/niwot_ridge.clim",    n_columns=14)
+clim_hf = ClimateDrivers.from_file("data/harvard_forest.clim")
+clim_nr = ClimateDrivers.from_file("data/niwot_ridge.clim")
 
 # ── Axes ──────────────────────────────────────────────────────────────────────
 sites   = Axis("site",   labels=["harvard_forest", "niwot_ridge"])

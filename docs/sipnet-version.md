@@ -68,10 +68,13 @@ first line.
 Anything else is a hard error, including 13 columns, which an earlier SIPNET
 accepted.
 
-pySIPNET writes 14 columns. SIPNET accepts them, noting in its log that it took
-the older layout. Both layouts can be read, selected with `n_columns=12` or
-`n_columns=14`. Note the discriminator is
-the column count, not a version: one SIPNET version reads both.
+pySIPNET reads a file's layout from the file, the way SIPNET does, and
+refuses exactly what SIPNET refuses, so you never state the layout of a file
+you read. Drivers built in memory are written in the current 12-column layout;
+pass `ClimateDrivers.from_dataframe(df, n_columns=14)` for the older one.
+Drivers read from a file keep that file's layout, since a file-backed climate is
+handed to SIPNET unchanged. Note the discriminator is the column count, not a
+version: one SIPNET version reads both.
 
 ### Parameter file
 
