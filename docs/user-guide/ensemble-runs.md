@@ -223,6 +223,13 @@ example, a `ValidationError` from an invalid parameter combination, or a
 runs are stored in position rather than dropped, so the indices of `outputs`
 and `coordinates` always correspond.
 
+pySIPNET's exceptions pickle, so a run that fails in a worker process reaches
+the driver as the real exception type: a `SIPNETRunError` from a
+`ProcessPoolExecutor` worker or a cluster job still carries `returncode`,
+`stdout`, `stderr` and `workdir`, and `isinstance` checks work. `workdir` is
+a path on the machine that ran SIPNET, and it has already been deleted unless
+the runner was created with `keep_workdir=True`.
+
 ### Extracting outputs
 
 ```python
