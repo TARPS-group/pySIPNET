@@ -88,6 +88,7 @@ behavior while making the issue visible to the user.
 
 from __future__ import annotations
 
+import copy
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -149,17 +150,27 @@ class ClimateDrivers:
     *file-backed* (holding only a path, with data loaded lazily on first
     access).  Use the factory methods to construct:
 
-    - :meth:`from_dataframe` — in-memory, with full column and data validation.
-    - :meth:`from_file` — reads an existing ``.clim`` file fully into memory.
+    - :meth:`from_dataframe` — in-memory, validated at construction.
+    - :meth:`from_file` — reads an existing ``.clim`` file fully into memory,
+      validated at construction.
     - :meth:`from_path` — file-backed, defers loading until ``.pandas`` is
-      accessed.  Use this in ensemble workflows where the file already exists
-      on disk and you want to avoid a redundant read/write cycle.
+      accessed, and **validation with it**.  Use this in ensemble workflows
+      where the file already exists on disk and you want to avoid a redundant
+      read/write cycle.
+
+    Validation (:meth:`validate`) runs exactly once for any set of data, at the
+    moment the data is loaded: at construction when data is passed in, and on
+    first access for a file-backed instance.  Nothing that uses the data
+    afterwards — a run, a time axis, an output Dataset — repeats it, so the
+    DataFrame behind :attr:`pandas` must not be modified in place.
 
     Parameters
     ----------
     data:
-        One row per model timestep with columns matching :data:`CLIMATE_COLUMNS`.
-        Mutually exclusive with *source_path*.
+        One row per model timestep with every column in :data:`CLIMATE_COLUMNS`,
+        under its registry name or an alias; aliases are renamed and extra
+        columns dropped, as in :meth:`from_dataframe`.  The frame is copied and
+        validated.  Mutually exclusive with *source_path*.
     source_path:
         Path to an existing ``.clim`` file.  Mutually exclusive with *data*.
     n_columns:
@@ -190,13 +201,16 @@ class ClimateDrivers:
             raise ValueError(
                 "Exactly one of 'data' or 'source_path' must be provided, not both or neither."
             )
-        self._data: pd.DataFrame | None = data
         self.source_path: Path | None = source_path
         self.n_columns: Literal[12, 14] = n_columns
         self.loc: int = loc
         self.time_zone: str | None = normalize_time_zone(time_zone)
         self._n_timesteps: int | None = None
         self._date_range: tuple[tuple[int, int], tuple[int, int]] | None = None
+        self._data: pd.DataFrame | None = None
+        if data is not None:
+            self._data = _standard_columns(data)
+            self._run_checks()
 
     # ── Construction ───────────────────────────────────────────────────────────
 
@@ -252,15 +266,7 @@ class ClimateDrivers:
         time_zone:
             The clock the labels are on; see the class docstring.
         """
-        df = _rename_aliases(df)
-        missing = set(CLIMATE_COLUMNS) - set(df.columns)
-        if missing:
-            raise ValueError(f"DataFrame is missing required columns: {sorted(missing)}")
-        obj = cls(
-            data=df[CLIMATE_COLUMNS].copy(), n_columns=n_columns, loc=loc, time_zone=time_zone
-        )
-        obj.validate()
-        return obj
+        return cls(data=df, n_columns=n_columns, loc=loc, time_zone=time_zone)
 
     @classmethod
     def from_path(
@@ -277,10 +283,14 @@ class ClimateDrivers:
         caches :attr:`n_timesteps` and :attr:`date_range` from those rows.
 
         .. note::
-            Chronological ordering is **assumed but not verified**.  The first
-            and last rows are used to populate :attr:`date_range`; if the file
-            is not sorted those values will be wrong.  Call :meth:`validate`
-            to perform a complete check, which will trigger a full data load.
+            **Validation is deferred along with the read.**  The full checks in
+            :meth:`validate` — missing values, ordering, and labels against
+            step lengths — run the first time the data is loaded, not here.  A
+            run stages the file without reading it, so a file that fails them
+            still runs; the failure surfaces when something reads the drivers,
+            such as the output's Dataset.  Call :meth:`validate` to load and
+            check the file up front.  Until then, :attr:`date_range` is taken
+            from the first and last rows and assumes the file is sorted.
 
         Parameters
         ----------
@@ -309,9 +319,11 @@ class ClimateDrivers:
     def pandas(self) -> pd.DataFrame:
         """The climate time series as a :class:`pandas.DataFrame`.
 
-        For file-backed instances, the first access reads and caches the full
-        file from :attr:`source_path`.  Subsequent accesses return the cached
-        copy at no cost.
+        For file-backed instances, the first access reads, validates and caches
+        the full file from :attr:`source_path`, so it raises if the file fails
+        :meth:`validate`.  Subsequent accesses return the cached copy at no
+        cost.  Do not modify the frame in place: it was validated once, and
+        nothing checks it again.
         """
         if self._data is None:
             from pysipnet.io.clim_io import read_clim_file
@@ -341,17 +353,33 @@ class ClimateDrivers:
         return build_xarray_dataset(
             self.pandas,
             attributes_for=_attributes_for,
-            time_zone=self.time_zone,
+            drivers=self,
             source="SIPNET climate drivers, via pySIPNET",
         )
+
+    def head(self, n: int) -> ClimateDrivers:
+        """The first *n* steps, as memory-backed drivers with the same layout and clock.
+
+        Not validated again: every check :meth:`validate` makes holds for a
+        prefix of a record that passed it, the drift reconstruction included,
+        since it starts from the same row. Loads a file-backed instance.
+        """
+        prefix = copy.copy(self)
+        prefix.source_path = None
+        prefix._data = self.pandas.head(n).copy()
+        prefix._n_timesteps = None
+        prefix._date_range = None
+        return prefix
 
     # ── Validation ─────────────────────────────────────────────────────────────
 
     def validate(self) -> None:
         """Check the climate data for common errors.
 
-        For file-backed instances, calling this method triggers a full data
-        load from :attr:`source_path`.
+        The checks run by themselves whenever data is loaded, so calling this
+        is only needed to load a file-backed instance now, and have its file
+        checked, rather than on first use.  On data already loaded it runs the
+        checks again.
 
         Raises
         ------
@@ -367,6 +395,12 @@ class ClimateDrivers:
             On a gap in the record, and on non-positive vapor pressure deficit
             or wind speed.
         """
+        if self._data is None:
+            _ = self.pandas  # loading runs the checks
+        else:
+            self._run_checks()
+
+    def _run_checks(self) -> None:
         self._check_no_nulls()
         self._check_positive_length()
         self._check_monotonic_time()
@@ -498,6 +532,15 @@ class ClimateDrivers:
             f"timesteps={self.n_timesteps}, "
             f"range={y0}-{d0:03d} to {y1}-{d1:03d}{zone})"
         )
+
+
+def _standard_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """A copy of *df* with exactly :data:`CLIMATE_COLUMNS`, aliases renamed."""
+    df = _rename_aliases(df)
+    missing = set(CLIMATE_COLUMNS) - set(df.columns)
+    if missing:
+        raise ValueError(f"DataFrame is missing required columns: {sorted(missing)}")
+    return df[CLIMATE_COLUMNS].copy()
 
 
 def _rename_aliases(df: pd.DataFrame) -> pd.DataFrame:

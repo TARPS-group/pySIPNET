@@ -77,7 +77,8 @@ result = runner.run(config.params, config.climate, events=config.events)
 ```
 
 The loaded climate is file-backed and lazy: the data is not read from
-`sipnet.clim` until the runner actually needs it.
+`sipnet.clim`, or validated, until something reads it. The runner only copies
+or links the file, so that is usually the output's Dataset.
 
 ### Promoting an exploratory result
 

@@ -160,26 +160,15 @@ def niwot_reference_output() -> SIPNETOutput:
 
     See the module docstring for what the baseline does and does not cover.
     """
-    from pysipnet.climate import ClimateDrivers
     from pysipnet.output import SIPNETOutput
     from pysipnet.parameters.model import ModelFlags
 
-    paths = niwot_reference_files()
-    frame = pd.read_csv(paths.output)
-    full = niwot_reference_climate()
-    climate = full.pandas.head(len(frame))
-
-    time_columns = ["year", "day_of_year", "hour_of_day"]
-    if not frame[time_columns].to_numpy().tolist() == climate[time_columns].to_numpy().tolist():
-        raise RuntimeError(
-            f"{paths.output.name} does not start where {paths.clim.name} starts, so its step "
-            "lengths cannot be taken from the climate. The bundled data is inconsistent; "
-            "regenerate the baseline with 'python -m tests.test_golden'."
-        )
-
+    frame = pd.read_csv(niwot_reference_files().output)
+    # A frame that does not start where the climate starts is refused when the
+    # Dataset is built, which is where rows are matched against their drivers.
     return SIPNETOutput.from_dataframe(
         frame,
-        climate=ClimateDrivers(data=climate.copy(), n_columns=full.n_columns),
+        climate=niwot_reference_climate().head(len(frame)),
         flags=ModelFlags.standard(),
         run_id=NIWOT_OUTPUT_RUN_ID,
     )

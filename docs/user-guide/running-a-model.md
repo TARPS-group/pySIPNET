@@ -61,7 +61,8 @@ so every example on this page runs as written from the repository root.
 
 `ClimateDrivers.from_file` loads the data into memory.  For ensemble
 workflows with pre-existing files, `ClimateDrivers.from_path` creates a
-lightweight file reference without loading the data — see [File I/O](file-io.md).
+lightweight file reference without loading the data, which also defers
+validating it until the first read — see [File I/O](file-io.md).
 
 ### Parameters
 

@@ -80,6 +80,12 @@ for path in site_files:
 annual_nee = {site: df["net_ecosystem_exchange"].sum() for site, df in results.items()}
 ```
 
+Because the climate files are never loaded, they are never validated either:
+a file with overlapping or drifting timestamps runs and fills `results`
+without complaint. To find a bad file before spending a run on it, call
+`climate.validate()` right after `from_path`; asking for
+`result.outputs.xarray` would also check it, since that reads the drivers.
+
 Use `ClimateStaging.SYMLINK` instead of `COPY` if the climate files are large
 and you are on Linux/macOS — SIPNET will read the original file directly,
 eliminating the copy.
@@ -181,6 +187,7 @@ param_samples: list[SIPNETParameters] = [...]
 
 # One shared climate file for all members
 climate = ClimateDrivers.from_path("data/my_site.clim", n_columns=14)
+climate.validate()   # check it once now, not after 1 000 runs; later reads are cached
 
 runner = SIPNETRunner(
     flags=ModelFlags.standard(),

@@ -52,19 +52,21 @@ drivers', is refused rather than aligned by guesswork.  ``year``,
 the output's :attr:`~pysipnet.output.SIPNETOutput.pandas` view still has the
 printed ones, being a faithful view of the file.
 
-With no drivers — an output read from a file on its own — the axis falls back
-to the printed labels.  The Dataset's ``time_axis_source`` attribute says which
-happened, as ``time_step_length_source`` does for the lengths, which come from
-the drivers when they are known and are otherwise inferred from consecutive
-timestamps (exact for every step but the last, which is assumed to repeat the
-one before it).  A single row with no declared length cannot be placed on the
-axis at all and is refused.
+With no drivers — an output file re-opened on its own — the axis falls back
+to the printed labels, and the step lengths are inferred from consecutive
+labels (exact for every step but the last, which is assumed to repeat the one
+before it).  A single row with no declared length cannot be placed on the axis
+at all and is refused.  The Dataset's ``time_axis_source`` and
+``time_step_length_source`` attributes say which happened.
 
 Labels and lengths must agree
 -----------------------------
 SIPNET never checks that a row's start plus its length is the next row's
-start.  :func:`check_step_continuity` does, whenever an axis is built from
-declared lengths, and in :meth:`~pysipnet.climate.ClimateDrivers.validate`:
+start.  :func:`check_step_continuity` does, once for every set of drivers:
+when a :class:`~pysipnet.climate.ClimateDrivers` loads its data (see
+:meth:`~pysipnet.climate.ClimateDrivers.validate`), or, for a bare frame that
+carries its own ``time_step_length`` column, when its axis is built.  An axis
+built from a ``ClimateDrivers`` does not repeat it.  The rule:
 
 - an **overlap**, a row starting more than a minute before the previous one
   ends, is refused;
@@ -78,9 +80,8 @@ declared lengths, and in :meth:`~pysipnet.climate.ClimateDrivers.validate`:
 The minute is what three-decimal day lengths need: SIPNET's own Niwot fixture
 declares ``0.292`` days where its labels say exactly 7 hours, 29 seconds
 apart, and its worst step is 43 s off.  Over its 800 rows the labels never
-wander more than 101 s from the lengths' running sum.  Labels read back from
-an output file carry SIPNET's 0.01 h rounding, and both tolerances widen by
-that much for them.
+wander more than 101 s from the lengths' running sum.  An output re-opened
+without its drivers has no declared lengths to check its labels against.
 
 The end of a step is its start plus its **declared** length, which is the
 duration SIPNET integrates fluxes over — except that when the next row starts
@@ -117,6 +118,8 @@ from pysipnet.variables import TIME_COORDINATE_NAMES, VariableKind
 if TYPE_CHECKING:
     import pandas as pd
     import xarray as xr
+
+    from pysipnet.climate import ClimateDrivers
 
 TIME_DIMENSION = "time"
 BOUNDS_DIMENSION = "bounds"
@@ -162,11 +165,8 @@ STEP_TOLERANCE = np.timedelta64(60, "s")
 DRIFT_TOLERANCE = np.timedelta64(300, "s")
 
 # SIPNET prints hour_of_day as %5.2f, so a label read back from its output is
-# anywhere within 18 s of the driver's, and a difference of two within 36 s.
-PRINTED_LABEL_RESOLUTION = np.timedelta64(36, "s")
-_EXACT_LABELS = np.timedelta64(0, "ns")
-# The same in hours, for comparing a printed label with the driver it came
-# from, plus room for the 6 significant figures pySIPNET writes the driver with.
+# within 0.005 h of the driver it came from; the rest is room for the 6
+# significant figures pySIPNET writes the driver with.
 _PRINTED_HOUR_TOLERANCE = 0.005 + 1e-4
 
 # datetime64[ns] spans 1677-09-21 to 2262-04-11. A year outside this range would
@@ -303,8 +303,6 @@ def describe_duration(duration: np.timedelta64 | float) -> str:
 def check_step_continuity(
     start: np.ndarray,
     length: np.ndarray,
-    *,
-    label_error: np.timedelta64 = _EXACT_LABELS,
 ) -> np.ndarray:
     """Check that each row starts where the one before it ends, and return where it does not.
 
@@ -319,10 +317,6 @@ def check_step_continuity(
         Step starts, ``datetime64[ns]``, in ascending order.
     length:
         Declared step lengths, ``timedelta64[ns]``, one per row.
-    label_error:
-        How far a difference of two labels may be off through rounding in the
-        labels themselves, added to both tolerances:
-        :data:`PRINTED_LABEL_RESOLUTION` for labels read back from an output.
 
     Returns
     -------
@@ -341,9 +335,8 @@ def check_step_continuity(
     if len(start) < 2:
         return np.empty(0, dtype=np.intp)
 
-    error = _as_ns(label_error)
-    step_tolerance = _as_ns(STEP_TOLERANCE) + error
-    drift_tolerance = _as_ns(DRIFT_TOLERANCE) + error
+    step_tolerance = _as_ns(STEP_TOLERANCE)
+    drift_tolerance = _as_ns(DRIFT_TOLERANCE)
 
     end = start + length
     # Positive: the next row starts after this one ends. Negative: before.
@@ -399,15 +392,13 @@ def check_step_continuity(
     return np.flatnonzero(gaps)
 
 
-def _step_end(
-    start: np.ndarray, length: np.ndarray, tolerance: np.timedelta64 = STEP_TOLERANCE
-) -> np.ndarray:
-    """Start plus declared length, snapped to the next row's start when within *tolerance*."""
+def _step_end(start: np.ndarray, length: np.ndarray) -> np.ndarray:
+    """Start plus declared length, snapped to the next row's start within :data:`STEP_TOLERANCE`."""
     end = start + length
     if len(start) > 1:
         next_start = start[1:]
         off = np.abs((next_start - end[:-1]).astype("timedelta64[ns]"))
-        snap = off <= tolerance
+        snap = off <= STEP_TOLERANCE
         end[:-1] = np.where(snap, next_start, end[:-1])
     if len(start) and (end <= start).any():
         row = int(np.argmax(end <= start))
@@ -502,13 +493,9 @@ class TimeAxis:
     time_zone: str
 
 
-def _declared_lengths(values: np.ndarray, n_rows: int) -> np.ndarray:
-    """Step lengths in days, refusing a count or a value no interval can have."""
+def _declared_lengths(values: np.ndarray) -> np.ndarray:
+    """Step lengths in days, refusing a value no interval can have."""
     length = _finite(np.asarray(values, dtype=float), "time_step_length")
-    if len(length) != n_rows:
-        raise ValueError(
-            f"time_step_length has {len(length)} values but the data has {n_rows} rows."
-        )
     if len(length) and length.min() <= 0:
         row = int(np.argmin(length))
         raise ValueError(
@@ -556,11 +543,23 @@ def build_time_axis(
     df: pd.DataFrame,
     *,
     attributes_for: Callable[[str], dict[str, Any]],
-    time_step_length: np.ndarray | None = None,
-    drivers: pd.DataFrame | None = None,
-    time_zone: str | None = None,
+    drivers: ClimateDrivers | None = None,
 ) -> TimeAxis:
     """Build the shared time coordinates for a frame's rows.
+
+    The step starts and lengths come from exactly one of three places:
+
+    1. *drivers*, when given.  Their starts, their lengths and their declared
+       ``time_zone`` become the axis, and *df*'s own labels are only checked
+       against them, row for row.  Their labels and lengths are not checked
+       against each other again: a :class:`~pysipnet.climate.ClimateDrivers`
+       did that when its data was loaded.
+    2. *df*'s own ``time_step_length`` column, when it has one: the frame
+       carries its whole clock, as a ``.clim`` file does.  Nothing has checked
+       it yet, so :func:`check_step_continuity` runs here.
+    3. Otherwise the lengths are inferred from consecutive labels, which
+       agree with them by construction, so there is nothing to check; see
+       :func:`_infer_step_length`.
 
     Parameters
     ----------
@@ -569,82 +568,60 @@ def build_time_axis(
         ``hour_of_day``.
     attributes_for:
         Returns the ``.attrs`` for a column name; ``{}`` for unknown columns.
-    time_step_length:
-        Step lengths in days, one per row, for rows whose drivers are not
-        available.  When this and *drivers* are both ``None``, a frame with its
-        own ``time_step_length`` column is taken to be its own drivers, and
-        failing that the lengths are inferred from consecutive timestamps; see
-        :func:`_infer_step_length`.
     drivers:
-        The climate drivers' frame the rows were produced from, one row each.
-        The axis is then the drivers' — their starts and their lengths — and
-        *df*'s own labels are only checked against it.  Mutually exclusive
-        with *time_step_length*.
-    time_zone:
-        The clock the drivers declare, recorded on the axis without
-        conversion.  ``None`` records it as :data:`TIME_ZONE_UNDECLARED`.
+        The climate drivers the rows were produced from, one row each.
 
     Raises
     ------
     ValueError
         If the rows cannot be placed: a row count or labels that do not match
-        the drivers, timestamps that do not increase, or declared lengths that
-        disagree with the labels (see :func:`check_step_continuity`).
+        the drivers, timestamps that do not increase, or a frame's own lengths
+        that disagree with its labels.
     """
-    if drivers is not None and time_step_length is not None:
-        raise ValueError(
-            "Pass drivers or time_step_length, not both: the drivers carry their own lengths."
-        )
-    if drivers is None and time_step_length is None and "time_step_length" in df.columns:
-        # The drivers state their own step lengths; measuring the gaps between
-        # timestamps instead would discard the last row's true length.
-        drivers = df
-
+    time_zone = None
     if drivers is not None:
-        if len(drivers) != len(df):
+        clock = drivers.pandas
+        if len(clock) != len(df):
             raise ValueError(
-                f"The data has {len(df)} rows but its climate drivers have {len(drivers)}. SIPNET "
+                f"The data has {len(df)} rows but its climate drivers have {len(clock)}. SIPNET "
                 "writes exactly one output row per climate row, so these are not the drivers "
                 "the rows were produced from, or the run stopped early. Refusing to guess how "
                 "they line up."
             )
-        if drivers is not df:
-            _check_labels_match(df, drivers)
-        start = timestep_start(drivers)
-        length = _declared_lengths(drivers["time_step_length"].to_numpy(), len(drivers))
+        if clock is not df:
+            _check_labels_match(df, clock)
+        start = timestep_start(clock)
+        length = clock["time_step_length"].to_numpy(dtype=float)
         axis_source = TIME_AXIS_FROM_DRIVERS
         length_source = STEP_LENGTH_FROM_DRIVERS
-        label_error = _EXACT_LABELS
-    else:
+        time_zone = drivers.time_zone
+    elif "time_step_length" in df.columns:
         start = timestep_start(df)
-        axis_source = TIME_AXIS_FROM_PRINTED_LABELS
-        label_error = PRINTED_LABEL_RESOLUTION
-        if time_step_length is None:
-            inferred = _infer_step_length(start)
-            if inferred is None:
-                raise ValueError(
-                    f"Cannot place {len(df)} row(s) on a time axis without knowing the step "
-                    "length: the 'time' coordinate is the end of each step, and with fewer than "
-                    "two rows there is nothing to infer it from. Pass time_step_length (days, "
-                    "one per row), which a run's climate drivers provide."
-                )
-            length = inferred
-            length_source = STEP_LENGTH_INFERRED
-        else:
-            length = _declared_lengths(time_step_length, len(df))
-            length_source = STEP_LENGTH_FROM_DRIVERS
-
-    length_td = days_to_timedelta(length)
-    if length_source == STEP_LENGTH_FROM_DRIVERS:
-        # Inferred lengths agree with the labels by construction.
+        length = _declared_lengths(df["time_step_length"].to_numpy())
         if len(start) > 1:
             _gaps_in_days(start)
-        check_step_continuity(start, length_td, label_error=label_error)
+        check_step_continuity(start, days_to_timedelta(length))
+        axis_source = TIME_AXIS_FROM_DRIVERS
+        length_source = STEP_LENGTH_FROM_DRIVERS
+    else:
+        start = timestep_start(df)
+        inferred = _infer_step_length(start)
+        if inferred is None:
+            raise ValueError(
+                f"Cannot place {len(df)} row(s) on a time axis without knowing the step length: "
+                "the 'time' coordinate is the end of each step, and with fewer than two rows "
+                "there is nothing to infer it from. Pass the climate drivers the rows were "
+                "produced from, or give the frame a time_step_length column (days)."
+            )
+        length = inferred
+        axis_source = TIME_AXIS_FROM_PRINTED_LABELS
+        length_source = STEP_LENGTH_INFERRED
 
+    length_td = days_to_timedelta(length)
     zone = TIME_ZONE_UNDECLARED if time_zone is None else time_zone
     coords = assemble_time_coords(
         start=start,
-        end=_step_end(start, length_td, STEP_TOLERANCE + label_error),
+        end=_step_end(start, length_td),
         length=length_td,
         attributes_for=attributes_for,
         length_source=length_source,
@@ -717,8 +694,7 @@ def build_xarray_dataset(
     df: pd.DataFrame,
     *,
     attributes_for: Callable[[str], dict[str, Any]],
-    time_step_length: np.ndarray | None = None,
-    time_zone: str | None = None,
+    drivers: ClimateDrivers | None = None,
     source: str,
     extra_attrs: dict[str, Any] | None = None,
 ) -> xr.Dataset:
@@ -737,12 +713,9 @@ def build_xarray_dataset(
         variable.
     attributes_for:
         Returns the ``.attrs`` for a column name; ``{}`` for unknown columns.
-    time_step_length:
-        Step lengths in days, one per row.  When omitted, a frame with its own
-        ``time_step_length`` column is taken to be climate drivers, and
-        otherwise the lengths are inferred from the timestamps.
-    time_zone:
-        The clock the drivers declare; see :func:`build_time_axis`.
+    drivers:
+        The climate drivers the rows came from; see :func:`build_time_axis`
+        for where the axis comes from with and without them.
     source:
         Free text for the Dataset's ``source`` attribute.
     extra_attrs:
@@ -753,12 +726,7 @@ def build_xarray_dataset(
     if df.empty:
         return xr.Dataset()
 
-    axis = build_time_axis(
-        df,
-        attributes_for=attributes_for,
-        time_step_length=time_step_length,
-        time_zone=time_zone,
-    )
+    axis = build_time_axis(df, attributes_for=attributes_for, drivers=drivers)
     return dataset_from_dataframe(
         df, axis, attributes_for=attributes_for, source=source, extra_attrs=extra_attrs
     )

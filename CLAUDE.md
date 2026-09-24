@@ -373,10 +373,22 @@ drivers whose `time` column was `linspace(0, 24n - 1, 8n) % 24`, drifting
   restarts the drift reconstruction and shows as a gap between `time_bounds`.
 
 Niwot's rounded lengths (`0.292` for exactly 7 h) peak at 43.2 s per step and
-100.8 s cumulative over 800 rows; `tests/test_time_axis.py` pins both. The
-check fires in `validate()` (so `from_dataframe`/`from_file` refuse on read)
-and again whenever a time axis is built from drivers, which is what catches a
-lazy `from_path` climate: the run succeeds, and `result.outputs["nee"]` raises.
+100.8 s cumulative over 800 rows; `tests/test_time_axis.py` pins both.
+
+**Validation runs exactly once per set of data, when it is loaded.** Every
+path that puts data into a `ClimateDrivers` goes through `__init__(data=...)`,
+which normalizes the columns (aliases renamed, extras dropped, copied) and runs
+the checks: `from_dataframe`, `from_file`, the direct constructor, and a
+`from_path` instance's first read of `.pandas`. Nothing downstream repeats
+them — not the runner, not `climate.xarray`, not an output's axis — so the
+frame behind `.pandas` must not be modified in place. `validate()` on
+unloaded data just loads it; on loaded data it re-runs the checks, on request.
+`head(n)` returns a prefix without re-checking, since every check holds for a
+prefix of a checked record (the drift reconstruction starts from the same
+row). **`from_path` defers validation along with the read**: the runner
+copies or symlinks the file without reading it, so a file that fails the
+checks still runs, and the failure surfaces on the first read, typically
+`result.outputs["nee"]`. Call `climate.validate()` to check it up front.
 
 ### `events.in` (optional)
 
@@ -496,11 +508,19 @@ run and could not represent a 20-minute step at all. An output whose row count
 differs from the drivers', or whose printed labels do not round from them, is
 refused. `year`/`day_of_year`/`hour_of_day` coordinates carry the drivers'
 unrounded values; `.pandas` keeps the printed ones, being a view of the file.
-Without drivers (`from_path`/`from_dataframe` with no `climate`) the axis
-falls back to the printed labels, and the continuity check widens by their
-36 s resolution. The Dataset's `time_axis_source` says which happened.
-`time_step_length=` remains for an output whose lengths are known but whose
-drivers are not; it is exclusive with `climate=`.
+Without drivers (an output file re-opened with `from_path`/`from_dataframe`
+and no `climate`) the axis falls back to the printed labels and the lengths
+are inferred from them, so there is nothing to check labels against; the
+Dataset's `time_axis_source` and `time_step_length_source` say so. The old
+`time_step_length=` argument is gone: it was a third mode (printed starts,
+supplied lengths) that the runner no longer used, and it needed its own looser
+tolerance. Pass `climate=` instead — `climate.head(n)` for the first `n`
+rows. `SIPNETOutput.time_step_length` remains, read from the climate.
+
+`build_time_axis` takes lengths from exactly one place: a `ClimateDrivers`
+(already checked, not re-checked), a bare frame's own `time_step_length`
+column (checked there, since nothing else has), or inference from the labels
+(consistent by construction).
 
 A declared end within 60 s of the next row's start snaps to it, so
 three-decimal `.clim` lengths do not put `time` seconds off the clock;

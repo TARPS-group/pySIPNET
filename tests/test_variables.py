@@ -333,19 +333,17 @@ def test_dataset_infers_the_step_length_when_it_is_not_given():
 def test_dataset_step_bounds_from_lengths():
     from pysipnet.output import build_output_dataset
 
-    ds = build_output_dataset(_frame(), time_step_length=np.full(4, 0.5))
+    ds = build_output_dataset(_frame().assign(time_step_length=0.5))
     assert ds.attrs["time_step_length_source"] == "climate drivers"
     assert ds["time"].values[0] == np.datetime64("2020-01-01T12:00")
     assert ds["time_step_length"].values[0] == np.timedelta64(12, "h")
-    with pytest.raises(ValueError, match="values but the data has"):
-        build_output_dataset(_frame(), time_step_length=np.ones(3))
 
 
 def test_dataset_carries_cf_time_bounds():
     """The interval each row covers, in the form CF-aware tooling looks for."""
     from pysipnet.output import build_output_dataset
 
-    ds = build_output_dataset(_frame(), time_step_length=np.full(4, 0.5))
+    ds = build_output_dataset(_frame().assign(time_step_length=0.5))
     assert ds["time"].attrs["bounds"] == "time_bounds"
     assert ds["time_bounds"].dims == ("time", "bounds")
     np.testing.assert_array_equal(ds["time_bounds"].values[:, 0], ds["time_step_start"].values)
@@ -358,9 +356,9 @@ def test_dataset_refuses_a_row_it_cannot_place_in_time():
     """One row with no declared length has no end, so no time coordinate."""
     from pysipnet.output import build_output_dataset
 
-    with pytest.raises(ValueError, match="Pass time_step_length"):
+    with pytest.raises(ValueError, match="time_step_length column"):
         build_output_dataset(_frame().head(1))
-    ds = build_output_dataset(_frame().head(1), time_step_length=np.array([0.5]))
+    ds = build_output_dataset(_frame().head(1).assign(time_step_length=0.5))
     assert ds["time"].values[0] == np.datetime64("2020-01-01T12:00")
 
 
@@ -381,12 +379,12 @@ def test_step_end_snaps_to_the_next_start_within_a_minute():
     )
     # 0.292 d is 7 h less 28.8 s; the third step is followed by nothing, so it
     # keeps its declared end.
-    ds = build_output_dataset(frame, time_step_length=np.array([0.292, 0.417, 0.583]))
+    ds = build_output_dataset(frame.assign(time_step_length=[0.292, 0.417, 0.583]))
     assert ds["time"].values[0] == np.datetime64("1998-11-01T07:00")
     assert ds["time"].values[1] == np.datetime64("1998-11-01T17:00")
     assert ds["time_step_length"].values[0] == np.timedelta64(25_228_800, "ms")
     # A three-hour hole is left alone.
-    gapped = build_output_dataset(frame, time_step_length=np.array([0.1667, 0.417, 0.583]))
+    gapped = build_output_dataset(frame.assign(time_step_length=[0.1667, 0.417, 0.583]))
     assert gapped["time"].values[0] == np.datetime64("1998-11-01T04:00:02.880")
 
 
@@ -653,7 +651,7 @@ def test_step_lengths_must_increase_the_clock():
         build_output_dataset(repeated)
     # Supplying the lengths does not excuse the timestamps.
     with pytest.raises(ValueError, match="do not increase"):
-        build_output_dataset(repeated, time_step_length=np.array([0.5, 0.5, 1.0]))
+        build_output_dataset(repeated.assign(time_step_length=[0.5, 0.5, 1.0]))
 
 
 def test_a_sub_minute_step_still_snaps_forward():
@@ -671,7 +669,7 @@ def test_a_sub_minute_step_still_snaps_forward():
         }
     )
     # 0.0001 d is 8.6 s, 27 s short of the next start: within the snap tolerance.
-    ds = build_output_dataset(frame, time_step_length=np.array([0.0001, 0.5]))
+    ds = build_output_dataset(frame.assign(time_step_length=[0.0001, 0.5]))
     assert ds["time"].values[0] == ds["time_step_start"].values[1]
     assert (ds["time"].values > ds["time_step_start"].values).all()
 
@@ -680,7 +678,7 @@ def test_supplied_step_lengths_must_be_positive():
     from pysipnet.output import build_output_dataset
 
     with pytest.raises(ValueError, match="positive duration"):
-        build_output_dataset(_frame(), time_step_length=np.array([0.5, 0.5, 0.0, 0.5]))
+        build_output_dataset(_frame().assign(time_step_length=[0.5, 0.5, 0.0, 0.5]))
 
 
 def test_a_frames_own_step_lengths_beat_the_inferred_ones():

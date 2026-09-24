@@ -19,7 +19,6 @@ prints; they are skipped when it is absent.
 from __future__ import annotations
 
 import json
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -211,13 +210,15 @@ class TestAxisFromDrivers:
         assert output.time_step_length is not None
         np.testing.assert_array_equal(output.time_step_length, climate.pandas["time_step_length"])
 
-    def test_the_printed_labels_alone_cannot_give_that_axis(self):
+    def test_without_drivers_the_axis_is_the_printed_labels(self):
+        """An output re-opened on its own can only use SIPNET's rounded labels, and says so."""
         climate = _climate_frame("2012-06-01", 72, pd.Timedelta(minutes=20))
         alone = SIPNETOutput.from_dataframe(
-            _printed(climate, net_ecosystem_exchange=np.arange(72.0)),
-            time_step_length=climate["time_step_length"].to_numpy(),
+            _printed(climate, net_ecosystem_exchange=np.arange(72.0))
         ).xarray
         assert alone.attrs["time_axis_source"] == TIME_AXIS_FROM_PRINTED_LABELS
+        assert alone.attrs["time_step_length_source"].startswith("inferred")
+        assert alone["time"].attrs["time_zone"] == "undeclared"
         off = np.abs(alone["time_step_start"].values - timestep_start(climate))
         assert off.max() == np.timedelta64(12, "s")
 
@@ -244,31 +245,104 @@ class TestAxisFromDrivers:
         with pytest.raises(ValueError, match="Row 4 is labelled .* not produced from these"):
             _ = output.xarray
 
-    def test_climate_and_time_step_length_are_exclusive(self):
-        climate = ClimateDrivers.from_dataframe(
-            _climate_frame("2012-06-01", 4, pd.Timedelta(hours=3))
-        )
-        with pytest.raises(ValueError, match="not both"):
-            SIPNETOutput.from_dataframe(
-                _printed(climate.pandas), climate=climate, time_step_length=np.full(4, 0.125)
-            )
-
     def test_the_niwot_reference_is_on_the_climate_axis(self):
         output = niwot_reference_output().xarray
         climate = niwot_reference_climate().xarray.isel(time=slice(0, output.sizes["time"]))
         np.testing.assert_array_equal(output["time"].values, climate["time"].values)
         assert output.attrs["time_axis_source"] == TIME_AXIS_FROM_DRIVERS
 
-    def test_an_overlap_in_printed_labels_is_still_caught(self):
-        """With no drivers the check widens by SIPNET's rounding, but a real overlap remains one."""
-        climate = _climate_frame("2012-06-01", 10, pd.Timedelta(hours=3))
-        lengths = climate["time_step_length"].to_numpy().copy()
-        lengths[4] = 0.25
-        output = SIPNETOutput.from_dataframe(
-            _printed(climate, net_ecosystem_exchange=np.arange(10.0)), time_step_length=lengths
-        )
+    def test_a_bare_frame_carrying_its_own_lengths_is_checked_when_placed(self):
+        """Nothing else has checked a plain DataFrame, so building its axis does."""
+        from pysipnet.output import build_output_dataset
+
+        frame = _climate_frame("2012-06-01", 10, pd.Timedelta(hours=3))
+        frame.loc[4, "time_step_length"] = 0.25
         with pytest.raises(ValueError, match="overlap"):
-            _ = output.xarray
+            build_output_dataset(frame[["year", "day_of_year", "hour_of_day", "time_step_length"]])
+
+
+# ---------------------------------------------------------------------------
+# Validation runs once, when the data is loaded
+# ---------------------------------------------------------------------------
+
+
+def _write_unchecked_clim(frame: pd.DataFrame, path) -> None:
+    """Write a 12-column .clim without going through ClimateDrivers, which would refuse it."""
+    from pysipnet.climate import CLIMATE_COLUMNS
+
+    np.savetxt(path, frame[CLIMATE_COLUMNS].to_numpy(dtype=float), fmt="%.10g")
+
+
+@pytest.fixture
+def count_checks(monkeypatch):
+    """How many times the continuity check has run, anywhere."""
+    import pysipnet.dataset
+
+    calls = {"n": 0}
+    real = pysipnet.dataset.check_step_continuity
+
+    def counting(*args, **kwargs):
+        calls["n"] += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(pysipnet.dataset, "check_step_continuity", counting)
+    return calls
+
+
+class TestValidatesOnce:
+    def test_the_constructor_validates(self):
+        with pytest.raises(ValueError, match="labels drift"):
+            ClimateDrivers(data=_drifted_frame([2012]))
+
+    def test_the_constructor_normalizes_columns_like_from_dataframe(self):
+        frame = _climate_frame("2012-06-01", 4, pd.Timedelta(hours=3)).rename(
+            columns={"air_temperature": "tair"}
+        )
+        frame["extra"] = 1.0
+        climate = ClimateDrivers(data=frame)
+        assert "air_temperature" in climate.pandas.columns
+        assert "extra" not in climate.pandas.columns
+        with pytest.raises(ValueError, match="missing required columns"):
+            ClimateDrivers(data=frame.drop(columns=["wind_speed"]))
+
+    def test_in_memory_drivers_are_checked_once_however_they_are_used(self, count_checks):
+        climate = ClimateDrivers.from_dataframe(
+            _climate_frame("2012-06-01", 10, pd.Timedelta(hours=3))
+        )
+        assert count_checks["n"] == 1
+        _ = climate.xarray
+        output = SIPNETOutput.from_dataframe(
+            _printed(climate.pandas, net_ecosystem_exchange=np.arange(10.0)), climate=climate
+        )
+        _ = output.xarray
+        _ = climate.head(5).xarray
+        assert count_checks["n"] == 1
+
+    def test_a_file_is_checked_once_on_read(self, count_checks, tmp_path):
+        path = tmp_path / "site.clim"
+        _write_unchecked_clim(_climate_frame("2012-06-01", 10, pd.Timedelta(hours=3)), path)
+        ClimateDrivers.from_file(path, n_columns=12)
+        assert count_checks["n"] == 1
+
+    def test_a_file_backed_climate_is_checked_when_first_loaded(self, count_checks, tmp_path):
+        path = tmp_path / "site.clim"
+        _write_unchecked_clim(_climate_frame("2012-06-01", 10, pd.Timedelta(hours=3)), path)
+        climate = ClimateDrivers.from_path(path, n_columns=12)
+        assert count_checks["n"] == 0
+        _ = climate.pandas
+        _ = climate.xarray
+        climate.validate()  # already loaded: runs the checks again, on request
+        assert count_checks["n"] == 2
+
+    def test_a_file_backed_climate_defers_the_failure_until_loaded(self, tmp_path):
+        path = tmp_path / "drifted.clim"
+        _write_unchecked_clim(_drifted_frame([2012]), path)
+        climate = ClimateDrivers.from_path(path, n_columns=12)
+        assert climate.n_timesteps == 8 * 366
+        with pytest.raises(ValueError, match="labels drift"):
+            climate.validate()
+        with pytest.raises(ValueError, match="labels drift"):
+            _ = climate.pandas
 
 
 # ---------------------------------------------------------------------------
@@ -407,10 +481,8 @@ class TestRuns:
         """SIPNET runs it happily; it is the time axis that would be wrong, so that refuses."""
         path = tmp_path / "drifted.clim"
         drifted = _drifted_frame([2012])
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            ClimateDrivers(data=drifted).to_file(path)
-        climate = ClimateDrivers.from_path(path)
+        _write_unchecked_clim(drifted, path)
+        climate = ClimateDrivers.from_path(path, n_columns=12)
         result = SIPNETRunner(flags=ModelFlags.standard()).run(niwot_params, climate)
 
         assert result.provenance.success
@@ -426,6 +498,6 @@ class TestRuns:
         result = runner.run(niwot_params, climate, run_id="full")
         assert result.outputs.source_path is not None
 
-        shorter = ClimateDrivers(data=climate.pandas.head(23))
+        shorter = climate.head(23)
         with pytest.raises(ValueError, match="24 rows but its climate drivers have 23"):
             _ = SIPNETOutput.from_path(result.outputs.source_path, climate=shorter).xarray

@@ -92,8 +92,12 @@ stored columns are always the full names.
 climate = ClimateDrivers.from_file("data/my_site.clim", n_columns=14)
 climate.pandas      # DataFrame always available
 climate.xarray      # the same on an xarray `time` axis shared with outputs
-climate.validate()  # full validation runs immediately
 ```
+
+Both validate the data as it is loaded (see
+[Labels, lengths and the clock](#labels-lengths-and-the-clock)), and a
+`ClimateDrivers` is never re-checked after that: not by the runner, not by
+`climate.xarray`, not by a run's output. Treat `climate.pandas` as read-only.
 
 #### File-backed (lazy)
 
@@ -109,23 +113,33 @@ print(climate.n_timesteps)  # available without loading data
 print(climate.date_range)   # also available without loading data
 ```
 
-Accessing `climate.pandas` triggers a full load and caches the result.
+Accessing `climate.pandas` triggers a full load, validates the data, and
+caches the result.
 
-!!! warning "Chronological ordering assumption"
-    `from_path` validates the column count of the first and last rows but
-    **assumes the file is sorted chronologically**.  Call `.validate()` to
-    perform a complete check (triggers a full load):
+!!! warning "Validation is deferred along with the read"
+    `from_path` checks only the column count of the first and last rows. The
+    full validation — missing values, chronological order, labels against step
+    lengths — runs when the file is first loaded, not when the object is
+    created. The runner stages the file by copying or linking it without
+    reading it, so **a file that fails validation still runs**, and the error
+    appears later, the first time something reads the drivers: usually
+    `result.outputs.xarray` or `result.outputs["nee"]`, which build their time
+    axis from them. Until then `date_range` also assumes the file is sorted.
+
+    To find out before spending a run (or an ensemble) on it, validate up
+    front; it loads the file once, and later reads use the cached copy:
 
     ```python
     climate = ClimateDrivers.from_path("unknown_source.clim")
-    climate.validate()   # raises ValueError if not monotone
+    climate.validate()   # loads and checks now; raises ValueError on a bad file
     ```
 
 #### Labels, lengths and the clock
 
 SIPNET integrates each row over its `time_step_length` and never checks that
-the row's start plus that length is where the next row starts. `validate()`
-(which `from_dataframe` and `from_file` run) does:
+the row's start plus that length is where the next row starts. pySIPNET checks
+it whenever climate data is loaded (at construction for `from_file` and
+`from_dataframe`, on first read for `from_path`):
 
 - a row that starts more than a minute before the previous one ends is an
   **overlap**, and refused;
@@ -135,8 +149,8 @@ the row's start plus that length is where the next row starts. `validate()`
 - a row that starts more than a minute after the previous one ends is a
   **gap**, and only warned about.
 
-The same check runs when a time axis is built from drivers, which is how a
-file-backed climate that was never validated is caught.
+For a file-backed climate that first read is often the output's Dataset,
+which is where a bad `from_path` file is reported if it was never validated.
 
 A `.clim` file cannot say which clock its labels are on, so tell
 `ClimateDrivers`:
