@@ -49,11 +49,11 @@ not error on non-positive values, matching SIPNET's own tolerance.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import TextIO
 
 import pandas as pd
 
-from pysipnet.climate import CLIMATE_COLUMNS, ClimateDrivers
+from pysipnet.climate import CLIMATE_COLUMNS, ClimateDrivers, ClimLayout
 
 # ── Climate file layouts ──────────────────────────────────────────────────────
 #
@@ -63,8 +63,6 @@ from pysipnet.climate import CLIMATE_COLUMNS, ClimateDrivers
 #
 #   12 columns  year day time length tair tsoil par precip vpd vpdSoil vPress wspd
 #   14 columns  loc, the 12 above, soilWetness
-
-ClimLayout = Literal[12, 14]
 
 _N_COLS_12 = 12
 _N_COLS_14 = 14
@@ -110,18 +108,13 @@ def write_clim_file(climate: ClimateDrivers, path: Path) -> None:
         )
 
 
-def detect_clim_layout(path: Path) -> ClimLayout:
-    """Which layout a climate file is in, from the fields on its first line.
-
-    The same test SIPNET makes (``countFields`` on the first line in
-    ``readClimData``), so a file this accepts is one SIPNET reads, and a file
-    it refuses is one SIPNET would refuse.
-    """
-    with path.open() as fh:
-        first_line = fh.readline()
+def _layout_of_first_line(first_line: str, path: Path) -> ClimLayout:
+    """The layout a first line declares, refusing what SIPNET refuses."""
     n_fields = len(first_line.split())
-    if n_fields in (_N_COLS_12, _N_COLS_14):
-        return n_fields  # type: ignore[return-value]
+    if n_fields == _N_COLS_12:
+        return 12
+    if n_fields == _N_COLS_14:
+        return 14
     if n_fields == 0:
         raise ValueError(
             f"{path} is empty or starts with a blank line. SIPNET reads the layout from the "
@@ -140,33 +133,55 @@ def detect_clim_layout(path: Path) -> ClimLayout:
     )
 
 
+def _open_clim_file(path: Path) -> TextIO:
+    if not path.exists():
+        raise FileNotFoundError(f"Climate file not found: {path}")
+    return path.open()
+
+
+def detect_clim_layout(path: Path) -> ClimLayout:
+    """Which layout a climate file is in, from the fields on its first line.
+
+    The same test SIPNET makes (``countFields`` on the first line in
+    ``readClimData``), so a file this accepts is one SIPNET reads, and a file
+    it refuses is one SIPNET would refuse.
+    """
+    with _open_clim_file(path) as fh:
+        return _layout_of_first_line(fh.readline(), path)
+
+
 def peek_clim_file(path: Path) -> tuple[ClimLayout, int, tuple[int, int], tuple[int, int]]:
-    """The layout, the row count and the first and last dates, without a full read.
+    """The layout, the row count and the first and last dates, in one pass.
 
     Used by :meth:`~pysipnet.climate.ClimateDrivers.from_path` to populate
-    metadata without loading the whole file.  SIPNET climate files have no
-    header row, so every non-blank line is a data row and the count is exact.
+    metadata without parsing the whole file.  SIPNET climate files have no
+    header row and SIPNET skips interior blank lines, so every non-blank line
+    is a data row and the count is exact.
 
     Returns
     -------
     tuple
         ``(n_columns, n_rows, (start_year, start_doy), (end_year, end_doy))``.
     """
-    n_columns = detect_clim_layout(path)
-    with path.open() as fh:
-        n_rows = sum(1 for line in fh if line.strip())
-
-    first = pd.read_csv(path, sep=r"\s+", header=None, nrows=1, dtype=float)
-    last = pd.read_csv(path, sep=r"\s+", header=None, skiprows=n_rows - 1, nrows=1, dtype=float)
+    with _open_clim_file(path) as fh:
+        first = fh.readline()
+        n_columns = _layout_of_first_line(first, path)
+        n_rows, last = 1, first
+        for line in fh:
+            if line.strip():
+                n_rows += 1
+                last = line
 
     if n_columns == _N_COLS_14:
         year_col, day_col = _YEAR_COL_IN_14, _DAY_COL_IN_14
     else:
         year_col, day_col = _YEAR_COL_IN_12, _DAY_COL_IN_12
 
-    start = (int(first.iloc[0, year_col]), int(first.iloc[0, day_col]))
-    end = (int(last.iloc[0, year_col]), int(last.iloc[0, day_col]))
-    return n_columns, n_rows, start, end
+    def date(line: str) -> tuple[int, int]:
+        fields = line.split()
+        return int(float(fields[year_col])), int(float(fields[day_col]))
+
+    return n_columns, n_rows, date(first), date(last)
 
 
 def read_clim_file(path: Path, *, time_zone: str | None = None) -> ClimateDrivers:
@@ -193,21 +208,19 @@ def read_clim_file(path: Path, *, time_zone: str | None = None) -> ClimateDriver
         :meth:`~pysipnet.climate.ClimateDrivers.validate`.
     """
     n_columns = detect_clim_layout(path)
+    # pandas sizes the frame from the first line: a longer row raises, and a
+    # shorter one is padded with NaN, which validation refuses.
     raw = pd.read_csv(path, sep=r"\s+", header=None, dtype=float)
-    if raw.shape[1] != n_columns:
-        raise ValueError(
-            f"{path} starts with {n_columns} columns but has {raw.shape[1]} in a later row; "
-            "every row must have the same layout."
-        )
 
     loc = 0
     if n_columns == _N_COLS_14:
-        locations = raw.iloc[:, _LOC_COL_IN_14].unique()
+        locations = sorted(raw.iloc[:, _LOC_COL_IN_14].unique())
         if len(locations) > 1:
+            shown = ", ".join(f"{value:g}" for value in locations[:5])
             raise ValueError(
-                f"{path} names {len(locations)} locations in its site column "
-                f"({sorted(locations)[:5]}). SIPNET runs one site per file and refuses a "
-                "legacy climate file whose site identifier changes between rows."
+                f"{path} names {len(locations)} locations in its site column ({shown}). "
+                "SIPNET runs one site per file and refuses a legacy climate file whose site "
+                "identifier changes between rows."
             )
         loc = int(locations[0])
         data = raw.iloc[:, _DATA_START_IN_14:_DATA_END_IN_14].copy()

@@ -33,8 +33,6 @@ absent (e.g. CI without a build step).  Build it with ``make sipnet``.
 
 from __future__ import annotations
 
-import subprocess
-import tempfile
 import warnings
 from pathlib import Path
 
@@ -43,11 +41,10 @@ import pandas as pd
 import pytest
 
 from pysipnet.io.clim_io import read_clim_file
-from pysipnet.io.output_reader import read_output_file
 from pysipnet.io.reference import niwot_reference_files
 from pysipnet.parameters.model import ModelFlags
 from pysipnet.runner import SIPNETRunner
-from tests.helpers import params_from_sipnet_file
+from tests.helpers import params_from_sipnet_file, run_sipnet_directly
 
 _REFERENCE = niwot_reference_files()
 REFERENCE_PARAM = _REFERENCE.param
@@ -74,29 +71,11 @@ _OUT_OF_SCOPE_COLUMNS = {"microbe_c"}
 
 
 def _run_binary_directly(binary: Path, param_path: Path, clim_path: Path) -> pd.DataFrame:
-    """Run the SIPNET binary by hand on the given files and parse its output.
-
-    Mirrors a manual invocation: copies the inputs into a clean directory,
-    writes a minimal ``sipnet.in``, executes the binary with that directory as
-    the working directory, and parses ``sipnet.out`` with the standard reader.
-    """
-    with tempfile.TemporaryDirectory() as tmp:
-        workdir = Path(tmp)
-        (workdir / "sipnet.param").write_bytes(param_path.read_bytes())
-        (workdir / "sipnet.clim").write_bytes(clim_path.read_bytes())
-        (workdir / "sipnet.in").write_text("fileName = sipnet\nEVENTS = 0\n")
-
-        proc = subprocess.run(
-            [str(binary)],
-            cwd=workdir,
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-        assert proc.returncode == 0, (
-            f"Direct SIPNET invocation failed (rc={proc.returncode})\n{proc.stderr}"
-        )
-        return read_output_file(workdir / "sipnet.out")
+    """Run the SIPNET binary by hand on the given files and parse its output."""
+    run = run_sipnet_directly(binary, param_path, clim_path)
+    assert run.returncode == 0, f"Direct SIPNET invocation failed (rc={run.returncode})\n{run.log}"
+    assert run.output is not None
+    return run.output
 
 
 def _load_reference_climate():

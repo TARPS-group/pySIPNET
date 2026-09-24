@@ -276,7 +276,7 @@ class TestFileIO:
         rows = _rows(path)
         rows[2][0] = "1"
         path.write_text("\n".join(" ".join(row) for row in rows) + "\n")
-        with pytest.raises(ValueError, match="2 locations"):
+        with pytest.raises(ValueError, match=r"2 locations in its site column \(0, 1\)"):
             ClimateDrivers.from_file(path)
 
     def test_only_the_two_sipnet_layouts_can_be_chosen(self):
@@ -365,6 +365,33 @@ class TestFromPath:
         assert ref.n_timesteps == 3
         _ = ref.pandas
         assert ref.loc == (9 if n_columns == 14 else 0)
+
+    def test_interior_blank_lines_do_not_move_the_last_row(self, tmp_path):
+        """SIPNET skips them, so the metadata must still describe the last real row."""
+        path = tmp_path / "gappy.clim"
+        ClimateDrivers.from_dataframe(_make_df(n_days=4, start_doy=10)).to_file(path)
+        lines = path.read_text().splitlines()
+        path.write_text("\n".join([lines[0], "", lines[1], "", "", *lines[2:]]) + "\n\n")
+        ref = ClimateDrivers.from_path(path)
+        assert ref.n_timesteps == 4
+        assert ref.date_range == ((2020, 10), (2020, 13))
+
+    def test_a_str_path_is_accepted(self, tmp_path):
+        path = tmp_path / "test.clim"
+        ClimateDrivers.from_dataframe(_make_df(n_days=3)).to_file(path)
+        ref = ClimateDrivers(source_path=str(path))
+        assert ref.source_path == path
+        assert ref.n_timesteps == 3
+
+    def test_loading_refreshes_what_was_peeked(self, tmp_path):
+        """A file replaced between construction and load is described as it is read."""
+        path = tmp_path / "test.clim"
+        ClimateDrivers.from_dataframe(_make_df(n_days=3)).to_file(path)
+        ref = ClimateDrivers.from_path(path)
+        assert ref.n_columns == 12
+        ClimateDrivers.from_dataframe(_make_df(n_days=3), n_columns=14, loc=5).to_file(path)
+        _ = ref.pandas
+        assert (ref.n_columns, ref.loc) == (14, 5)
 
     def test_a_file_backed_layout_cannot_be_stated(self, tmp_path):
         path = tmp_path / "test.clim"

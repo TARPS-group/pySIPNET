@@ -6,12 +6,17 @@ imported as plain functions from any test module.
 
 from __future__ import annotations
 
+import subprocess
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pysipnet.version import SIPNET_NUMERIC_VERSION, SIPNET_PINNED_TAG
 
 if TYPE_CHECKING:
+    import pandas as pd
+
     from pysipnet.climate import ClimateDrivers
     from pysipnet.parameters.model import SIPNETParameters
     from pysipnet.runner import SIPNETRunError
@@ -122,3 +127,36 @@ def params_from_sipnet_file(path: Path):
             groups[group][field] = flat[sipnet_name]
     kwargs = {group: cls(**groups[group]) for group, cls in group_classes.items()}
     return SIPNETParameters(**kwargs)
+
+
+@dataclass(frozen=True)
+class BareRun:
+    """What running the SIPNET binary by hand produced."""
+
+    returncode: int
+    log: str
+    """stdout and stderr together; SIPNET writes its own errors to stdout."""
+    output: pd.DataFrame | None
+    """The parsed ``sipnet.out``, or ``None`` when the run failed."""
+
+
+def run_sipnet_directly(binary: Path, param_path: Path, clim_path: Path) -> BareRun:
+    """Run the bare SIPNET binary on these inputs, as a user would by hand.
+
+    Copies the inputs into a clean directory, writes a minimal ``sipnet.in``,
+    runs the binary there and parses ``sipnet.out`` with the standard reader.
+    No pySIPNET writer or runner is involved, which is the point: tests compare
+    what the wrapper does with what this does.
+    """
+    from pysipnet.io.output_reader import read_output_file
+
+    with tempfile.TemporaryDirectory() as tmp:
+        workdir = Path(tmp)
+        (workdir / "sipnet.param").write_bytes(param_path.read_bytes())
+        (workdir / "sipnet.clim").write_bytes(clim_path.read_bytes())
+        (workdir / "sipnet.in").write_text("fileName = sipnet\nEVENTS = 0\n")
+        proc = subprocess.run(
+            [str(binary)], cwd=workdir, capture_output=True, text=True, timeout=300
+        )
+        output = read_output_file(workdir / "sipnet.out") if proc.returncode == 0 else None
+        return BareRun(returncode=proc.returncode, log=proc.stdout + proc.stderr, output=output)

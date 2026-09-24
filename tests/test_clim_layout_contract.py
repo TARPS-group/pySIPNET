@@ -14,20 +14,17 @@ the legacy 14-column layout, so no pySIPNET writer is involved in making them.
 
 from __future__ import annotations
 
-import subprocess
-import tempfile
 import warnings
-from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from pysipnet.io.clim_io import detect_clim_layout, read_clim_file
-from pysipnet.io.output_reader import read_output_file
 from pysipnet.io.reference import niwot_reference_files
 from pysipnet.parameters.model import ModelFlags
 from pysipnet.runner import SIPNETRunner
+from tests.helpers import BareRun, run_sipnet_directly
 
 _SIPNET_BINARY = SIPNETRunner(flags=ModelFlags.standard()).binary_path
 
@@ -63,26 +60,8 @@ def _variants(tmp_path: Path) -> dict[str, Path]:
     }
 
 
-@dataclass(frozen=True)
-class _Run:
-    accepted: bool
-    log: str
-    output: pd.DataFrame | None
-
-
-def _run_sipnet(clim: Path) -> _Run:
-    """Run the bare binary on *clim*; SIPNET logs its errors to stdout."""
-    with tempfile.TemporaryDirectory() as tmp:
-        workdir = Path(tmp)
-        (workdir / "sipnet.param").write_bytes(niwot_reference_files().param.read_bytes())
-        (workdir / "sipnet.clim").write_bytes(clim.read_bytes())
-        (workdir / "sipnet.in").write_text("fileName = sipnet\nEVENTS = 0\n")
-        proc = subprocess.run(
-            [str(_SIPNET_BINARY)], cwd=workdir, capture_output=True, text=True, timeout=120
-        )
-        accepted = proc.returncode == 0
-        output = read_output_file(workdir / "sipnet.out") if accepted else None
-        return _Run(accepted=accepted, log=proc.stdout + proc.stderr, output=output)
+def _run_sipnet(clim: Path) -> BareRun:
+    return run_sipnet_directly(_SIPNET_BINARY, niwot_reference_files().param, clim)
 
 
 def _pysipnet_reads(clim: Path) -> bool:
@@ -98,7 +77,7 @@ def _pysipnet_reads(clim: Path) -> bool:
 @pytest.mark.parametrize("variant", ["12", "13", "14", "11", "two sites"])
 def test_pysipnet_accepts_exactly_what_sipnet_accepts(tmp_path, variant):
     clim = _variants(tmp_path)[variant]
-    sipnet_accepts = _run_sipnet(clim).accepted
+    sipnet_accepts = _run_sipnet(clim).returncode == 0
     assert _pysipnet_reads(clim) == sipnet_accepts
     assert sipnet_accepts == (variant in {"12", "14"})
 

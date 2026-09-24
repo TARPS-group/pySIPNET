@@ -111,6 +111,9 @@ if TYPE_CHECKING:
 # they are written/read by the IO layer as padding, not stored in the DataFrame.
 CLIMATE_COLUMNS: list[str] = list(CLIMATE_COLUMN_NAMES)
 
+#: The two ``.clim`` layouts SIPNET reads, named by column count.
+ClimLayout = Literal[12, 14]
+
 _UTC_OFFSET = re.compile(r"UTC(?:([+-])(\d{2}):(\d{2}))?")
 
 
@@ -200,8 +203,8 @@ class ClimateDrivers:
         self,
         *,
         data: pd.DataFrame | None = None,
-        source_path: Path | None = None,
-        n_columns: Literal[12, 14] | None = None,
+        source_path: str | Path | None = None,
+        n_columns: ClimLayout | None = None,
         loc: int = 0,
         time_zone: str | None = None,
     ) -> None:
@@ -209,14 +212,14 @@ class ClimateDrivers:
             raise ValueError(
                 "Exactly one of 'data' or 'source_path' must be provided, not both or neither."
             )
-        self.source_path: Path | None = source_path
+        self.source_path: Path | None = None if source_path is None else Path(source_path)
         self.loc: int = loc
         self.time_zone: str | None = normalize_time_zone(time_zone)
         self._n_timesteps: int | None = None
         self._date_range: tuple[tuple[int, int], tuple[int, int]] | None = None
         self._data: pd.DataFrame | None = None
 
-        if source_path is not None:
+        if self.source_path is not None:
             from pysipnet.io.clim_io import peek_clim_file
 
             if n_columns is not None:
@@ -225,10 +228,8 @@ class ClimateDrivers:
                     "pass it. The runner stages the file unchanged, so its own layout is the "
                     "only one it can have."
                 )
-            if not source_path.exists():
-                raise FileNotFoundError(f"Climate file not found: {source_path}")
-            layout, n_rows, start, end = peek_clim_file(source_path)
-            self.n_columns: Literal[12, 14] = layout
+            layout, n_rows, start, end = peek_clim_file(self.source_path)
+            self.n_columns: ClimLayout = layout
             self._n_timesteps = n_rows
             self._date_range = (start, end)
         else:
@@ -267,7 +268,7 @@ class ClimateDrivers:
     def from_dataframe(
         cls,
         df: pd.DataFrame,
-        n_columns: Literal[12, 14] = 12,
+        n_columns: ClimLayout = 12,
         loc: int = 0,
         *,
         time_zone: str | None = None,
@@ -341,6 +342,7 @@ class ClimateDrivers:
                     "This ClimateDrivers has neither loaded data nor a file to read from."
                 )
             loaded = read_clim_file(self.source_path, time_zone=self.time_zone)
+            self.n_columns = loaded.n_columns
             self.loc = loaded.loc
             self._data = loaded.pandas
         return self._data
