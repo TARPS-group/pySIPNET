@@ -61,6 +61,7 @@ allowed to change what the first one's lazily-read result answers with; pass
 
 from __future__ import annotations
 
+import functools
 import re
 import subprocess
 import tempfile
@@ -146,19 +147,17 @@ class SIPNETRunError(RuntimeError):
     def __reduce__(self) -> tuple[Any, ...]:
         # BaseException rebuilds from cls(*self.args), and args holds only the
         # message, so the keyword-only arguments would be missing on unpickle.
-        fields = {
-            "returncode": self.returncode,
-            "stdout": self.stdout,
-            "stderr": self.stderr,
-            "workdir": self.workdir,
-        }
-        return (_rebuild_sipnet_run_error, (type(self), self.args[0], fields), self.__dict__)
-
-
-def _rebuild_sipnet_run_error(
-    cls: type[SIPNETRunError], message: str, fields: dict[str, Any]
-) -> SIPNETRunError:
-    return cls(message, **fields)
+        # A partial of the class keeps the pickle free of private names. args
+        # travels in the state, which BaseException.__setstate__ assigns back,
+        # because a caller may have replaced it with other than one message.
+        rebuild = functools.partial(
+            type(self),
+            returncode=self.returncode,
+            stdout=self.stdout,
+            stderr=self.stderr,
+            workdir=self.workdir,
+        )
+        return (rebuild, (str(self),), {**self.__dict__, "args": self.args})
 
 
 _SAFE_RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")

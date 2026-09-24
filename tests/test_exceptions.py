@@ -10,6 +10,7 @@ pickles without complaint and then fails to unpickle — and in a
 from __future__ import annotations
 
 import copy
+import functools
 import importlib
 import multiprocessing
 import pickle
@@ -24,17 +25,12 @@ import pysipnet
 from pysipnet.build import BinaryVersionError, BuildError, DownloadError
 from pysipnet.io.output_reader import UnknownOutputColumnWarning
 from pysipnet.runner import SIPNETRunError
+from tests.helpers import WORKER_TIMEOUT_SECONDS, make_run_error, raise_run_error, return_value
 
 _RUN_ERROR_FIELDS = ("returncode", "stdout", "stderr", "workdir")
 
 EXAMPLE_EXCEPTIONS: dict[type[BaseException], Callable[[], BaseException]] = {
-    SIPNETRunError: lambda: SIPNETRunError(
-        "SIPNET exited with code 1",
-        returncode=1,
-        stdout="reading climate\n",
-        stderr="Error: no climate data\n",
-        workdir=Path("/scratch/run-7"),
-    ),
+    SIPNETRunError: make_run_error,
     BinaryVersionError: lambda: BinaryVersionError("wrong tag"),
     DownloadError: lambda: DownloadError("checksum mismatch"),
     BuildError: lambda: BuildError("make failed"),
@@ -47,30 +43,6 @@ OPTIONAL_DEPENDENCY_MODULES = {"pysipnet.ensemble"}
 
 class _SubclassedRunError(SIPNETRunError):
     pass
-
-
-def _make_run_error(cls: type[SIPNETRunError] = SIPNETRunError) -> SIPNETRunError:
-    return cls(
-        "SIPNET exited with code 3",
-        returncode=3,
-        stdout="out",
-        stderr="err",
-        workdir=Path("/scratch/run-3"),
-    )
-
-
-def _raise_run_error(returncode: int) -> None:
-    raise SIPNETRunError(
-        f"SIPNET exited with code {returncode}",
-        returncode=returncode,
-        stdout="out",
-        stderr="err",
-        workdir=Path(f"/scratch/run-{returncode}"),
-    )
-
-
-def _return_value(value: int) -> int:
-    return value
 
 
 def _assert_same_run_error(restored: BaseException, original: SIPNETRunError) -> None:
@@ -105,25 +77,40 @@ def _pysipnet_exception_classes() -> set[type[BaseException]]:
 class TestRunErrorRoundTrip:
     @pytest.mark.parametrize("protocol", range(pickle.HIGHEST_PROTOCOL + 1))
     def test_pickle_keeps_type_message_and_attributes(self, protocol):
-        err = _make_run_error()
+        err = make_run_error()
         _assert_same_run_error(pickle.loads(pickle.dumps(err, protocol=protocol)), err)
 
     @pytest.mark.parametrize("copier", [copy.copy, copy.deepcopy])
     def test_copy_keeps_type_message_and_attributes(self, copier):
-        err = _make_run_error()
+        err = make_run_error()
         _assert_same_run_error(copier(err), err)
 
     def test_notes_and_extra_attributes_survive(self):
-        err = _make_run_error()
+        err = make_run_error()
         err.add_note("member 12 of the ensemble")
-        err.member = 12  # type: ignore[attr-defined]
+        err.member = 12
         restored = pickle.loads(pickle.dumps(err))
         assert restored.__notes__ == ["member 12 of the ensemble"]
         assert restored.member == 12
 
     def test_a_subclass_comes_back_as_itself(self):
-        err = _make_run_error(_SubclassedRunError)
+        err = make_run_error(cls=_SubclassedRunError)
         _assert_same_run_error(pickle.loads(pickle.dumps(err)), err)
+
+    @pytest.mark.parametrize(
+        "args", [(), ("SIPNET exited with code 3", "member 12")], ids=["empty", "extra"]
+    )
+    def test_rewritten_args_survive(self, args):
+        """Callers re-raising with added context sometimes replace ``args``."""
+        err = make_run_error()
+        err.args = args
+        _assert_same_run_error(pickle.loads(pickle.dumps(err)), err)
+
+    def test_the_pickle_names_only_the_public_class(self):
+        """A pickle saved to disk must not depend on a private helper's name."""
+        rebuild = make_run_error(cls=_SubclassedRunError).__reduce__()[0]
+        assert isinstance(rebuild, functools.partial)
+        assert rebuild.func is _SubclassedRunError
 
 
 class TestAcrossAProcessBoundary:
@@ -132,15 +119,10 @@ class TestAcrossAProcessBoundary:
     def test_error_raised_in_a_worker_arrives_intact(self):
         spawn = multiprocessing.get_context("spawn")
         with ProcessPoolExecutor(max_workers=1, mp_context=spawn) as pool:
-            failed = pool.submit(_raise_run_error, 4).exception()
-            later = pool.submit(_return_value, 5).result()
+            failed = pool.submit(raise_run_error, 4).exception(timeout=WORKER_TIMEOUT_SECONDS)
+            later = pool.submit(return_value, 5).result(timeout=WORKER_TIMEOUT_SECONDS)
 
-        assert isinstance(failed, SIPNETRunError)
-        assert failed.returncode == 4
-        assert failed.stdout == "out"
-        assert failed.stderr == "err"
-        assert failed.workdir == Path("/scratch/run-4")
-        assert str(failed) == "SIPNET exited with code 4"
+        _assert_same_run_error(failed, make_run_error(4))
         assert later == 5, "the failed run broke the pool for the next one"
 
 

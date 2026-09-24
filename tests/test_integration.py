@@ -59,14 +59,6 @@ def _make_climate(n_days: int = 30, year: int = 2010, start_doy: int = 150):
     return ClimateDrivers.from_dataframe(df, n_columns=14)
 
 
-def _run_with_no_climate_rows(params) -> None:
-    """Run SIPNET on a climate it refuses. Module-level so a worker can import it."""
-    from pysipnet.climate import ClimateDrivers
-
-    climate = ClimateDrivers.from_dataframe(_make_climate().pandas.head(0).copy())
-    SIPNETRunner(flags=ModelFlags.standard()).run(params, climate)
-
-
 # ---------------------------------------------------------------------------
 # Core run tests
 # ---------------------------------------------------------------------------
@@ -852,9 +844,9 @@ class TestFailedRunsRaise:
     @pytest.fixture
     def broken_climate(self):
         """A climate frame SIPNET refuses: no rows to read."""
-        from pysipnet.climate import ClimateDrivers
+        from tests.helpers import empty_climate
 
-        return ClimateDrivers.from_dataframe(_make_climate().pandas.head(0).copy())
+        return empty_climate()
 
     def test_a_failed_run_raises(self, minimal_params, broken_climate):
         from pysipnet.runner import SIPNETRunError
@@ -879,10 +871,12 @@ class TestFailedRunsRaise:
         from concurrent.futures import ProcessPoolExecutor
 
         from pysipnet.runner import SIPNETRunError
+        from tests.helpers import WORKER_TIMEOUT_SECONDS, run_with_no_climate_rows
 
         spawn = multiprocessing.get_context("spawn")
         with ProcessPoolExecutor(max_workers=1, mp_context=spawn) as pool:
-            err = pool.submit(_run_with_no_climate_rows, minimal_params).exception()
+            future = pool.submit(run_with_no_climate_rows, minimal_params)
+            err = future.exception(timeout=WORKER_TIMEOUT_SECONDS)
 
         assert isinstance(err, SIPNETRunError)
         assert err.returncode != 0
