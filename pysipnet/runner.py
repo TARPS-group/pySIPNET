@@ -67,7 +67,7 @@ import tempfile
 import uuid
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from pysipnet.build import (
     BINARY_NAME,
@@ -121,6 +121,11 @@ class SIPNETRunError(RuntimeError):
     Carries everything needed to diagnose the run without re-running it. The
     binary writes the actual reason to stdout or stderr — a missing parameter,
     an unreadable climate file — so those are the first place to look.
+
+    Survives pickling and :mod:`copy`, so an error raised in a worker process
+    reaches the driver as a ``SIPNETRunError`` with every attribute intact. A
+    subclass that changes the constructor's signature must define its own
+    :meth:`__reduce__`.
     """
 
     def __init__(
@@ -137,6 +142,23 @@ class SIPNETRunError(RuntimeError):
         self.stdout = stdout
         self.stderr = stderr
         self.workdir = workdir
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        # BaseException rebuilds from cls(*self.args), and args holds only the
+        # message, so the keyword-only arguments would be missing on unpickle.
+        fields = {
+            "returncode": self.returncode,
+            "stdout": self.stdout,
+            "stderr": self.stderr,
+            "workdir": self.workdir,
+        }
+        return (_rebuild_sipnet_run_error, (type(self), self.args[0], fields), self.__dict__)
+
+
+def _rebuild_sipnet_run_error(
+    cls: type[SIPNETRunError], message: str, fields: dict[str, Any]
+) -> SIPNETRunError:
+    return cls(message, **fields)
 
 
 _SAFE_RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")

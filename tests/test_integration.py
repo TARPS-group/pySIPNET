@@ -59,6 +59,14 @@ def _make_climate(n_days: int = 30, year: int = 2010, start_doy: int = 150):
     return ClimateDrivers.from_dataframe(df, n_columns=14)
 
 
+def _run_with_no_climate_rows(params) -> None:
+    """Run SIPNET on a climate it refuses. Module-level so a worker can import it."""
+    from pysipnet.climate import ClimateDrivers
+
+    climate = ClimateDrivers.from_dataframe(_make_climate().pandas.head(0).copy())
+    SIPNETRunner(flags=ModelFlags.standard()).run(params, climate)
+
+
 # ---------------------------------------------------------------------------
 # Core run tests
 # ---------------------------------------------------------------------------
@@ -864,6 +872,23 @@ class TestFailedRunsRaise:
         combined = exc.value.stdout + exc.value.stderr
         assert combined.strip(), "the error carried neither stdout nor stderr"
         assert "climate" in str(exc.value).lower()
+
+    def test_the_error_crosses_a_process_boundary(self, minimal_params):
+        """An ensemble worker's failure reaches the driver as the real error."""
+        import multiprocessing
+        from concurrent.futures import ProcessPoolExecutor
+
+        from pysipnet.runner import SIPNETRunError
+
+        spawn = multiprocessing.get_context("spawn")
+        with ProcessPoolExecutor(max_workers=1, mp_context=spawn) as pool:
+            err = pool.submit(_run_with_no_climate_rows, minimal_params).exception()
+
+        assert isinstance(err, SIPNETRunError)
+        assert err.returncode != 0
+        assert (err.stdout + err.stderr).strip()
+        assert isinstance(err.workdir, Path)
+        assert "climate" in str(err).lower()
 
     def test_check_false_returns_a_result_instead(self, minimal_params, broken_climate):
         """Opt-out for ensembles, where one failure should not stop the rest."""
