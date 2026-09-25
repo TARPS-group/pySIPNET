@@ -690,8 +690,10 @@ cells are shared by the whole Dataset, so the runs must share one time axis:
 `time_step_start` and `time_step_length` have to be on `time` alone. If you
 concatenate runs over different periods, xarray gives those coordinates a
 `member` or `site` dimension, and `resample` refuses the stack; resample each
-run separately. Selecting one run out of such a stack leaves rows of padding
-whose start and length are `NaT`, and `resample` drops them.
+run separately. Selecting one run out of such a stack leaves rows of padding,
+whose start and length are `NaT` and whose values are all missing, and
+`resample` drops them. A row that has a value but no start or length is
+refused instead, since there is no telling which cell it belongs to.
 
 [`check_resampling_method`][pysipnet.resample.check_resampling_method] is the
 check `resample` applies to each variable, for code that combines steps some

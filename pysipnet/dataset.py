@@ -152,7 +152,7 @@ TIME_AXIS_FROM_PRINTED_LABELS = (
     "row labels printed in the SIPNET output, which rounds hour_of_day to 0.01 h"
 )
 
-_NS_PER_DAY = 86_400_000_000_000
+NS_PER_DAY = 86_400_000_000_000
 _NS_PER_HOUR = 3_600_000_000_000
 
 # How far a step's declared end may miss the next row's start and still be
@@ -250,12 +250,12 @@ def sipnet_row_labels(start: np.ndarray) -> dict[str, np.ndarray]:
 def days_to_timedelta(days: np.ndarray) -> np.ndarray:
     """Lengths in days as ``timedelta64[ns]``, rounded to the nearest nanosecond."""
     values = _finite(np.asarray(days, dtype=float), "time_step_length")
-    return np.rint(values * _NS_PER_DAY).astype("int64").view("timedelta64[ns]")
+    return np.rint(values * NS_PER_DAY).astype("int64").view("timedelta64[ns]")
 
 
 def _gaps_in_days(start: np.ndarray) -> np.ndarray:
     """Differences between consecutive starts, refusing any that do not move forward."""
-    gaps = np.diff(start).astype("timedelta64[ns]").astype("int64") / _NS_PER_DAY
+    gaps = np.diff(start).astype("timedelta64[ns]").astype("int64") / NS_PER_DAY
     if (gaps <= 0).any():
         row = int(np.argmax(gaps <= 0))
         raise ValueError(

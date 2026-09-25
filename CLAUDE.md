@@ -631,13 +631,19 @@ not on `time` (`lon`/`lat` on `site`, a scalar `member`) is carried. The one
 set of cells is shared by the whole Dataset, so `time_step_start` and
 `time_step_length` must be on `time` alone; xarray gives them a `site`
 dimension when runs on different axes are concatenated, and that is refused.
-Selecting one run from such a stack leaves `NaT` padding rows, which are
-dropped rather than resampled (left in, a `NaT` length casts to the `int64`
-minimum). The combined `time_step_length` is summed as `int64` nanoseconds in
+Selecting one run from such a stack leaves padding rows (`NaT` interval, every
+value missing), which are dropped rather than resampled (left in, a `NaT`
+length casts to the `int64` minimum). A row with a value but a `NaT` interval
+is not padding and is refused, since dropping it would lose the value
+silently. The combined `time_step_length` is summed as `int64` nanoseconds in
 NumPy, not by xarray: xarray casts to float64 to fill empty cells, which is
-exact only to about 104 days. A zero, negative or unparseable `freq` is
-refused, and so is one whose every cell is shorter than the shortest step,
-which would return the input under a false `resampling_frequency`.
+exact only to about 104 days. Which cell each step falls in is computed for
+that sum with `searchsorted` and checked against xarray's own per-cell counts,
+so the lengths cannot describe different steps from the values. A zero,
+negative or unparseable `freq` is refused (with pandas' reason, which is where
+"`M` is now `ME`" lives), and so is one whose every cell is shorter than the
+shortest step, within `STEP_TOLERANCE`, which would return the input under a
+false `resampling_frequency`.
 
 Step lengths come from the climate's `time_step_length`
 column; when the output has no climate attached they are **inferred** from

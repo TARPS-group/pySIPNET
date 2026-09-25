@@ -378,6 +378,58 @@ def test_a_run_selected_from_such_a_stack_drops_its_padding(niwot):
     xr.testing.assert_identical(resample(padded, "1D", how="sum"), alone)
 
 
+def test_padding_in_mid_record_is_dropped():
+    # A truncated record ends at its declared end, not snapped to the next start
+    # as the full record's step is, so the union axis gains a timestamp inside
+    # the full record, where the full record's row is padding.
+    drivers = niwot_reference_climate()
+    full = drivers.xarray[["precipitation"]]
+    short = drivers.head(40).xarray[["precipitation"]]
+    assert short["time"].values[-1] not in full["time"].values
+    stack = xr.concat(
+        [full, short], dim="site", coords="different", compat="equals", join="outer"
+    ).assign_coords(site=SITES)
+    padded_full = stack.sel(site=SITES[0]).drop_vars("site")
+    assert np.isnat(padded_full["time_step_length"].values).sum() == 1
+    for run, padded in ((full, padded_full), (short, stack.sel(site=SITES[1]).drop_vars("site"))):
+        xr.testing.assert_identical(
+            resample(padded, "1D", how="sum"), resample(run, "1D", how="sum")
+        )
+
+
+def test_a_value_on_a_row_with_no_interval_is_refused_not_dropped(niwot):
+    ds = niwot[2][["net_ecosystem_exchange"]]
+    lengths = ds["time_step_length"].values.copy()
+    lengths[10] = np.timedelta64("NaT")
+    ds = ds.assign_coords(time_step_length=("time", lengths, ds["time_step_length"].attrs))
+    with pytest.raises(ValueError, match="net_ecosystem_exchange.*1 rows.*not padding"):
+        resample(ds, "MS", how="sum")
+
+
+def test_a_transposed_time_bounds_is_accepted(niwot):
+    ds = niwot[2]
+    assert ds.transpose()["time_bounds"].dims == ("bounds", "time")
+    how = {"net_ecosystem_exchange": "sum"}
+    xr.testing.assert_identical(
+        resample(ds.transpose(), "1D", how=how), resample(ds, "1D", how=how)
+    )
+
+
+def test_time_coordinates_of_the_wrong_dtype_are_refused(niwot):
+    ds = niwot[2][["net_ecosystem_exchange"]]
+    days = ds["time_step_length"].values.astype("int64") / 86_400e9
+    in_days = ds.assign_coords(time_step_length=("time", days))
+    with pytest.raises(ValueError, match="'time_step_length': 'float64'.*days_to_timedelta"):
+        resample(in_days, "1D", how="sum")
+
+
+def test_an_invalid_kind_attribute_is_named(niwot):
+    ds = niwot[2][["net_ecosystem_exchange"]].copy()
+    ds["net_ecosystem_exchange"].attrs["kind"] = "flux"
+    with pytest.raises(ValueError, match="'net_ecosystem_exchange' has kind 'flux', which is not"):
+        resample(ds, "1D", how="sum")
+
+
 def test_a_variable_without_time_is_refused(niwot):
     ds = niwot[2][["net_ecosystem_exchange"]].assign(
         static=("site", [1.0], {"kind": "timestep_total"})
@@ -432,7 +484,7 @@ def test_combined_lengths_are_the_sum_over_each_cell(climate, freq):
         (kind, method)
         for kind, valid in RESAMPLING_METHODS_FOR_KIND.items()
         for method in ("sum", "mean", "last")
-        if method not in valid and kind is not VariableKind.TIMESTEP_START_COORDINATE
+        if method not in valid
     ],
 )
 def test_the_public_check_raises_what_resample_raises(kind, method):
@@ -443,7 +495,8 @@ def test_the_public_check_raises_what_resample_raises(kind, method):
     with pytest.raises(ValueError) as from_check:
         check_resampling_method(kind, method, name="flux")
     assert str(from_check.value) == str(from_resample.value)
-    assert "Valid for this kind" in str(from_check.value)
+    expected = "Nothing is valid" if not RESAMPLING_METHODS_FOR_KIND[kind] else "Valid for this"
+    assert expected in str(from_check.value)
 
 
 def test_the_public_check_passes_valid_pairs_and_refuses_unknown_names():
@@ -469,6 +522,15 @@ def test_upsampling_is_refused(niwot):
         resample(niwot[2][["net_ecosystem_exchange"]], "1h", how="sum")
 
 
+def test_steps_a_hair_longer_than_the_frequency_are_not_upsampled():
+    # 0.0416667 days is 1 h 2.88 ms, within the time axis's own tolerance.
+    step = np.timedelta64(round(0.0416667 * 86_400e9), "ns")
+    hourly = _record(step, 48, "2000-01-01")
+    resampled = resample(hourly, "1h", how="sum")
+    assert resampled.sizes["time"] == 48
+    np.testing.assert_array_equal(resampled["flux"].values, hourly["flux"].values)
+
+
 def test_a_frequency_between_unequal_steps_is_allowed(niwot):
     # Niwot's steps are about 7 and 17 hours; 12-hour cells hold at most one, but some do.
     resample(niwot[2][["net_ecosystem_exchange"]], "12h", how="sum")
@@ -480,6 +542,6 @@ def test_a_period_that_is_not_positive_is_refused(niwot, freq):
         resample(niwot[2][["net_ecosystem_exchange"]], freq, how="sum")
 
 
-def test_a_frequency_that_is_not_one_is_refused(niwot):
-    with pytest.raises(ValueError, match="pandas offset alias"):
+def test_a_frequency_that_is_not_one_is_refused_with_pandas_reason(niwot):
+    with pytest.raises(ValueError, match="pandas offset alias.*'bogus': Invalid frequency"):
         resample(niwot[2][["net_ecosystem_exchange"]], "bogus", how="sum")
