@@ -2,20 +2,19 @@
 
 xarray drops attributes in arithmetic, so ``nee / days`` comes back with no
 ``units`` and :func:`~pysipnet.units.convert_dataarray_units` has nothing to
-read.  The functions here do the arithmetic an observation operator needs and
-write the ``units``, ``constituent`` and ``kind`` that are true of the result:
+read.  The functions here do the arithmetic and write the ``units``,
+``constituent`` and ``kind`` that are true of the result:
 
-- :func:`multiply_with_units` and :func:`divide_with_units`, which combine
-  units, constituent and kind by the rules below;
+- :func:`multiply_with_units` and :func:`divide_with_units`;
 - :func:`add_with_units` and :func:`subtract_with_units`, which require the
   operands to agree;
 - :func:`step_length`, a pySIPNET array's ``time_step_length`` as a float
   array with units, so that a per-step total divides into a rate.
 
-Two uses motivate them.  Leaf area index is ``leaf_carbon`` over the
+Leaf area index, for example, is ``leaf_carbon`` over the
 ``leaf_carbon_per_area`` parameter, both ``g m-2`` of C, which is a
-dimensionless pool.  An NEE rate is ``net_ecosystem_exchange`` over the step
-length in days, ``g m-2 d-1`` of C, which converts to ``umol m-2 s-1`` of CO2::
+dimensionless pool; and ``net_ecosystem_exchange`` over the step length in days
+is a rate in ``g m-2 d-1`` of C, which converts to ``umol m-2 s-1`` of CO2::
 
     rate = divide_with_units(nee, step_length(nee))
     convert_dataarray_units(rate, to_units="umol m-2 s-1", to_constituent="CO2")
@@ -25,10 +24,9 @@ Operands
 An operand is a ``DataArray`` with a ``units`` attribute (and optionally
 ``constituent`` and ``kind``), or a plain real number, which is dimensionless
 with no constituent and no kind.  At least one operand must be a
-``DataArray``.  A parameter array carries ``units`` and ``constituent`` and no
-``kind``; a model variable carries all three.  An operand in an offset unit
-(``degC``) is refused, since a temperature on an offset scale does not
-multiply; the one exception is the difference of two, which is in ``K``.
+``DataArray``.  A parameter the caller labels from its
+:data:`~pysipnet.parameters.model.PARAMETER_SPECS` entry carries ``units`` and
+``constituent`` and no ``kind``; a model variable carries all three.
 
 Values
 ------
@@ -40,26 +38,14 @@ model variable's ``time_step_start`` and ``time_step_length`` and can still be
 passed to :func:`pysipnet.resample.resample`; a coordinate both operands carry
 with different values, which xarray would silently drop, is refused.
 
-Units
------
-Combined symbol by symbol, adding exponents for a product and subtracting them
-for a quotient.  A symbol whose exponent reaches zero drops out, and an empty
-result is ``"1"``.  Prefixes are not merged: ``cm`` over ``m`` is
-``"cm m-1"``, which :func:`~pysipnet.units.convert_dataarray_units` converts to
-``"1"`` on request.  The operand that carries the constituent leads the string,
-because a constituent qualifies the first unit (see :mod:`pysipnet.units`):
-``per_day * nee`` is ``"g m-2 d-1"``, not ``"d-1 g m-2"``.  For the same reason
-that first unit must survive unchanged: ``g m-2`` of C divided by ``g`` would
-leave ``m-2`` of C, which names no quantity of carbon, and is refused.
-
-Constituent
------------
-In a product, at most one operand names one and the result takes it.  In a
-quotient, the numerator's is kept when the denominator has none, and cancels
-when both name the same one: leaf carbon over leaf carbon per area is a ratio,
-not carbon.  A denominator naming a constituent the numerator lacks is
-refused, and so are two different constituents; convert one first.
-:func:`add_with_units` and :func:`subtract_with_units` require the same one.
+Units and constituent
+---------------------
+As :func:`~pysipnet.units.product_units`,
+:func:`~pysipnet.units.quotient_units`, :func:`~pysipnet.units.sum_units`
+and :func:`~pysipnet.units.difference_units` give them, by the rules under
+"Combination" in :mod:`pysipnet.units`; a refusal there is raised here,
+prefixed by the operation.  ``per_day * nee`` is ``"g m-2 d-1"`` of C, the
+constituent's operand leading.
 
 Kind
 ----
@@ -81,7 +67,7 @@ Result
 ``units``; ``constituent`` when there is one; and when there is a kind,
 ``kind`` with the ``time_reference`` and ``cell_methods`` pySIPNET gives it.
 ``sign_convention`` is kept when it is still true: in a product or quotient
-when the other operand has no values below or at zero, in a sum when both
+when the other operand has no values at or below zero, in a sum when both
 operands state the same one, and never in a difference.  ``long_name`` and
 ``derivation`` name the operation (``"net_ecosystem_exchange /
 time_step_length"``), with an unnamed operand given by its own derivation in
@@ -90,7 +76,7 @@ not ``description``, ``sipnet_name``, ``output_decimals`` or SIPNET's
 internal-conversion attributes.  The result's name is ``None``, and the
 operands are not modified.
 
-Refusals raise ``ValueError`` naming the operands and what would work, or
+Refusals raise ``ValueError`` naming the operation and what would work, or
 ``TypeError`` for an operand that is neither a ``DataArray`` nor a real
 number.  The algebra is deliberately not closed: a derivation the rules do not
 cover sets the attributes itself.
@@ -98,13 +84,21 @@ cover sets the attributes itself.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
 import numpy as np
 import xarray as xr
 
-from pysipnet.units import _is_offset, unit_registry, validate_units
+from pysipnet.units import (
+    difference_units,
+    product_units,
+    quotient_units,
+    read_dataarray_units,
+    sum_units,
+    unit_registry,
+)
 from pysipnet.variables import (
     CELL_METHODS_FOR_KIND,
     KIND_AFTER_TIME_POWER,
@@ -141,24 +135,23 @@ def multiply_with_units(a: Operand, b: Operand) -> xr.DataArray:
     ``nee * per_day`` are both ``"g m-2 d-1"`` of C.
     """
     x, y = _operands(a, b, "multiply_with_units")
-    _refuse_offset(x, y, "multiply")
+    derivation = f"{x.label} * {y.label}"
     kind = _product_or_quotient_kind(x, y, "*")
-    if x.constituent and y.constituent:
-        raise ValueError(
-            f"multiply_with_units(): {x.label} is a quantity of {x.constituent!r} and "
-            f"{y.label} a quantity of {y.constituent!r}; at most one operand of a product "
-            "names a constituent. Convert one of them to a quantity with no constituent, "
-            "or divide instead if the result is a ratio."
-        )
-    lead, other = (y, x) if y.constituent else (x, y)
-    units = _combine_units(lead, other, +1, "multiply_with_units")
+    units, constituent = _units_of(
+        derivation,
+        product_units,
+        units=x.units,
+        constituent=x.constituent,
+        other_units=y.units,
+        other_constituent=y.constituent,
+    )
     return _labeled_result(
         _apply(x, y, "*"),
         units=units,
-        constituent=lead.constituent,
+        constituent=constituent,
         kind=kind,
         sign_convention=_scaled_sign_convention(x, y),
-        derivation=f"{x.label} * {y.label}",
+        derivation=derivation,
     )
 
 
@@ -169,33 +162,46 @@ def divide_with_units(a: Operand, b: Operand) -> xr.DataArray:
     ``daily_rate`` in ``"g m-2 d-1"`` of C.
     """
     x, y = _operands(a, b, "divide_with_units")
-    _refuse_offset(x, y, "divide")
+    derivation = f"{x.label} / {y.label}"
     kind = _product_or_quotient_kind(x, y, "/")
-    constituent = _quotient_constituent(x, y)
-    units = _combine_units(x, y, -1, "divide_with_units", keep_lead=bool(constituent))
+    units, constituent = _units_of(
+        derivation,
+        quotient_units,
+        units=x.units,
+        constituent=x.constituent,
+        divisor_units=y.units,
+        divisor_constituent=y.constituent,
+    )
     return _labeled_result(
         _apply(x, y, "/"),
         units=units,
         constituent=constituent,
         kind=kind,
         sign_convention=_scaled_sign_convention(x, y),
-        derivation=f"{x.label} / {y.label}",
+        derivation=derivation,
     )
 
 
 def add_with_units(a: Operand, b: Operand) -> xr.DataArray:
     """``a + b``; the operands must agree in ``units``, ``constituent`` and ``kind``."""
     x, y = _operands(a, b, "add_with_units")
-    _refuse_offset(x, y, "add")
-    _require_agreement(x, y, "add_with_units")
-    same_sign = x.sign_convention if x.sign_convention == y.sign_convention else ""
-    return _labeled_result(
-        _apply(x, y, "+"),
+    derivation = f"{x.label} + {y.label}"
+    _require_same_kind(x, y, derivation)
+    units, constituent = _units_of(
+        derivation,
+        sum_units,
         units=x.units,
         constituent=x.constituent,
+        other_units=y.units,
+        other_constituent=y.constituent,
+    )
+    return _labeled_result(
+        _apply(x, y, "+"),
+        units=units,
+        constituent=constituent,
         kind=x.kind,
-        sign_convention=same_sign,
-        derivation=f"{x.label} + {y.label}",
+        sign_convention=x.sign_convention if x.sign_convention == y.sign_convention else "",
+        derivation=derivation,
     )
 
 
@@ -207,19 +213,23 @@ def subtract_with_units(a: Operand, b: Operand) -> xr.DataArray:
     difference of two upward fluxes is not an upward flux.
     """
     x, y = _operands(a, b, "subtract_with_units")
-    _require_agreement(x, y, "subtract_with_units")
-    units = x.units
-    if _has_offset(units):
-        if len(units.split()) != 1 or _kelvin_per_degree(units) != 1.0:
-            _refuse_offset(x, y, "subtract")
-        units = "K"
+    derivation = f"{x.label} - {y.label}"
+    _require_same_kind(x, y, derivation)
+    units, constituent = _units_of(
+        derivation,
+        difference_units,
+        units=x.units,
+        constituent=x.constituent,
+        other_units=y.units,
+        other_constituent=y.constituent,
+    )
     return _labeled_result(
         _apply(x, y, "-"),
         units=units,
-        constituent=x.constituent,
+        constituent=constituent,
         kind=x.kind,
         sign_convention="",
-        derivation=f"{x.label} - {y.label}",
+        derivation=derivation,
     )
 
 
@@ -279,28 +289,15 @@ def _labeled(operand: Any, what: str) -> _Labeled:
     """An operand's value and attributes; a number is dimensionless with no constituent or kind."""
     if isinstance(operand, xr.DataArray):
         label = _operand_label(operand)
-        units = operand.attrs.get("units")
-        if not isinstance(units, str):
+        try:
+            units, constituent = read_dataarray_units(operand)
+        except ValueError as exc:
             hint = (
                 " Use step_length(), which gives the step length as a float with units."
                 if operand.name == _STEP_LENGTH_COORDINATE
                 else ""
             )
-            raise ValueError(
-                f"{what}(): {label} has no 'units' attribute, so the result's units would be "
-                "unknown. Take the operand from pySIPNET output or build it from a "
-                f"parameter's spec, or set attrs['units'] first.{hint}"
-            )
-        try:
-            validate_units(units)
-        except ValueError as exc:
-            raise ValueError(f"{what}(): {label}: {exc}") from None
-        constituent = operand.attrs.get("constituent", "")
-        if not isinstance(constituent, str):
-            raise ValueError(
-                f"{what}(): {label} has a 'constituent' attribute of {constituent!r}; it must "
-                "be a str, '' or absent for none."
-            )
+            raise ValueError(f"{what}(): {exc}{hint}") from None
         raw_kind = operand.attrs.get("kind")
         try:
             kind = VariableKind(raw_kind) if raw_kind is not None else None
@@ -340,93 +337,14 @@ def _operand_label(array: xr.DataArray) -> str:
     return "array"
 
 
-def _has_offset(units: str) -> bool:
-    """Whether any unit in *units* is on an offset scale; Pint alone misses ``degC d``."""
-    return any(_is_offset(symbol) for symbol in _exponents(units))
-
-
-def _refuse_offset(x: _Labeled, y: _Labeled, verb: str) -> None:
-    for operand in (x, y):
-        if _has_offset(operand.units):
-            raise ValueError(
-                f"cannot {verb} {operand.label}, which is in {operand.units!r}: a temperature "
-                "on an offset scale is not a multiple of anything, so its products, "
-                "quotients and sums have no units. Only the difference of two is defined "
-                "(subtract_with_units, which gives K); express the temperature in K instead."
-            )
-
-
-def _kelvin_per_degree(units: str) -> float:
-    to_kelvin = [unit_registry.Quantity(t, units).to("K").magnitude for t in (0.0, 1.0)]
-    return float(to_kelvin[1] - to_kelvin[0])
-
-
-def _exponents(units: str) -> dict[str, int]:
-    """A validated UDUNITS string as ``{symbol: exponent}``, in the order the symbols appear."""
-    exponents: dict[str, int] = {}
-    for token in units.split():
-        if token == "1":
-            continue
-        symbol = token.rstrip("-0123456789")
-        exponents[symbol] = exponents.get(symbol, 0) + int(token[len(symbol) :] or 1)
-    return exponents
-
-
-def _render(exponents: dict[str, int]) -> str:
-    parts = [
-        symbol if exponent == 1 else f"{symbol}{exponent}"
-        for symbol, exponent in exponents.items()
-        if exponent != 0
-    ]
-    return " ".join(parts) if parts else "1"
-
-
-def _combine_units(
-    lead: _Labeled, other: _Labeled, sign: int, what: str, *, keep_lead: bool | None = None
-) -> str:
-    """*lead*'s units times (``sign=+1``) or over (``sign=-1``) *other*'s, *lead*'s symbols first.
-
-    When the result has a constituent (*keep_lead*, which defaults to whether
-    *lead* names one), *lead*'s first unit is the one it qualifies, and it must
-    come through first and unchanged.
-    """
-    exponents = _exponents(lead.units)
-    for symbol, exponent in _exponents(other.units).items():
-        exponents[symbol] = exponents.get(symbol, 0) + sign * exponent
-    units = _render(exponents)
-    if lead.constituent if keep_lead is None else keep_lead:
-        first = lead.units.split()[0]
-        if units.split()[0] != first:
-            op = "*" if sign > 0 else "/"
-            raise ValueError(
-                f"{what}(): {lead.label} is {lead.units!r} of {lead.constituent!r}, and the "
-                f"constituent qualifies its first unit, {first!r}; {lead.label} {op} "
-                f"{other.label} is {units!r}, which changes that unit, so the result would "
-                f"not say what quantity of {lead.constituent!r} it measures. Convert "
-                f"{other.label} so that {first!r} does not cancel or combine."
-            )
-    validate_units(units)
-    return units
-
-
-def _quotient_constituent(x: _Labeled, y: _Labeled) -> str:
-    if not y.constituent:
-        return x.constituent
-    if x.constituent == y.constituent:
-        return ""
-    if not x.constituent:
-        raise ValueError(
-            f"divide_with_units(): {y.label} is a quantity of {y.constituent!r} but {x.label} "
-            "names no constituent, so the result would be per unit of a substance the "
-            "numerator does not measure. Divide by a quantity with no constituent, or give "
-            "the numerator its constituent."
-        )
-    raise ValueError(
-        f"divide_with_units(): {x.label} is a quantity of {x.constituent!r} and {y.label} a "
-        f"quantity of {y.constituent!r}. Convert one with "
-        "pysipnet.units.convert_dataarray_units so both name the same constituent, and "
-        "the quotient is a ratio."
-    )
+def _units_of(
+    derivation: str, rule: Callable[..., tuple[str, str]], **units: str
+) -> tuple[str, str]:
+    """``rule(**units)``, with a refusal prefixed by the operation it refused."""
+    try:
+        return rule(**units)
+    except ValueError as exc:
+        raise ValueError(f"{derivation}: {exc}") from None
 
 
 def _time_power(units: str) -> float:
@@ -473,7 +391,7 @@ def _product_or_quotient_kind(x: _Labeled, y: _Labeled, op: str) -> VariableKind
 
 
 def _scaled_sign_convention(x: _Labeled, y: _Labeled) -> str:
-    """The kinded operand's ``sign_convention``, if the other operand cannot flip a sign."""
+    """An operand's ``sign_convention``, if the other operand cannot flip its sign."""
     source, other = (x, y) if x.sign_convention else (y, x)
     if not source.sign_convention:
         return ""
@@ -484,16 +402,13 @@ def _scaled_sign_convention(x: _Labeled, y: _Labeled) -> str:
     return "" if flips else source.sign_convention
 
 
-def _require_agreement(x: _Labeled, y: _Labeled, what: str) -> None:
-    def described(operand: _Labeled) -> str:
-        kind = operand.kind.value if operand.kind is not None else None
-        return f"{operand.label} ({operand.units!r}, {operand.constituent!r}, kind {kind!r})"
-
-    if (x.units, x.constituent, x.kind) != (y.units, y.constituent, y.kind):
+def _require_same_kind(x: _Labeled, y: _Labeled, derivation: str) -> None:
+    if x.kind != y.kind:
+        kinds = [k.value if k is not None else None for k in (x.kind, y.kind)]
         raise ValueError(
-            f"{what}() needs operands that agree in units, constituent and kind; got "
-            f"{described(x)} and {described(y)}. Convert one with "
-            "pysipnet.units.convert_dataarray_units first, or resample both to the same kind."
+            f"{derivation}: a sum or difference needs operands of the same kind; got "
+            f"{kinds[0]!r} and {kinds[1]!r}. Resample one of them first, or combine a total "
+            "with a rate through step_length()."
         )
 
 

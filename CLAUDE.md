@@ -531,15 +531,19 @@ be misstated), rewrites both on a copy, and drops `output_decimals` and the
 `units` was found to be unchecked against the `DataArray`'s own: a wrong one
 gave wrong numbers and then stamped the target units over the evidence.
 
-**Arithmetic on labeled arrays lives in `pysipnet/arithmetic.py`, not
-`units.py`,** because it reads `VariableKind` and `variables.py` imports
-`units` at import time. `multiply_with_units` / `divide_with_units` /
-`add_with_units` / `subtract_with_units` write the `units`, `constituent` and
-`kind` true of the result, since plain xarray arithmetic drops them and
-`convert_dataarray_units` would then have nothing to read. The operand with
-the constituent leads the unit string, and its first unit must come through
+**Arithmetic on labeled arrays is split by what it knows about.** The
+`(units, constituent)` rules are unit vocabulary and live in `units.py`:
+`product_units` / `quotient_units` / `sum_units` / `difference_units` work on
+bare strings, and `read_dataarray_units` is the one reader of a `DataArray`'s
+`units`/`constituent` attrs (conversion uses it too). The operand with the
+constituent leads the unit string, and its first unit must come through
 unchanged (`g m-2` of C ÷ `g` is refused: `m-2` of C is not a quantity of
-carbon). Kind changes only as `KIND_AFTER_TIME_POWER` in `variables.py` says
+carbon). A bare `degC` does not multiply; `degC d` does, because Pint reads a
+compound `degC` as a difference. `pysipnet/arithmetic.py` applies those rules to
+`DataArray`s (`multiply_with_units` / `divide_with_units` / `add_with_units` /
+`subtract_with_units`) and adds the `kind` rules; it cannot live in `units.py`
+because it reads `VariableKind` and `variables.py` imports `units` at import
+time. Kind changes only as `KIND_AFTER_TIME_POWER` in `variables.py` says
 (total ÷ time → `daily_rate`, rate × time → total). Index coordinates must
 align exactly, so two different time axes are refused rather than
 intersected. `step_length()` makes the `time_step_length` coordinate an
@@ -569,8 +573,8 @@ Under start labeling `time: point` would have claimed the pool was the
 start-of-step value, which it is not. The Dataset states the interval each row
 covers: `time_step_start`, `time_step_length` and a CF `time_bounds` variable
 named by `time`'s `bounds` attribute, so `[time_step_start, time]` is
-machine-readable — which is what an observation operator needs in order to
-decide which steps an observation spans.
+machine-readable — which is what deciding which steps a measurement spans
+requires.
 
 **The axis comes from the climate drivers, not from SIPNET's printed labels.**
 Every output the runner returns carries its `ClimateDrivers`
@@ -841,8 +845,8 @@ pySIPNET/
 │   │   ├── base.py               # ParameterSpec, param_field, domains (version-agnostic)
 │   │   └── model.py              # ModelFlags and SIPNETParameters
 │   ├── variables.py              # the output-variable registry (names, units, kinds, labels)
-│   ├── units.py                  # UDUNITS unit strings: Pint registry, validation, formatting, constituent-aware conversion
-│   ├── arithmetic.py             # products, quotients, sums of labeled DataArrays; step_length()
+│   ├── units.py                  # UDUNITS unit strings: Pint registry, validation, formatting, conversion, combination
+│   ├── arithmetic.py             # products, quotients, sums of labeled DataArrays, with kind; step_length()
 │   ├── climate.py                # ClimateDrivers + validation
 │   ├── dataset.py                # shared DataFrame → xarray builder (time = step end)
 │   ├── resample.py               # explicit, kind-checked coarsening of the time axis

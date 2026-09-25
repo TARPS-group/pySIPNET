@@ -88,24 +88,42 @@ the denominator would need the molar mass of air.  Water content by mass
 A depth and a volume (``"m3 m-2"`` and ``"m"``) are the same kind, being
 geometry alone.
 
-Arithmetic
-----------
-xarray drops ``attrs`` in arithmetic, so a product or quotient of labeled
-arrays arrives with nothing for :func:`convert_dataarray_units` to read.
-:mod:`pysipnet.arithmetic` combines them and labels the result:
-``multiply_with_units`` and ``divide_with_units`` combine the unit strings
-symbol by symbol, with the operand carrying the constituent first so that the
-constituent still qualifies the first unit, and ``add_with_units`` and
-``subtract_with_units`` require the operands to agree.  ``step_length`` turns
-a pySIPNET array's step lengths into an operand, so a total per step becomes a
-rate::
+Combination
+-----------
+:func:`product_units`, :func:`quotient_units`, :func:`sum_units` and
+:func:`difference_units` give the ``(units, constituent)`` of a product,
+quotient, sum or difference of two quantities, so a derived quantity is still
+one this module can convert::
 
-    rate = divide_with_units(nee, step_length(nee))  # "g m-2 d-1" of C
-    convert_dataarray_units(rate, to_units="umol m-2 s-1", to_constituent="CO2")
+    product_units(units="d-1", other_units="g m-2", other_constituent="C")
+    # ("g m-2 d-1", "C")
 
-That module also carries the variable's ``kind``, so it lives beside
-:mod:`pysipnet.variables` rather than here: the registry validates its units
-with this module at import.
+The rules:
+
+- Units combine symbol by symbol, adding exponents for a product and
+  subtracting them for a quotient.  A symbol whose exponent reaches zero drops
+  out, and an empty result is ``"1"``.  Prefixes are not merged: ``cm`` over
+  ``m`` is ``"cm m-1"``, which converts to ``"1"`` on request.
+- The operand that carries the constituent leads the string, because the
+  constituent qualifies the first unit, and that first unit must come through
+  unchanged: ``g m-2`` of C over ``g`` would leave ``m-2`` of C, which names no
+  quantity of carbon, and is refused.
+- A product may name at most one constituent.  A quotient keeps the
+  numerator's, and the same constituent on both sides cancels (carbon over
+  carbon is a ratio).  A constituent only in the denominator, or two different
+  ones, is refused.
+- A sum or difference needs the same unit string and constituent on both
+  sides.
+- A bare offset temperature (``degC``) does not multiply or add; the
+  difference of two is a temperature difference, in ``K``.  Inside a compound
+  unit Pint reads ``degC`` as a difference already, so degree-days in
+  ``"degC d"`` combine like any other unit.
+
+:mod:`pysipnet.arithmetic` applies these rules to ``DataArray`` objects,
+reading the operands' units with :func:`read_dataarray_units`, and adds the
+rules for a variable's ``kind``.  It is a separate module because the kinds live
+in :mod:`pysipnet.variables`, which validates its unit strings with this module
+at import.
 """
 
 from __future__ import annotations
@@ -159,7 +177,7 @@ _CONSTITUENT_TOKENS: frozenset[str] = frozenset(MOLAR_MASS)
 
 # A symbol with an optional signed integer exponent ("m", "m-2", "kPa-1"), or the
 # bare "1" of a dimensionless quantity.
-_UDUNITS_TOKEN = re.compile(r"[A-Za-z]+(-?\d+)?|1")
+_UDUNITS_TOKEN = re.compile(r"([A-Za-z]+)(-?\d+)?|1")
 
 _SUPERSCRIPT = str.maketrans("-0123456789", "⁻⁰¹²³⁴⁵⁶⁷⁸⁹")
 
@@ -239,7 +257,7 @@ def validate_units(units: str) -> None:
 
 
 def format_units(units: str, *, constituent: str = "", style: UnitStyle = "unicode") -> str:
-    """Render a unit string for display, with the constituent after the mass unit.
+    """Render a unit string for display, with the constituent after the first unit.
 
     ``format_units("g m-2 d-1", constituent="C")`` gives ``"g C m⁻² d⁻¹"`` in
     the default Unicode style, ``r"\\mathrm{g\\,C\\,m^{-2}\\,d^{-1}}"`` in LaTeX,
@@ -250,20 +268,12 @@ def format_units(units: str, *, constituent: str = "", style: UnitStyle = "unico
     the author wrote is preserved.
     """
     validate_units(units)
-    tokens = units.split()
-    if tokens == ["1"]:
+    if units.split() == ["1"]:
         return "dimensionless"
 
     rendered: list[str] = []
-    for i, token in enumerate(tokens):
-        match = re.fullmatch(r"([A-Za-z]+)(-?\d+)?", token)
-        if match is None:
-            # validate_units admits only symbols and the bare "1", which prints as is.
-            rendered.append(token)
-            continue
-        symbol, exponent = match.group(1), match.group(2)
-        symbol = _DISPLAY_SYMBOL.get(symbol, symbol)
-        rendered.append(_render_token(symbol, exponent, style))
+    for i, (symbol, exponent) in enumerate(_unit_powers(units)):
+        rendered.append(_render_token(_DISPLAY_SYMBOL.get(symbol, symbol), exponent, style))
         # The constituent qualifies the first (mass or amount) unit: "g C m-2".
         if i == 0 and constituent:
             rendered.append(constituent)
@@ -273,11 +283,21 @@ def format_units(units: str, *, constituent: str = "", style: UnitStyle = "unico
     return " ".join(rendered)
 
 
-def _render_token(symbol: str, exponent: str | None, style: UnitStyle) -> str:
-    if exponent is None or exponent == "1":
+def _unit_powers(units: str) -> list[tuple[str, int]]:
+    """A validated unit string as ``(symbol, exponent)`` pairs, in order; ``"1"`` gives none."""
+    powers: list[tuple[str, int]] = []
+    for token in units.split():
+        match = _UDUNITS_TOKEN.fullmatch(token)
+        if match is not None and match.group(1) is not None:
+            powers.append((match.group(1), int(match.group(2) or 1)))
+    return powers
+
+
+def _render_token(symbol: str, exponent: int, style: UnitStyle) -> str:
+    if exponent == 1:
         return symbol
     if style == "unicode":
-        return symbol + exponent.translate(_SUPERSCRIPT)
+        return symbol + str(exponent).translate(_SUPERSCRIPT)
     if style == "latex":
         return f"{symbol}^{{{exponent}}}"
     if style == "html":
@@ -398,9 +418,10 @@ def convert_dataarray_units(
     """Convert *array* to *to_units* of *to_constituent*, reading its current units from ``attrs``.
 
     The source is ``array.attrs["units"]`` (required) and
-    ``array.attrs.get("constituent", "")``, the attributes every pySIPNET
-    output, climate and parameter ``DataArray`` carries, so the units the
-    values are in cannot be misstated.  *to_constituent* defaults to the
+    ``array.attrs.get("constituent", "")``, read by
+    :func:`read_dataarray_units`.  Every pySIPNET output and climate
+    ``DataArray`` carries both, so the units the values are in cannot be
+    misstated.  *to_constituent* defaults to the
     source constituent; ``""`` means none.  Only the data is scaled:
     coordinates, dimensions and the name are unchanged.
 
@@ -424,19 +445,8 @@ def convert_dataarray_units(
             f"convert_dataarray_units() takes an xarray DataArray, not {type(array).__name__}."
             + hint
         )
-    label = f"DataArray {array.name!r}" if array.name is not None else "DataArray"
-    units = array.attrs.get("units")
-    if not isinstance(units, str):
-        raise ValueError(
-            f"{label} has no 'units' attribute, so its current units are unknown. Set "
-            "array.attrs['units'], or convert array.values with convert_units()."
-        )
-    constituent = array.attrs.get("constituent", "")
-    if not isinstance(constituent, str):
-        raise ValueError(
-            f"{label} has a 'constituent' attribute of {constituent!r}; it must be a str, "
-            "'' or absent for none."
-        )
+    units, constituent = read_dataarray_units(array)
+    label = _array_label(array)
     if to_constituent is None:
         to_constituent = constituent
     try:
@@ -453,6 +463,175 @@ def convert_dataarray_units(
         relabeled["constituent"] = to_constituent
     result.attrs = relabeled
     return result
+
+
+def read_dataarray_units(array: xr.DataArray) -> tuple[str, str]:
+    """The ``(units, constituent)`` a ``DataArray`` declares in its ``attrs``, validated.
+
+    ``units`` is required and must pass :func:`validate_units`;
+    ``constituent`` is optional, ``""`` when absent.  Raises ``ValueError``
+    naming the array otherwise.
+    """
+    label = _array_label(array)
+    units = array.attrs.get("units")
+    if not isinstance(units, str):
+        raise ValueError(
+            f"{label} has no 'units' attribute, so the units of its values are unknown. Set "
+            "array.attrs['units'], or work on array.values with convert_units()."
+        )
+    try:
+        validate_units(units)
+    except ValueError as exc:
+        raise ValueError(f"{label}: {exc}") from None
+    constituent = array.attrs.get("constituent", "")
+    if not isinstance(constituent, str):
+        raise ValueError(
+            f"{label} has a 'constituent' attribute of {constituent!r}; it must be a str, "
+            "'' or absent for none."
+        )
+    return units, constituent
+
+
+def _array_label(array: xr.DataArray) -> str:
+    return f"DataArray {array.name!r}" if array.name is not None else "DataArray"
+
+
+@lru_cache(maxsize=256)
+def product_units(
+    *, units: str, constituent: str = "", other_units: str, other_constituent: str = ""
+) -> tuple[str, str]:
+    """The ``(units, constituent)`` of *units* of *constituent* times *other_units* of theirs.
+
+    See "Combination" in the module docstring for the rules; anything they
+    refuse raises ``ValueError``.  ``product_units(units="d-1",
+    other_units="g m-2", other_constituent="C")`` is ``("g m-2 d-1", "C")``:
+    the operand with the constituent leads.
+    """
+    what = f"{_quantity(units, constituent)} times {_quantity(other_units, other_constituent)}"
+    _refuse_offset_operands(what, units, other_units)
+    if constituent and other_constituent:
+        raise ValueError(
+            f"Cannot multiply {what}: at most one factor of a product names a constituent. "
+            "Divide instead if the result is a ratio."
+        )
+    if other_constituent:
+        return _combined(what, other_units, other_constituent, units, +1), other_constituent
+    return _combined(what, units, constituent, other_units, +1), constituent
+
+
+@lru_cache(maxsize=256)
+def quotient_units(
+    *, units: str, constituent: str = "", divisor_units: str, divisor_constituent: str = ""
+) -> tuple[str, str]:
+    """The ``(units, constituent)`` of *units* of *constituent* over *divisor_units* of theirs.
+
+    See "Combination" in the module docstring for the rules; anything they
+    refuse raises ``ValueError``.  ``quotient_units(units="g m-2",
+    constituent="C", divisor_units="g m-2", divisor_constituent="C")`` is
+    ``("1", "")``: the same constituent cancels.
+    """
+    what = f"{_quantity(units, constituent)} over {_quantity(divisor_units, divisor_constituent)}"
+    _refuse_offset_operands(what, units, divisor_units)
+    if divisor_constituent and not constituent:
+        raise ValueError(
+            f"Cannot divide {what}: the result would be per unit of a substance the "
+            "numerator does not measure."
+        )
+    if divisor_constituent and constituent != divisor_constituent:
+        raise ValueError(
+            f"Cannot divide {what}: convert one of them so both name the same constituent, "
+            "and the quotient is a ratio."
+        )
+    kept = "" if divisor_constituent else constituent
+    return _combined(what, units, kept, divisor_units, -1), kept
+
+
+@lru_cache(maxsize=256)
+def sum_units(
+    *, units: str, constituent: str = "", other_units: str, other_constituent: str = ""
+) -> tuple[str, str]:
+    """The ``(units, constituent)`` of a sum: the operands' own, which must agree."""
+    what = f"{_quantity(units, constituent)} plus {_quantity(other_units, other_constituent)}"
+    _require_same_units(what, units, constituent, other_units, other_constituent)
+    _refuse_offset_operands(what, units)
+    return units, constituent
+
+
+@lru_cache(maxsize=256)
+def difference_units(
+    *, units: str, constituent: str = "", other_units: str, other_constituent: str = ""
+) -> tuple[str, str]:
+    """The ``(units, constituent)`` of a difference: the operands' own, which must agree.
+
+    The difference of two temperatures in ``degC`` is a temperature
+    difference, ``("K", "")``.
+    """
+    what = f"{_quantity(units, constituent)} minus {_quantity(other_units, other_constituent)}"
+    _require_same_units(what, units, constituent, other_units, other_constituent)
+    if _is_offset(units):
+        if _linear_map(units, "K")[0] != 1.0:
+            raise ValueError(
+                f"Cannot subtract {what}: a difference of {units!r} is a temperature "
+                "difference with no UDUNITS name. Take differences in degC or K."
+            )
+        return "K", constituent
+    return units, constituent
+
+
+def _quantity(units: str, constituent: str) -> str:
+    return f"{units!r} of {constituent}" if constituent else repr(units)
+
+
+def _require_same_units(
+    what: str, units: str, constituent: str, other_units: str, other_constituent: str
+) -> None:
+    validate_units(units)
+    validate_units(other_units)
+    if (units, constituent) != (other_units, other_constituent):
+        raise ValueError(
+            f"Cannot combine {what}: a sum or difference needs the same units and "
+            "constituent on both sides. Convert one to the other's first."
+        )
+
+
+def _refuse_offset_operands(what: str, *units: str) -> None:
+    for u in units:
+        validate_units(u)
+        if _is_offset(u):
+            raise ValueError(
+                f"Cannot combine {what}: {u!r} is an offset temperature scale, which does not "
+                "multiply or add. Only the difference of two such temperatures is defined, "
+                "and it is in K."
+            )
+
+
+def _combined(what: str, lead: str, constituent: str, other: str, sign: int) -> str:
+    """*lead* times (``sign=+1``) or over (``sign=-1``) *other*, *lead*'s symbols first.
+
+    With a constituent, *lead*'s first unit is the one it qualifies, so it
+    must come through first and unchanged.
+    """
+    exponents: dict[str, int] = {}
+    for symbol, exponent in _unit_powers(lead):
+        exponents[symbol] = exponents.get(symbol, 0) + exponent
+    for symbol, exponent in _unit_powers(other):
+        exponents[symbol] = exponents.get(symbol, 0) + sign * exponent
+    parts = [
+        symbol if exponent == 1 else f"{symbol}{exponent}"
+        for symbol, exponent in exponents.items()
+        if exponent != 0
+    ]
+    combined = " ".join(parts) if parts else "1"
+    if constituent and _unit_powers(combined)[:1] != _unit_powers(lead)[:1]:
+        first = lead.split()[0]
+        raise ValueError(
+            f"Cannot combine {what}: the constituent {constituent!r} qualifies the first unit, "
+            f"{first!r}, and the result {combined!r} changes it, so it would not say what "
+            f"quantity of {constituent} it measures. Convert the other operand so that "
+            f"{first!r} does not cancel or combine."
+        )
+    validate_units(combined)
+    return combined
 
 
 def _conversion_factor(units: str, constituent: str, to_units: str, to_constituent: str) -> float:
@@ -560,10 +739,16 @@ def _is_offset(units: str) -> bool:
     return bool(unit_registry.Quantity(0.0, units).to_base_units().magnitude != 0)
 
 
+def _linear_map(units: str, to_units: str) -> tuple[float, float]:
+    """``(scale, offset)`` taking a value *v* in *units* to ``scale * v + offset`` in *to_units*."""
+    zero = float(unit_registry.Quantity(0.0, units).to(to_units).magnitude)
+    one = float(unit_registry.Quantity(1.0, units).to(to_units).magnitude)
+    return one - zero, zero
+
+
 def _offset_scale_factor(units: str, to_units: str) -> float:
     try:
-        factor = unit_registry.Quantity(1.0, units).to(to_units).magnitude
-        zero = unit_registry.Quantity(0.0, units).to(to_units).magnitude
+        factor, zero = _linear_map(units, to_units)
     except pint.errors.DimensionalityError:
         raise ValueError("the quantities have different dimensions.") from None
     if zero != 0:

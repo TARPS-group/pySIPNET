@@ -160,13 +160,13 @@ def test_leaf_carbon_over_leaf_carbon_per_area_is_leaf_area_index(niwot):
     np.testing.assert_allclose(in_m2.values, lai.values, **EXACT)
 
 
-# ── units ────────────────────────────────────────────────────────────────────
+# ── units and constituent (the rules are pysipnet.units', tested there) ─────
 
 
 def test_prefixes_are_not_merged():
     depth = xr.DataArray([2.0], dims="x", name="depth", attrs={"units": "cm"})
-    per_m = xr.DataArray([4.0], dims="x", name="height", attrs={"units": "m"})
-    ratio = divide_with_units(depth, per_m)
+    height = xr.DataArray([4.0], dims="x", name="height", attrs={"units": "m"})
+    ratio = divide_with_units(depth, height)
     assert ratio.attrs["units"] == "cm m-1"
     np.testing.assert_allclose(
         convert_dataarray_units(ratio, to_units="1").values, [0.005], **EXACT
@@ -182,48 +182,28 @@ def test_a_number_is_dimensionless(nee):
 
 
 @pytest.mark.parametrize(
-    "other_units, op", [("g-1", multiply_with_units), ("g", divide_with_units)]
+    "other_units, op, symbol",
+    [("g-1", multiply_with_units, "*"), ("g", divide_with_units, "/")],
 )
-def test_the_constituents_unit_may_not_cancel(nee, other_units, op):
+def test_a_unit_refusal_names_the_operation(nee, other_units, op, symbol):
     other = xr.DataArray(2.0, name="leaf_mass", attrs={"units": other_units})
-    with pytest.raises(ValueError, match="qualifies its first unit, 'g'"):
+    with pytest.raises(
+        ValueError,
+        match=f"^net_ecosystem_exchange \\{symbol} leaf_mass: .*qualifies the first unit",
+    ):
         op(nee, other)
 
 
-def test_the_constituents_unit_may_not_change_power(nee):
-    with pytest.raises(ValueError, match="'g2 m-2'"):
-        multiply_with_units(nee, xr.DataArray(2.0, name="mass", attrs={"units": "g"}))
-
-
-@pytest.mark.parametrize("units", ["degC", "degC d"])
-def test_an_offset_unit_is_refused_in_a_product(units):
-    celsius = xr.DataArray([1.0], dims="x", name="air_temperature", attrs={"units": units})
-    with pytest.raises(ValueError, match="offset scale"):
+def test_degree_days_multiply_but_a_temperature_does_not():
+    gdd = xr.DataArray([100.0], dims="x", name="gdd", attrs={"units": "degC d"})
+    assert multiply_with_units(gdd, 2).attrs["units"] == "degC d"
+    celsius = xr.DataArray([1.0], dims="x", name="air_temperature", attrs={"units": "degC"})
+    with pytest.raises(ValueError, match="offset temperature scale"):
         multiply_with_units(celsius, 2)
-
-
-# ── constituent ──────────────────────────────────────────────────────────────
 
 
 def _carbon(name: str = "c") -> xr.DataArray:
     return xr.DataArray([2.0], dims="x", name=name, attrs={"units": "g m-2", "constituent": "C"})
-
-
-def _nitrogen() -> xr.DataArray:
-    return xr.DataArray([4.0], dims="x", name="n", attrs={"units": "g m-2", "constituent": "N"})
-
-
-def _plain(units: str = "m2") -> xr.DataArray:
-    return xr.DataArray([4.0], dims="x", name="plain", attrs={"units": units})
-
-
-def test_two_constituents_in_a_product_are_refused():
-    with pytest.raises(ValueError, match="at most one operand of a product names a constituent"):
-        multiply_with_units(_carbon(), _nitrogen())
-
-
-def test_a_quotient_keeps_the_numerators_constituent():
-    assert divide_with_units(_carbon(), _plain()).attrs["constituent"] == "C"
 
 
 def test_the_same_constituent_cancels_in_a_quotient():
@@ -232,14 +212,12 @@ def test_the_same_constituent_cancels_in_a_quotient():
     assert "constituent" not in ratio.attrs
 
 
-def test_a_constituent_only_in_the_denominator_is_refused():
-    with pytest.raises(ValueError, match="numerator does not measure"):
-        divide_with_units(_plain(), _carbon())
-
-
-def test_two_different_constituents_in_a_quotient_are_refused():
-    with pytest.raises(ValueError, match="'C' and n a quantity of 'N'"):
-        divide_with_units(_carbon(), _nitrogen())
+def test_a_constituent_refusal_names_the_operation():
+    nitrogen = xr.DataArray([4.0], dims="x", name="n", attrs={"units": "g m-2", "constituent": "N"})
+    with pytest.raises(ValueError, match="^c \\* n: .*at most one factor"):
+        multiply_with_units(_carbon(), nitrogen)
+    with pytest.raises(ValueError, match="^c / n: .*same constituent"):
+        divide_with_units(_carbon(), nitrogen)
 
 
 # ── kind ─────────────────────────────────────────────────────────────────────
@@ -413,11 +391,19 @@ def test_a_sum_keeps_a_sign_convention_only_when_both_state_it(nee):
     assert "sign_convention" not in subtract_with_units(nee, nee).attrs
 
 
-def test_disagreeing_operands_are_refused_in_a_sum(niwot, nee):
-    with pytest.raises(ValueError, match="agree in units, constituent and kind"):
+def test_a_sum_needs_the_same_kind(niwot, nee):
+    with pytest.raises(
+        ValueError, match="same kind; got 'timestep_total' and 'timestep_end_state'"
+    ):
         add_with_units(nee, niwot["leaf_carbon"])
-    with pytest.raises(ValueError, match="agree in units, constituent and kind"):
-        subtract_with_units(nee, divide_with_units(nee, step_length(nee)))
+
+
+def test_a_difference_needs_the_same_units(nee):
+    rate = multiply_with_units(nee, _per_day())
+    with pytest.raises(ValueError, match="same kind"):
+        subtract_with_units(nee, rate)
+    with pytest.raises(ValueError, match="same units and constituent"):
+        subtract_with_units(nee, convert_dataarray_units(nee, to_units="kg m-2"))
 
 
 def test_the_difference_of_two_celsius_temperatures_is_in_kelvin():
@@ -426,5 +412,5 @@ def test_the_difference_of_two_celsius_temperatures_is_in_kelvin():
     difference = subtract_with_units(warm, cool)
     assert difference.attrs["units"] == "K"
     np.testing.assert_allclose(difference.values, [15.0], **EXACT)
-    with pytest.raises(ValueError, match="offset scale"):
+    with pytest.raises(ValueError, match="offset temperature scale"):
         add_with_units(warm, cool)

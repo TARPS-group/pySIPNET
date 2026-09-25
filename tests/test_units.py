@@ -22,6 +22,12 @@ from pysipnet.units import (
     conversion_factor,
     convert_dataarray_units,
     convert_units,
+    difference_units,
+    format_units,
+    product_units,
+    quotient_units,
+    read_dataarray_units,
+    sum_units,
 )
 from pysipnet.variables import CLIMATE_VARIABLES, OUTPUT_VARIABLES
 
@@ -360,3 +366,151 @@ def test_every_registry_constituent_can_convert():
     }
     assert declared <= CONSTITUENTS, declared - CONSTITUENTS
     assert declared - AMOUNT_ONLY_CONSTITUENTS <= set(MOLAR_MASS)
+
+
+# ── combination ──────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("units", "constituent", "other_units", "other_constituent", "expected"),
+    [
+        ("g m-2", "C", "d-1", "", ("g m-2 d-1", "C")),
+        ("d-1", "", "g m-2", "C", ("g m-2 d-1", "C")),  # the constituent leads
+        ("g m-2", "C", "m2", "", ("g", "C")),
+        ("cm d-1", "H2O", "d", "", ("cm", "H2O")),
+        ("m2", "", "m-2", "", ("1", "")),
+        ("cm", "", "m-1", "", ("cm m-1", "")),  # prefixes are not merged
+        ("degC d", "", "1", "", ("degC d", "")),  # degree-days are a difference
+        ("1", "", "1", "", ("1", "")),
+        ("g1 m-2", "C", "d-1", "", ("g m-2 d-1", "C")),  # the first unit, not its spelling
+    ],
+)
+def test_product_units(units, constituent, other_units, other_constituent, expected):
+    assert (
+        product_units(
+            units=units,
+            constituent=constituent,
+            other_units=other_units,
+            other_constituent=other_constituent,
+        )
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("units", "constituent", "divisor_units", "divisor_constituent", "expected"),
+    [
+        ("g m-2", "C", "d", "", ("g m-2 d-1", "C")),
+        ("g m-2", "C", "g m-2", "C", ("1", "")),  # the same constituent cancels
+        ("g m-2", "C", "kg m-2", "C", ("g kg-1", "")),
+        ("g m-2", "C", "d-1", "", ("g m-2 d", "C")),
+        ("cm", "", "m", "", ("cm m-1", "")),
+    ],
+)
+def test_quotient_units(units, constituent, divisor_units, divisor_constituent, expected):
+    assert (
+        quotient_units(
+            units=units,
+            constituent=constituent,
+            divisor_units=divisor_units,
+            divisor_constituent=divisor_constituent,
+        )
+        == expected
+    )
+
+
+def test_a_combined_product_converts_through_its_constituent():
+    units, constituent = product_units(units="d-1", other_units="g m-2", other_constituent="C")
+    assert conversion_factor(
+        units=units, constituent=constituent, to_units="umol m-2 s-1", to_constituent="CO2"
+    ) == pytest.approx(1e6 / 12.011 / 86_400, rel=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("rule", "kwargs", "text"),
+    [
+        (
+            product_units,
+            {"units": "g m-2", "constituent": "C", "other_units": "g-1"},
+            "qualifies the first unit, 'g'",
+        ),
+        (product_units, {"units": "g m-2", "constituent": "C", "other_units": "g"}, "'g2 m-2'"),
+        (
+            quotient_units,
+            {"units": "g m-2", "constituent": "C", "divisor_units": "g"},
+            "qualifies the first unit, 'g'",
+        ),
+        (
+            product_units,
+            {
+                "units": "g m-2",
+                "constituent": "C",
+                "other_units": "g m-2",
+                "other_constituent": "N",
+            },
+            "at most one factor",
+        ),
+        (
+            quotient_units,
+            {"units": "m2", "divisor_units": "g m-2", "divisor_constituent": "C"},
+            "numerator does not measure",
+        ),
+        (
+            quotient_units,
+            {
+                "units": "g m-2",
+                "constituent": "C",
+                "divisor_units": "g m-2",
+                "divisor_constituent": "N",
+            },
+            "same constituent",
+        ),
+        (product_units, {"units": "degC", "other_units": "1"}, "offset temperature scale"),
+        (quotient_units, {"units": "1", "divisor_units": "degC"}, "offset temperature scale"),
+        (sum_units, {"units": "degC", "other_units": "degC"}, "offset temperature scale"),
+        (sum_units, {"units": "g m-2", "other_units": "kg m-2"}, "same units and constituent"),
+        (
+            sum_units,
+            {"units": "g m-2", "constituent": "C", "other_units": "g m-2"},
+            "same units and constituent",
+        ),
+        (
+            difference_units,
+            {"units": "g m-2", "other_units": "m-2 g"},
+            "same units and constituent",
+        ),
+        (product_units, {"units": "g C m-2", "other_units": "1"}, "substance token"),
+    ],
+)
+def test_combination_refusals(rule, kwargs, text):
+    with pytest.raises(ValueError, match=text):
+        rule(**kwargs)
+
+
+def test_sums_and_differences_keep_the_shared_units():
+    assert sum_units(
+        units="g m-2", constituent="C", other_units="g m-2", other_constituent="C"
+    ) == (
+        "g m-2",
+        "C",
+    )
+    assert difference_units(units="degC", other_units="degC") == ("K", "")
+    assert difference_units(units="K", other_units="K") == ("K", "")
+
+
+def test_format_units_renders_exponents_from_the_shared_grammar():
+    assert format_units("g m-2 d-1", constituent="C") == "g C m⁻² d⁻¹"
+    assert format_units("m1 s", style="plain") == "m s"
+    assert format_units("umol m-2 s-1", style="latex") == r"\mathrm{umol\,m^{-2}\,s^{-1}}"
+
+
+def test_read_dataarray_units():
+    assert read_dataarray_units(
+        xr.DataArray(1.0, attrs={"units": "g m-2", "constituent": "C"})
+    ) == (
+        "g m-2",
+        "C",
+    )
+    assert read_dataarray_units(xr.DataArray(1.0, attrs={"units": "d"})) == ("d", "")
+    with pytest.raises(ValueError, match="DataArray 'x': Unit string 'g C m-2'"):
+        read_dataarray_units(xr.DataArray(1.0, name="x", attrs={"units": "g C m-2"}))

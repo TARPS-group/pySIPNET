@@ -358,15 +358,15 @@ put it back for display. See [Design](../design.md) for the convention.
 ### Converting units
 
 Three functions in `pysipnet.units` translate a value from one
-`(units, constituent)` pair to another, which is what an observation operator
-needs when the observation is in different units from the model. Pint does the
+`(units, constituent)` pair to another, for comparing model output with data
+reported in different units. Pint does the
 prefixes and dimensions; pySIPNET adds the chemistry, since a gram of carbon
 becomes a mole only through carbon's molar mass.
 
 - `convert_dataarray_units(array, to_units=..., to_constituent=...)` converts
   an xarray `DataArray`, reading the units it is in from `array.attrs["units"]`
-  and `array.attrs["constituent"]`. Every output, climate and parameter
-  `DataArray` carries both, so there is nothing to misstate.
+  and `array.attrs["constituent"]`. Every output and climate `DataArray`
+  carries both, so there is nothing to misstate.
 - `convert_units(values, units=..., constituent=..., to_units=..., to_constituent=...)`
   converts unlabeled values (a number, a NumPy array, a pandas object), with
   the caller stating the units they are in.
@@ -470,7 +470,17 @@ lai = divide_with_units(result.outputs["leaf_carbon"], per_area)
 ```
 
 An operand is a `DataArray` with a `units` attribute, or a plain number
-(dimensionless). The rules:
+(dimensionless). The unit and constituent rules are `pysipnet.units`' own, and
+`product_units`, `quotient_units`, `sum_units` and `difference_units` apply
+them to bare `(units, constituent)` pairs:
+
+```python
+from pysipnet.units import product_units
+product_units(units="d-1", other_units="g m-2", other_constituent="C")
+# ('g m-2 d-1', 'C')
+```
+
+The rules:
 
 - **Values** are plain xarray arithmetic, broadcasting as usual (a `(site,)`
   parameter against a `(site, time)` stack gives per-site results). Index
@@ -495,8 +505,9 @@ An operand is a `DataArray` with a `units` attribute, or a plain number
   dimension is refused: a pool times a turnover rate is a flux, which SIPNET
   reports itself.
 - `add_with_units` and `subtract_with_units` require the same units,
-  constituent and kind. The difference of two `degC` temperatures is in `K`;
-  otherwise an offset temperature is refused, since it does not multiply.
+  constituent and kind. A bare `degC` temperature does not multiply or add,
+  and the difference of two is in `K`; degree-days in `degC d` combine like
+  any other unit, since Pint already reads `degC` there as a difference.
 
 The result carries `units`, `constituent`, `kind` with its `time_reference`
 and `cell_methods`, the `sign_convention` if it is still true (not after
@@ -585,8 +596,8 @@ ds.to_netcdf("run.nc")  # self-describing on disk; needs a netCDF backend
 ```
 
 `time_bounds` is the Climate and Forecast conventions' way of saying which
-interval each value covers, which is what an observation operator needs in order
-to decide how observations line up with model steps. It adds a second dimension,
+interval each value covers, which is what you need in order to decide how
+measurements over some other interval line up with model steps. It adds a second dimension,
 `bounds`, so `ds.sizes` reads `{'time': 365, 'bounds': 2}`; use `result.outputs.pandas`
 when you want a flat table. The Dataset declares `Conventions = "CF-1.11"`.
 Writing it needs a netCDF backend that stores 64-bit integers (`h5netcdf` or
