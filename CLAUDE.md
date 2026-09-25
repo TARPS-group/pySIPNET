@@ -500,23 +500,36 @@ Units are UDUNITS strings (`"g m-2"`, `"cm d-1"`, `"1"`) validated at import by
 `pysipnet/units.py`; the substance goes in `constituent` (`"C"`, `"N"`,
 `"H2O"`), never in the string, because Pint reads `g C` as gram·coulomb without
 error.
-`conversion_factor()` / `convert()` in the same module take the constituent
+`conversion_factor()` / `convert_units()` in the same module take the constituent
 as an argument beside each unit string and add the chemistry Pint lacks:
 `MOLAR_MASS` for mass↔amount, `DENSITY` (H2O only) for depth↔mass, and
 `ATOMS_PER_MOLECULE` (C–CO2, C–CH4, N–N2O) for a change of constituent on an
 amount basis. Anything else is refused. The constituent qualifies the
 **first** unit token (where `format_units` prints it), which must be an amount,
 a mass, or for H2O a depth or volume; whole-string dimensionality would find a
-"mass" inside `Pa` or `W` and lose the one in `ug g-1`. `photons` is in
+"mass" inside `Pa` or `W` and lose the one in `ug g-1`. The same first-unit
+reading gates Pint's plain factor: if the first unit changes kind
+(`_kind_change`: amount/mass/depth/volume, depth↔volume exempt as geometry),
+the conversion bridges through the tables or is refused, even when the whole
+dimensions match. Without that, `umol mol-1` CO2 → `ug g-1` (both
+dimensionless) returned 1, and so did `kg kg-1` → `m3 m-3` water content. `photons` is in
 `AMOUNT_ONLY_CONSTITUENTS`, and `tests/test_units.py` fails if a registry
 declares a constituent the tables do not know. `_CONSTITUENT_TOKENS`, the
 substances `validate_units` refuses inside a unit string, is derived from
 `MOLAR_MASS`, so a new convertible substance is refused there automatically.
-`conversion_factor` is `lru_cache`d. `convert` rewrites `units`/`constituent`
-in an object's `attrs`, drops `output_decimals` and the
-`sipnet_internal_*` attributes, and refuses a `Dataset`: xarray keeps attrs
-through arithmetic, so without the rewrite a converted DataArray would still
-claim its old units.
+`conversion_factor` is `lru_cache`d, and in all three functions
+`to_constituent=None` means "same as the source". There are two ways to apply
+it, split because xarray and pandas both keep `attrs` through `values * factor`:
+`convert_units(values, units=..., ...)` takes unlabeled values (number, NumPy,
+pandas) and **refuses** any xarray object and any pandas object with a `units`
+attr, since the result would still claim its old units;
+`convert_dataarray_units(array, to_units=..., ...)` **reads** the source
+`units`/`constituent` from `array.attrs` (no argument for them, so they cannot
+be misstated), rewrites both on a copy, and drops `output_decimals` and the
+`sipnet_internal_*` attributes. It refuses a `Dataset` and an array without
+`units`. It was one `convert(values, units=...)` until the caller-supplied
+`units` was found to be unchecked against the `DataArray`'s own: a wrong one
+gave wrong numbers and then stamped the target units over the evidence.
 
 `SIPNETOutput` exposes `.pandas` (DataFrame), `.xarray` (xarray Dataset, one
 `time` dimension = step **end**), `["nee"]` (DataArray by name or alias),
