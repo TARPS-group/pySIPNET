@@ -475,7 +475,9 @@ An operand is a `DataArray` with a `units` attribute, or a plain number
 - **Values** are plain xarray arithmetic, broadcasting as usual (a `(site,)`
   parameter against a `(site, time)` stack gives per-site results). Index
   coordinates must match exactly: two different time axes are refused rather
-  than cut to the labels they share.
+  than cut to the labels they share, and so is a coordinate such as
+  `time_step_start` that both operands carry with different values, which
+  xarray would otherwise drop.
 - **Units** combine symbol by symbol, and a symbol whose exponent reaches zero
   drops out; nothing is rescaled, so `cm` over `m` is `"cm m-1"`. The operand
   that carries the constituent comes first, since the constituent qualifies

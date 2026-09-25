@@ -67,6 +67,12 @@ def test_step_length_is_the_coordinate_in_the_units_asked_for(niwot, nee, units,
     assert "kind" not in lengths.attrs
 
 
+def test_step_length_goes_into_a_dataset(nee):
+    lengths = step_length(nee)
+    assert "time_step_length" not in lengths.coords
+    assert "time_step_length" in lengths.to_dataset().data_vars
+
+
 def test_step_length_reads_a_dataset(niwot):
     np.testing.assert_allclose(step_length(niwot).values, _days(niwot), **EXACT)
 
@@ -189,8 +195,9 @@ def test_the_constituents_unit_may_not_change_power(nee):
         multiply_with_units(nee, xr.DataArray(2.0, name="mass", attrs={"units": "g"}))
 
 
-def test_an_offset_unit_is_refused_in_a_product():
-    celsius = xr.DataArray([1.0], dims="x", name="air_temperature", attrs={"units": "degC"})
+@pytest.mark.parametrize("units", ["degC", "degC d"])
+def test_an_offset_unit_is_refused_in_a_product(units):
+    celsius = xr.DataArray([1.0], dims="x", name="air_temperature", attrs={"units": units})
     with pytest.raises(ValueError, match="offset scale"):
         multiply_with_units(celsius, 2)
 
@@ -332,8 +339,9 @@ def test_the_result_keeps_the_kinded_operands_time_coordinates(niwot, nee):
     rate = divide_with_units(nee, step_length(nee))
     for name in ("time_step_start", "time_step_length", "year", "day_of_year", "hour_of_day"):
         xr.testing.assert_identical(rate[name], nee[name])
-    daily = resample(rate.rename("net_ecosystem_exchange_rate"), "1D", how="mean")
+    daily = resample(rate, "1D", how="mean")
     assert daily.attrs["kind"] == VariableKind.DAILY_RATE
+    assert daily.name is None
 
 
 def test_a_site_parameter_broadcasts_over_a_stack_of_records(niwot):
@@ -347,6 +355,12 @@ def test_a_site_parameter_broadcasts_over_a_stack_of_records(niwot):
     np.testing.assert_allclose(
         lai.sel(site="b").values, niwot["leaf_carbon"].values / 300.0, **EXACT
     )
+
+
+def test_conflicting_time_coordinates_are_refused_not_dropped(nee):
+    shifted = nee.assign_coords(time_step_start=nee["time_step_start"] + np.timedelta64(1, "h"))
+    with pytest.raises(ValueError, match="time_step_start"):
+        divide_with_units(nee, step_length(shifted))
 
 
 def test_misaligned_index_coordinates_are_refused_not_intersected(nee):

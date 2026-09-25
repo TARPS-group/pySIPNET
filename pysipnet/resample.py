@@ -168,11 +168,12 @@ def resample(
     import xarray as xr
 
     if isinstance(data, xr.DataArray):
-        if data.name is None:
-            raise ValueError("The DataArray has no name; resample the Dataset it came from.")
         if isinstance(how, Mapping):
             raise TypeError("Pass how as a single method for a DataArray, e.g. how='sum'.")
-        return resample(data.to_dataset(), freq, how=how)[data.name]
+        # An arithmetic result has no name; it still resamples, under a stand-in.
+        name = data.name if data.name is not None else "array"
+        resampled = resample(data.to_dataset(name=name), freq, how=how)[name]
+        return resampled.rename(data.name)
 
     _require_time_layout(data)
     methods = _methods_for(data, how)

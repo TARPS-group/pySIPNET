@@ -37,7 +37,8 @@ coordinates must match exactly where both operands have them: two time axes
 that differ are refused rather than silently cut to the labels they share.
 Non-index coordinates of the operands carry through, so the result keeps a
 model variable's ``time_step_start`` and ``time_step_length`` and can still be
-passed to :func:`pysipnet.resample.resample`.
+passed to :func:`pysipnet.resample.resample`; a coordinate both operands carry
+with different values, which xarray would silently drop, is refused.
 
 Units
 -----
@@ -97,7 +98,6 @@ cover sets the attributes itself.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -119,7 +119,7 @@ StepLengthUnits = Literal["d", "h", "s"]
 
 _STEP_LENGTH_COORDINATE = "time_step_length"
 _NANOSECONDS_PER: dict[str, float] = {"d": 86_400e9, "h": 3_600e9, "s": 1e9}
-_UNIT_TOKEN = re.compile(r"^([A-Za-z]+)(-?\d+)?$")
+_ALIGNMENT_ERROR: type[Exception] = getattr(xr, "AlignmentError", ValueError)
 
 
 @dataclass(frozen=True)
@@ -209,8 +209,8 @@ def subtract_with_units(a: Operand, b: Operand) -> xr.DataArray:
     x, y = _operands(a, b, "subtract_with_units")
     _require_agreement(x, y, "subtract_with_units")
     units = x.units
-    if _is_offset(units):
-        if _kelvin_per_degree(units) != 1.0:
+    if _has_offset(units):
+        if len(units.split()) != 1 or _kelvin_per_degree(units) != 1.0:
             _refuse_offset(x, y, "subtract")
         units = "K"
     return _labeled_result(
@@ -260,7 +260,7 @@ def step_length(data: xr.DataArray | xr.Dataset, units: StepLengthUnits = "d") -
     return xr.DataArray(
         nanoseconds / _NANOSECONDS_PER[units],
         dims=coordinate.dims,
-        coords=coordinate.coords,
+        coords=coordinate.drop_vars(_STEP_LENGTH_COORDINATE).coords,
         name=_STEP_LENGTH_COORDINATE,
         attrs={"units": units, "long_name": "Timestep length"},
     )
@@ -340,9 +340,14 @@ def _operand_label(array: xr.DataArray) -> str:
     return "array"
 
 
+def _has_offset(units: str) -> bool:
+    """Whether any unit in *units* is on an offset scale; Pint alone misses ``degC d``."""
+    return any(_is_offset(symbol) for symbol in _exponents(units))
+
+
 def _refuse_offset(x: _Labeled, y: _Labeled, verb: str) -> None:
     for operand in (x, y):
-        if _is_offset(operand.units):
+        if _has_offset(operand.units):
             raise ValueError(
                 f"cannot {verb} {operand.label}, which is in {operand.units!r}: a temperature "
                 "on an offset scale is not a multiple of anything, so its products, "
@@ -357,16 +362,13 @@ def _kelvin_per_degree(units: str) -> float:
 
 
 def _exponents(units: str) -> dict[str, int]:
-    """A UDUNITS string as ``{symbol: exponent}``, in the order the symbols appear."""
+    """A validated UDUNITS string as ``{symbol: exponent}``, in the order the symbols appear."""
     exponents: dict[str, int] = {}
     for token in units.split():
         if token == "1":
             continue
-        match = _UNIT_TOKEN.match(token)
-        if match is None:
-            raise ValueError(f"cannot combine the unit token {token!r} of {units!r}.")
-        symbol = match.group(1)
-        exponents[symbol] = exponents.get(symbol, 0) + int(match.group(2) or 1)
+        symbol = token.rstrip("-0123456789")
+        exponents[symbol] = exponents.get(symbol, 0) + int(token[len(symbol) :] or 1)
     return exponents
 
 
@@ -496,25 +498,50 @@ def _require_agreement(x: _Labeled, y: _Labeled, what: str) -> None:
 
 
 def _apply(x: _Labeled, y: _Labeled, op: str) -> xr.DataArray:
+    if isinstance(x.value, xr.DataArray) and isinstance(y.value, xr.DataArray):
+        try:
+            xr.align(x.value, y.value, join="exact", copy=False)
+        except ValueError as exc:
+            # xr.AlignmentError only exists from xarray 2024.10; before, a plain ValueError.
+            if not isinstance(exc, _ALIGNMENT_ERROR) or "join='exact'" not in str(exc):
+                raise
+            raise ValueError(
+                f"{x.label} {op} {y.label}: the operands' index coordinates differ, and "
+                "silently keeping only the labels they share would drop rows. Select the "
+                "same labels on both first (for example with xr.align(..., join='inner')). "
+                f"{exc}"
+            ) from None
+        _refuse_conflicting_coordinates(x, y, op)
     operations = {
         "*": lambda p, q: p * q,
         "/": lambda p, q: p / q,
         "+": lambda p, q: p + q,
         "-": lambda p, q: p - q,
     }
-    try:
-        with xr.set_options(arithmetic_join="exact", keep_attrs=False):  # type: ignore[no-untyped-call]
-            result: xr.DataArray = operations[op](x.value, y.value)
-    except ValueError as exc:
-        # xr.AlignmentError, a ValueError, only exists from xarray 2024.10.
-        if "exact" not in str(exc):
-            raise
-        raise ValueError(
-            f"{x.label} {op} {y.label}: the operands' index coordinates differ, and "
-            "silently keeping only the labels they share would drop rows. Select the same "
-            f"labels on both first (for example with xr.align(..., join='inner')). {exc}"
-        ) from None
+    with xr.set_options(keep_attrs=False):  # type: ignore[no-untyped-call]
+        result: xr.DataArray = operations[op](x.value, y.value)
     return result
+
+
+def _refuse_conflicting_coordinates(x: _Labeled, y: _Labeled, op: str) -> None:
+    """Refuse non-index coordinates both operands carry with different values.
+
+    xarray drops such a coordinate from the result without a word, so the
+    result would lose ``time_step_start`` or ``time_step_length`` and could no
+    longer be resampled.
+    """
+    a, b = x.value, y.value
+    shared = (set(a.coords) & set(b.coords)) - set(a.indexes) - set(b.indexes)
+    differing = sorted(
+        str(name) for name in shared if not a.coords[name].variable.equals(b.coords[name].variable)
+    )
+    if differing:
+        raise ValueError(
+            f"{x.label} {op} {y.label}: the operands carry different values of the "
+            f"coordinates {differing}, which the result would silently lose. Take both "
+            "from the same record (step_length() of the array itself, for example), or "
+            "drop the coordinate from one of them first."
+        )
 
 
 def _labeled_result(
