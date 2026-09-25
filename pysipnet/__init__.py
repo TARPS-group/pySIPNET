@@ -79,7 +79,7 @@ from pysipnet.parameters.model import (
     SIPNETParameters,
     resolve_parameter_name,
 )
-from pysipnet.resample import resample
+from pysipnet.resample import check_resampling_method, resample
 from pysipnet.result import RunProvenance, SIPNETResult
 from pysipnet.runner import ClimateStaging, SIPNETRunError, SIPNETRunner
 from pysipnet.variables import (
@@ -112,6 +112,7 @@ __all__ = [
     "SIPNETResult",
     "SIPNETOutput",
     "RunProvenance",
+    "check_resampling_method",
     "resample",
     # Parameters
     "SIPNETParameters",

@@ -661,6 +661,51 @@ same layout, with `time` at the end of each coarser step and `kind`,
 now is. A step ending exactly at midnight belongs to the day that ended, so a
 daily record resamples to itself.
 
+`freq` must be at least as long as the steps: `"1h"` on Niwot's 7- and
+17-hour steps is refused rather than returning the input relabeled.
+
+#### Ensembles and stacks of sites
+
+`resample` reduces over `time` only, so an ensemble or a stack of sites
+resamples in one call. Every other dimension keeps its size and order, and
+every coordinate that does not depend on `time` comes through, such as
+`lon`/`lat` on `site`:
+
+```python
+import xarray as xr
+
+runs = [runner.run(p, climate).outputs[["nee", "wood_carbon"]] for p in ensemble]
+stack = xr.concat(runs, dim="member").assign_coords(member=range(len(runs)))
+
+monthly = resample(
+    stack,
+    "MS",
+    how={"net_ecosystem_exchange": "sum", "wood_carbon": "last"},
+)
+monthly["net_ecosystem_exchange"].dims   # ('member', 'time')
+```
+
+Each member's slice is exactly what resampling that run alone gives. The
+cells are shared by the whole Dataset, so the runs must share one time axis:
+`time_step_start` and `time_step_length` have to be on `time` alone. If you
+concatenate runs over different periods, xarray gives those coordinates a
+`member` or `site` dimension, and `resample` refuses the stack; resample each
+run separately. Selecting one run out of such a stack leaves rows of padding,
+whose start and length are `NaT` and whose values are all missing, and
+`resample` drops them. A row that has a value but no start or length is
+refused instead, since there is no telling which cell it belongs to.
+
+[`check_resampling_method`][pysipnet.resample.check_resampling_method] is the
+check `resample` applies to each variable, for code that combines steps some
+other way and wants to refuse a meaningless method in the same words:
+
+```python
+from pysipnet import check_resampling_method
+
+check_resampling_method("timestep_end_state", "sum", name="wood_carbon")
+# ValueError: Cannot resample 'wood_carbon' with 'sum': it is a pool reported at ...
+```
+
 ## Querying parameter metadata
 
 ### SIPNET_PARAMS_BY_GROUP
