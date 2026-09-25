@@ -504,9 +504,19 @@ error.
 as an argument beside each unit string and add the chemistry Pint lacks:
 `MOLAR_MASS` for mass↔amount, `DENSITY` (H2O only) for depth↔mass, and
 `ATOMS_PER_MOLECULE` (C–CO2, C–CH4, N–N2O) for a change of constituent on an
-amount basis. Anything else is refused. `photons` is in
+amount basis. Anything else is refused. The constituent qualifies the
+**first** unit token (where `format_units` prints it), which must be an amount,
+a mass, or for H2O a depth or volume; whole-string dimensionality would find a
+"mass" inside `Pa` or `W` and lose the one in `ug g-1`. `photons` is in
 `AMOUNT_ONLY_CONSTITUENTS`, and `tests/test_units.py` fails if a registry
-declares a constituent the tables do not know.
+declares a constituent the tables do not know. `_CONSTITUENT_TOKENS`, the
+substances `validate_units` refuses inside a unit string, is derived from
+`MOLAR_MASS`, so a new convertible substance is refused there automatically.
+`conversion_factor` is `lru_cache`d. `convert` rewrites `units`/`constituent`
+in an object's `attrs`, drops `output_decimals` and the
+`sipnet_internal_*` attributes, and refuses a `Dataset`: xarray keeps attrs
+through arithmetic, so without the rewrite a converted DataArray would still
+claim its old units.
 
 `SIPNETOutput` exposes `.pandas` (DataFrame), `.xarray` (xarray Dataset, one
 `time` dimension = step **end**), `["nee"]` (DataArray by name or alias),
@@ -801,7 +811,7 @@ pySIPNET/
 │   │   ├── base.py               # ParameterSpec, param_field, domains (version-agnostic)
 │   │   └── model.py              # ModelFlags and SIPNETParameters
 │   ├── variables.py              # the output-variable registry (names, units, kinds, labels)
-│   ├── units.py                  # UDUNITS unit strings: Pint registry, validation, formatting
+│   ├── units.py                  # UDUNITS unit strings: Pint registry, validation, formatting, constituent-aware conversion
 │   ├── climate.py                # ClimateDrivers + validation
 │   ├── dataset.py                # shared DataFrame → xarray builder (time = step end)
 │   ├── resample.py               # explicit, kind-checked coarsening of the time axis
@@ -827,6 +837,7 @@ pySIPNET/
 │   ├── test_param_name_mapping.py   # the Python→SIPNET parameter map, stated by hand
 │   ├── test_integration.py       # end-to-end behavior, flags, mass balance, snow flag
 │   ├── test_variables.py         # the .out header contract and the registry's own rules
+│   ├── test_units.py             # conversion factors, refusals, and every registry constituent convertible
 │   ├── test_download.py          # prebuilt-binary download and its verification
 │   ├── test_fidelity.py          # wrapper output == bare binary output
 │   ├── test_time_axis.py         # axis from the drivers, label/length continuity, time_zone
@@ -901,6 +912,11 @@ Worth knowing which test to look at when something breaks:
   and `time_zone` survives the run, `RunConfig` and `resample`. Catches the
   axis silently reverting to SIPNET's rounded labels, and a tolerance change
   that would start accepting drift or refusing Niwot.
+- `test_units.py` — every conversion factor, stated as arithmetic on the
+  molar masses by hand, every refusal by message, round trips, relabeling of
+  `attrs`, and that every constituent a registry declares is one the
+  conversion tables know. Catches a wrong table entry, a wrong route through
+  the tables, and a new constituent added without its molar mass.
 - `test_integration.py` — end-to-end behavior, including that flags visibly
   change results and that SIPNET's own mass-balance errors stay near zero.
 

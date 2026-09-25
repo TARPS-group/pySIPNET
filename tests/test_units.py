@@ -8,6 +8,7 @@ it cannot cancel itself out.
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 import xarray as xr
 
@@ -49,11 +50,17 @@ FACTORS = [
     ("g m-2", "N", "g m-2", "N2O", 44.013 / (2 * 14.007)),
     ("mol m-2", "N2O", "mol m-2", "N", 2.0),
     ("nmol g-1 s-1", "CO2", "nmol g-1 s-1", "C", 1.0),
+    # The g-1 is leaf mass; the constituent qualifies only the first unit.
+    ("nmol g-1 s-1", "CO2", "ug g-1 s-1", "C", 12.011e-3),
+    ("mg g-1 kPa", "CO2", "mg g-1 kPa", "C", 12.011 / 44.009),
     # Water as a depth, through the density.
     ("cm", "H2O", "kg m-2", "H2O", 10.0),
     ("mm", "H2O", "kg m-2", "H2O", 1.0),
     ("cm d-1", "H2O", "kg m-2 s-1", "H2O", 10 / 86400),
     ("cm", "H2O", "mol m-2", "H2O", 10_000 / 18.015),
+    ("m3 m-2", "H2O", "mm", "H2O", 1000.0),
+    # Same dimension needs no bridge, whatever the first unit is.
+    ("kPa", "H2O", "Pa", "H2O", 1000.0),
 ]
 
 
@@ -90,7 +97,7 @@ def test_round_trip_is_identity(units, constituent, to_units, to_constituent, ex
 
 REFUSALS = [
     # (units, constituent, to_units, to_constituent, text the message must contain)
-    ("g m-2", "C", "m2 m-2", "C", "different dimensions"),
+    ("g m-2", "C", "m2 m-2", "C", "'m2' in 'm2 m-2' is not an amount or a mass of 'C'"),
     ("g m-2", "", "m2 m-2", "", "different dimensions"),
     ("g m-2", "", "mol m-2", "", "molar mass needs a substance"),
     ("g m-2", "C", "g m-2", "", "one side only"),
@@ -102,9 +109,17 @@ REFUSALS = [
     ("g m-2", "C", "g m-2", "N", "no recorded atom ratio between 'C' and 'N'"),
     ("g m-2", "CO2", "g m-2", "CH4", "no recorded atom ratio between 'CO2' and 'CH4'"),
     ("g m-2", "photons", "mol m-2", "photons", "'photons' has no molar mass"),
-    ("m2 m-2", "C", "m2 m-2", "CO2", "neither an amount nor a mass of 'C'"),
-    ("g m-2", "C", "cm", "C", "different dimensions"),
+    ("m2 m-2", "C", "m2 m-2", "CO2", "'m2' in 'm2 m-2' is not an amount or a mass of 'C'"),
+    ("g m-2", "C", "cm", "C", "'cm' in 'cm' is not an amount or a mass of 'C'"),
+    ("g m-2", "C", "mol m-2 s-1", "C", "does not reconcile them"),
+    ("g m-2", "H2O", "m2 m-2", "H2O", "an amount, a mass, a depth or a volume of 'H2O'"),
+    # The constituent qualifies the first unit, so a mass inside a pressure or a
+    # power is not a mass of the substance.
+    ("Pa", "C", "Pa", "CO2", "'Pa' in 'Pa' is not an amount or a mass of 'C'"),
+    ("W m-2", "C", "W m-2", "CO2", "'W' in 'W m-2' is not an amount or a mass of 'C'"),
+    ("g m-2", "C", "Pa mol g-1", "C", "'Pa' in 'Pa mol g-1' is not an amount or a mass"),
     ("degC", "", "K", "", "offset temperature scale"),
+    ("degC", "C", "degC", "CO2", "a temperature has no constituent"),
 ]
 
 
@@ -145,10 +160,74 @@ def test_convert_preserves_dataarray_shape_and_coordinates():
     np.testing.assert_allclose(out.values, 1e6 / 12.011 / 86400, rtol=1e-12)
 
 
+def test_convert_relabels_a_dataarray_and_leaves_the_input_alone():
+    from pysipnet.io.reference import niwot_reference_output
+
+    wood = niwot_reference_output()["wood_carbon"]
+    before = dict(wood.attrs)
+    out = convert(wood, units="g m-2", constituent="C", to_units="Mg ha-1", to_constituent="C")
+    assert out.attrs["units"] == "Mg ha-1" and out.attrs["constituent"] == "C"
+    assert "output_decimals" not in out.attrs
+    assert out.attrs["long_name"] == before["long_name"]
+    assert wood.attrs == before
+
+
+def test_convert_relabels_constituent_and_drops_sipnet_conversion_attrs():
+    da = xr.DataArray(
+        [1.0],
+        attrs={
+            "units": "cm",
+            "constituent": "H2O",
+            "sipnet_internal_units": "mm",
+            "sipnet_internal_conversion": "x 0.1",
+        },
+    )
+    out = convert(da, units="cm", constituent="H2O", to_units="kg m-2", to_constituent="H2O")
+    assert out.attrs == {"units": "kg m-2", "constituent": "H2O"}
+    out = convert(
+        xr.DataArray([1.0], attrs={"units": "g m-2", "constituent": "C"}),
+        units="g m-2",
+        constituent="C",
+        to_units="g m-2",
+        to_constituent="CO2",
+    )
+    assert out.attrs["constituent"] == "CO2"
+
+
+def test_convert_relabels_a_pandas_series():
+    s = pd.Series([1.0, 2.0])
+    s.attrs = {"units": "g m-2", "constituent": "C"}
+    out = convert(s, units="g m-2", constituent="C", to_units="Mg ha-1", to_constituent="C")
+    assert out.attrs["units"] == "Mg ha-1"
+    assert s.attrs["units"] == "g m-2"
+
+
+def test_convert_refuses_a_dataset():
+    ds = xr.Dataset({"a": ("t", [1.0]), "b": ("t", [2.0])})
+    with pytest.raises(TypeError, match="one variable at a time"):
+        convert(ds, units="g m-2", to_units="Mg ha-1")
+
+
 def test_convert_on_a_scalar():
     assert (
         convert(2.0, units="cm", constituent="H2O", to_units="kg m-2", to_constituent="H2O") == 20.0
     )
+
+
+def test_factor_is_cached():
+    conversion_factor.cache_clear()
+    factor("g m-2", "C", "Mg ha-1", "C")
+    factor("g m-2", "C", "Mg ha-1", "C")
+    assert conversion_factor.cache_info().hits == 1
+
+
+def test_every_convertible_substance_is_refused_inside_a_unit_string():
+    from pysipnet.units import validate_units
+
+    for substance in MOLAR_MASS:
+        # H2O fails the UDUNITS syntax check first; either way it is refused.
+        with pytest.raises(ValueError, match="substance token|UDUNITS syntax"):
+            validate_units(f"g {substance} m-2")
 
 
 def test_tables_are_read_only():
