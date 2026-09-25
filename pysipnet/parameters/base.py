@@ -125,7 +125,7 @@ class ParameterDomain(StrEnum):
         field is.
         """
         v = np.asarray(values, dtype=float)
-        inside = np.isfinite(v)
+        inside = np.asarray(np.isfinite(v))
         with np.errstate(invalid="ignore"):
             for keyword, bound in _DOMAIN_BOUNDS[self].items():
                 inside &= _COMPARISONS[keyword](v, bound)

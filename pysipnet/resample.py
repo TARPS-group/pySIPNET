@@ -95,7 +95,8 @@ _WHY_NOT: dict[tuple[VariableKind, str], str] = {
     ),
     (VariableKind.TIMESTEP_TOTAL, "mean"): (
         "the mean of per-step totals depends on how long the steps happened to be; sum "
-        "them, and divide by the new time_step_length yourself if you want a rate"
+        "them, and for a rate divide by the step length "
+        "(pysipnet.arithmetic.divide_with_units with step_length())"
     ),
     (VariableKind.TIMESTEP_TOTAL, "last"): (
         "the last step's total is not the total over the coarser step"
@@ -170,8 +171,9 @@ def resample(
     if isinstance(data, xr.DataArray):
         if isinstance(how, Mapping):
             raise TypeError("Pass how as a single method for a DataArray, e.g. how='sum'.")
-        # An arithmetic result has no name; it still resamples, under a stand-in.
-        name = data.name if data.name is not None else "array"
+        # An arithmetic result has no name; it resamples under its derivation, which
+        # is what a refusal should call it.
+        name = data.name if data.name is not None else data.attrs.get("derivation") or "array"
         resampled = resample(data.to_dataset(name=name), freq, how=how)[name]
         return resampled.rename(data.name)
 

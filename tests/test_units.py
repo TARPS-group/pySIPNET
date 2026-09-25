@@ -514,3 +514,8 @@ def test_read_dataarray_units():
     assert read_dataarray_units(xr.DataArray(1.0, attrs={"units": "d"})) == ("d", "")
     with pytest.raises(ValueError, match="DataArray 'x': Unit string 'g C m-2'"):
         read_dataarray_units(xr.DataArray(1.0, name="x", attrs={"units": "g C m-2"}))
+
+
+def test_a_difference_on_another_offset_scale_is_refused():
+    with pytest.raises(ValueError, match="temperature difference with no UDUNITS name"):
+        difference_units(units="degF", other_units="degF")

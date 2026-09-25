@@ -1287,6 +1287,10 @@ def parameter_dataarray(
         parameter_dataarray("leaf_carbon_per_area", [200.0, 300.0],
                             dims="site", coords={"site": ["a", "b"]})
 
+    *values* may already be a ``DataArray`` (an ensemble's draws, say), whose
+    dims and coords are kept and whose attributes are replaced; *dims* and
+    *coords* are then refused, since the array states its own.
+
     For a single :class:`SIPNETParameters`, use
     :meth:`SIPNETParameters.dataarray`.
 
@@ -1297,6 +1301,13 @@ def parameter_dataarray(
     """
     field = resolve_parameter_name(name)
     spec = PARAMETER_SPECS[_PARAMETER_PATHS[field]]
+    if isinstance(values, xr.DataArray):
+        if dims != () or coords is not None:
+            raise TypeError(
+                "parameter_dataarray(): values is a DataArray, which carries its own dims "
+                "and coords; pass dims and coords only with plain values."
+            )
+        dims, coords = values.dims, values.coords
     data = np.asarray(values, dtype=float)
     outside = ~spec.domain.contains(data)
     if outside.any():

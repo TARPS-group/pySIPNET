@@ -5,6 +5,7 @@ These tests do not require a compiled SIPNET binary.
 
 import numpy as np
 import pytest
+import xarray as xr
 from pydantic import ValidationError
 
 from pysipnet.parameters.base import ParameterDomain, get_parameter_specs
@@ -622,3 +623,29 @@ class TestParameterDataArray:
 def test_domain_contains_matches_the_pydantic_bounds(domain, inside, outside):
     assert domain.contains(inside).all()
     assert not domain.contains(outside).any()
+
+
+class TestParameterDataArrayFromADataArray:
+    def test_dims_and_coords_are_kept_and_attrs_replaced(self):
+        draws = xr.DataArray(
+            [200.0, 300.0], dims="member", coords={"member": [0, 1]}, attrs={"units": "kg"}
+        )
+        array = parameter_dataarray("leafCSpWt", draws)
+        assert array.dims == ("member",)
+        assert list(array["member"].values) == [0, 1]
+        assert array.attrs["units"] == "g m-2" and array.attrs["constituent"] == "C"
+        assert draws.attrs == {"units": "kg"}
+
+    def test_dims_with_a_dataarray_are_refused(self):
+        draws = xr.DataArray([200.0], dims="member")
+        with pytest.raises(TypeError, match="carries its own dims"):
+            parameter_dataarray("leafCSpWt", draws, dims="site")
+
+    def test_domain_still_applies(self):
+        with pytest.raises(ValueError, match="1 of 2 values"):
+            parameter_dataarray("leafCSpWt", xr.DataArray([200.0, -1.0], dims="member"))
+
+
+def test_domain_contains_returns_an_array_for_a_scalar():
+    result = ParameterDomain.POSITIVE.contains(3.0)
+    assert isinstance(result, np.ndarray) and result.shape == () and bool(result)

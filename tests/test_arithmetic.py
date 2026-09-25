@@ -410,3 +410,35 @@ def test_the_difference_of_two_celsius_temperatures_is_in_kelvin():
     np.testing.assert_allclose(difference.values, [15.0], **EXACT)
     with pytest.raises(ValueError, match="offset temperature scale"):
         add_with_units(warm, cool)
+
+
+def test_an_unnamed_result_is_resampled_and_refused_under_its_derivation(nee):
+    doubled = multiply_with_units(nee, 2.0)
+    with pytest.raises(ValueError, match="Cannot resample 'net_ecosystem_exchange \\* 2.0'"):
+        resample(doubled, "1D", how="mean")
+    assert resample(doubled, "1D", how="sum").name is None
+
+
+def test_resampling_a_total_by_mean_points_to_the_arithmetic(nee):
+    with pytest.raises(ValueError, match="divide_with_units with step_length"):
+        resample(nee, "1D", how="mean")
+
+
+def test_a_numpy_scalar_is_an_operand(nee):
+    doubled = multiply_with_units(nee, np.int64(2))
+    assert doubled.attrs["derivation"] == "net_ecosystem_exchange * 2"
+    np.testing.assert_allclose(doubled.values, 2 * nee.values, **EXACT)
+
+
+def test_a_chunked_operand_drops_the_sign_convention_without_computing(nee):
+    pytest.importorskip("dask")
+    factor = xr.DataArray(
+        np.full(nee.sizes["time"], 2.0),
+        dims="time",
+        coords={"time": nee["time"]},
+        name="factor",
+        attrs={"units": "1"},
+    ).chunk()
+    product = multiply_with_units(nee, factor)
+    assert "sign_convention" not in product.attrs
+    assert product.chunks is not None

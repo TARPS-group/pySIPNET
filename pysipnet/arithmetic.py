@@ -69,8 +69,10 @@ Result
 ``units``; ``constituent`` when there is one; and when there is a kind,
 ``kind`` with the ``time_reference`` and ``cell_methods`` pySIPNET gives it.
 ``sign_convention`` is kept when it is still true: in a product or quotient
-when the other operand has no values at or below zero, in a sum when both
-operands state the same one, and never in a difference.  ``long_name`` and
+when the other operand is a positive number or an in-memory array with no
+values at or below zero, in a sum when both operands state the same one, and
+never in a difference.  A lazy (dask-backed) other operand drops it rather
+than being computed to decide one attribute.  ``long_name`` and
 ``derivation`` name the operation (``"net_ecosystem_exchange /
 time_step_length"``), with an unnamed operand given by its own derivation in
 parentheses.  Nothing describing a source rather than the result is carried:
@@ -88,7 +90,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 import numpy as np
 import xarray as xr
@@ -108,8 +110,8 @@ from pysipnet.variables import (
     VariableKind,
 )
 
-Operand = xr.DataArray | float
-"""What each function takes on either side: a labeled ``DataArray`` or a plain number."""
+Operand: TypeAlias = xr.DataArray | float | np.integer[Any] | np.floating[Any]
+"""What each function takes on either side: a labeled ``DataArray`` or a plain real number."""
 
 StepLengthUnits = Literal["d", "h", "s"]
 
@@ -398,7 +400,8 @@ def _scaled_sign_convention(x: _Labeled, y: _Labeled) -> str:
     if not source.sign_convention:
         return ""
     if isinstance(other.value, xr.DataArray):
-        flips = bool((other.value <= 0).any())
+        # Deciding would compute a dask array, so a chunked operand drops the attribute.
+        flips = other.value.chunks is not None or bool((other.value <= 0).any())
     else:
         flips = not other.value > 0
     return "" if flips else source.sign_convention
