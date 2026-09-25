@@ -23,6 +23,14 @@ silent error rather than a caught one.  The qualifier lives in a separate
 ``constituent`` field (``"C"``, ``"N"``, ``"H2O"``) on the variable or
 parameter spec, and :func:`format_units` puts it back for display.
 
+A substance enters a *conversion* the same way: as an argument beside the unit
+string, never inside it.  :func:`conversion_factor` takes ``units`` and
+``constituent`` for each side and does the chemistry Pint cannot, since grams
+of carbon become moles only through carbon's molar mass::
+
+    conversion_factor(units="g m-2 d-1", constituent="C",
+                      to_units="umol m-2 s-1", to_constituent="CO2")  # 0.9636...
+
 **"per timestep" is not a unit.**  A flux integrated over the model step is in
 ``"g m-2"``; the fact that it is a total over the step is metadata carried by
 the variable's kind (see :mod:`pysipnet.variables`).
@@ -34,12 +42,42 @@ UDUNITS exponents (``m-2``) into Pint's (``m**-2``), plus an ``einstein``
 definition (one mole of photons).  :func:`validate_units` parses a string
 through it and additionally refuses the substance tokens above, so every unit
 string in the package is checked at import time.
+
+Conversion
+----------
+:func:`conversion_factor` returns the number that takes a value in one
+``(units, constituent)`` pair to another, and :func:`convert` multiplies by it.
+The factor is a pure function of the four strings, so a test can pin it.  In
+order, the rules are:
+
+1. Same dimension, same constituent (or none on either side): Pint's factor.
+2. Mass to amount or back, one constituent: through :data:`MOLAR_MASS`.  A
+   depth or volume of water to a mass or back: through :data:`DENSITY`.
+3. A change of constituent: only for a pair in :data:`ATOMS_PER_MOLECULE`,
+   applied on an amount basis and composed with rules 1 and 2.  Grams of C to
+   grams of CO2 goes C mass → C amount → CO2 amount → CO2 mass.
+4. Anything else raises ``ValueError`` naming both unit strings and both
+   constituents: a dimension mismatch, a constituent on one side only, an
+   unknown constituent, a substance token inside a unit string, a constituent
+   on a temperature, or an offset temperature conversion, which is not a
+   multiplication.
+
+Rules 2 and 3 read the constituent as qualifying the **first** unit in the
+string, the same position :func:`format_units` prints it in: ``"g m-2"`` of C
+is grams of carbon per square meter, and ``"nmol g-1 s-1"`` of CO2 is
+nanomoles of CO2 per gram of leaf.  That first unit must be an amount, a mass,
+or (for water) a depth or volume.  Pint's dimensionality alone cannot say which
+mass is the substance's: it would find one inside ``Pa`` or ``W`` and lose the
+one in ``ug g-1`` to cancellation.
 """
 
 from __future__ import annotations
 
 import re
-from typing import Literal
+from collections.abc import Mapping
+from functools import lru_cache
+from types import MappingProxyType
+from typing import Any, Literal
 
 import pint
 
@@ -47,9 +85,36 @@ import pint
 # are exponents; a bare '1' (dimensionless) has no letter before it.
 _UDUNITS_EXPONENT = re.compile(r"(?<=[A-Za-z])(-?\d+)")
 
+MOLAR_MASS: Mapping[str, float] = MappingProxyType(
+    {
+        "C": 12.011,
+        "N": 14.007,
+        "H2O": 18.015,
+        "CO2": 44.009,
+        "CH4": 16.043,
+        "N2O": 44.013,
+    }
+)
+"""Molar mass of each constituent that has one, in g mol-1."""
+
+DENSITY: Mapping[str, float] = MappingProxyType({"H2O": 1000.0})
+"""Density in kg m-3, which lets a depth convert to a mass per area (1 cm of water is 10 kg m-2)."""
+
+AMOUNT_ONLY_CONSTITUENTS: frozenset[str] = frozenset({"photons"})
+"""Constituents counted in moles that have no molar mass."""
+
+CONSTITUENTS: frozenset[str] = frozenset(MOLAR_MASS) | AMOUNT_ONLY_CONSTITUENTS
+"""Every constituent a conversion accepts, besides ``""`` for none."""
+
+ATOMS_PER_MOLECULE: Mapping[tuple[str, str], int] = MappingProxyType(
+    {("C", "CO2"): 1, ("C", "CH4"): 1, ("N", "N2O"): 2}
+)
+"""``(element, molecule): atoms of the element in one molecule``, the only changes of
+constituent a conversion makes."""
+
 # Tokens that name a substance rather than a unit.  Pint accepts every one of
 # them as something else (coulomb, newton, ...), so they must be refused here.
-_CONSTITUENT_TOKENS: frozenset[str] = frozenset({"C", "N", "H2O", "CO2", "CH4", "N2O"})
+_CONSTITUENT_TOKENS: frozenset[str] = frozenset(MOLAR_MASS)
 
 # A symbol with an optional signed integer exponent ("m", "m-2", "kPa-1"), or the
 # bare "1" of a dimensionless quantity.
@@ -63,6 +128,10 @@ _DISPLAY_SYMBOL: dict[str, str] = {"degC": "°C", "einstein": "E"}
 
 UnitStyle = Literal["unicode", "latex", "html", "plain"]
 
+# Attributes that describe a value in its original units and would be false after
+# a conversion: the printed precision, and SIPNET's conversion from the file units.
+_UNIT_DEPENDENT_ATTRS = ("output_decimals", "sipnet_internal_units", "sipnet_internal_conversion")
+
 
 def _udunits_to_pint(expression: str) -> str:
     return _UDUNITS_EXPONENT.sub(r"**\1", expression)
@@ -72,10 +141,13 @@ unit_registry = pint.UnitRegistry(preprocessors=[_udunits_to_pint])  # type: ign
 unit_registry.define("einstein = mole = E")
 """Pint registry that understands the package's UDUNITS-style unit strings.
 
-Use it for conversions::
+It converts between physical units only::
 
     from pysipnet.units import unit_registry
     q = unit_registry.Quantity(values, "g m-2 d-1").to("kg m-2 s-1")
+
+For a quantity with a ``constituent``, use :func:`conversion_factor` or
+:func:`convert` instead, which apply the constituent rules as well.
 """
 
 
@@ -155,3 +227,181 @@ def _render_token(symbol: str, exponent: str | None, style: UnitStyle) -> str:
     if style == "html":
         return f"{symbol}<sup>{exponent}</sup>"
     return f"{symbol}{exponent}"
+
+
+@lru_cache(maxsize=256)
+def conversion_factor(
+    *, units: str, constituent: str = "", to_units: str, to_constituent: str = ""
+) -> float:
+    """Return the factor taking *units* of *constituent* to *to_units* of *to_constituent*.
+
+    ``conversion_factor(units="g m-2", constituent="C", to_units="g m-2",
+    to_constituent="CO2")`` is ``44.009 / 12.011``.  See the module docstring
+    for the rules; anything they do not cover raises ``ValueError``.  The
+    result is cached, since it depends on nothing but the four strings.
+    """
+    try:
+        return _conversion_factor(units, constituent, to_units, to_constituent)
+    except ValueError as exc:
+        raise ValueError(
+            f"Cannot convert {units!r} ({_describe(constituent)}) to {to_units!r} "
+            f"({_describe(to_constituent)}): {exc}"
+        ) from None
+
+
+def convert(
+    values: Any, *, units: str, constituent: str = "", to_units: str, to_constituent: str = ""
+) -> Any:
+    """Return *values* multiplied by :func:`conversion_factor` for the same arguments.
+
+    Works on anything that multiplies by a float (a scalar, a NumPy array, a
+    pandas object or an xarray ``DataArray``) and preserves its shape.  An
+    object that carries ``attrs`` comes back relabeled: ``units`` and
+    ``constituent`` say *to_units* and *to_constituent*, and the attributes
+    that described the original units (``output_decimals`` and SIPNET's
+    internal conversion) are dropped.  An xarray ``Dataset`` is refused,
+    because its variables do not share one unit.
+    """
+    if hasattr(values, "data_vars"):
+        raise TypeError(
+            "convert() takes one variable at a time; a Dataset's variables have their own "
+            "units. Convert ds[name] instead."
+        )
+    factor = conversion_factor(
+        units=units, constituent=constituent, to_units=to_units, to_constituent=to_constituent
+    )
+    result = values * factor
+    attrs = getattr(result, "attrs", None)
+    if isinstance(attrs, dict):
+        relabeled = {k: v for k, v in attrs.items() if k not in _UNIT_DEPENDENT_ATTRS}
+        relabeled["units"] = to_units
+        relabeled.pop("constituent", None)
+        if to_constituent:
+            relabeled["constituent"] = to_constituent
+        result.attrs = relabeled
+    return result
+
+
+def _conversion_factor(units: str, constituent: str, to_units: str, to_constituent: str) -> float:
+    validate_units(units)
+    validate_units(to_units)
+    for c in (constituent, to_constituent):
+        if c and c not in CONSTITUENTS:
+            raise ValueError(
+                f"unknown constituent {c!r}; known constituents are {sorted(CONSTITUENTS)}."
+            )
+    if bool(constituent) != bool(to_constituent):
+        raise ValueError(
+            "a constituent is given on one side only; name the substance on both sides or neither."
+        )
+
+    source = unit_registry.Quantity(1.0, units)
+    target = unit_registry.Quantity(1.0, to_units)
+
+    if _is_offset(units) or _is_offset(to_units):
+        if constituent:
+            raise ValueError("a temperature has no constituent.")
+        return _offset_scale_factor(units, to_units)
+
+    if constituent == to_constituent and source.dimensionality == target.dimensionality:
+        return float(source.to(to_units).magnitude)
+    mismatch = (
+        f"the quantities have different dimensions ({source.dimensionality} and "
+        f"{target.dimensionality})"
+    )
+    if not constituent:
+        ratio = source.dimensionality / target.dimensionality
+        mass_per_amount = unit_registry.Quantity(1.0, "g mol-1").dimensionality
+        if ratio in (mass_per_amount, 1 / mass_per_amount):
+            raise ValueError(
+                "mass and amount convert through a molar mass, and a molar mass needs a "
+                "substance; name the constituent on both sides."
+            )
+        raise ValueError(f"{mismatch} and no constituent to bridge them.")
+
+    molecules = (
+        1.0 if constituent == to_constituent else _molecule_ratio(constituent, to_constituent)
+    )
+    bridged = (
+        source
+        * _to_amount_basis(constituent, units)
+        * molecules
+        / _to_amount_basis(to_constituent, to_units)
+    )
+    try:
+        return float(bridged.to(to_units).magnitude)
+    except pint.errors.DimensionalityError:
+        raise ValueError(
+            f"{mismatch}, and restating both as amounts of the constituent does not reconcile them."
+        ) from None
+
+
+def _describe(constituent: str) -> str:
+    return f"constituent {constituent!r}" if constituent else "no constituent"
+
+
+def _is_offset(units: str) -> bool:
+    return bool(unit_registry.Quantity(0.0, units).to_base_units().magnitude != 0)
+
+
+def _offset_scale_factor(units: str, to_units: str) -> float:
+    try:
+        factor = unit_registry.Quantity(1.0, units).to(to_units).magnitude
+        zero = unit_registry.Quantity(0.0, units).to(to_units).magnitude
+    except pint.errors.DimensionalityError:
+        raise ValueError("the quantities have different dimensions.") from None
+    if zero != 0:
+        raise ValueError(
+            "an offset temperature scale (such as degC) converts by adding as well as "
+            "multiplying, so it has no conversion factor. Convert temperature differences "
+            "in K or with the same scale on both sides."
+        )
+    return float(factor)
+
+
+def _to_amount_basis(constituent: str, units: str) -> pint.Quantity[Any]:
+    """The multiplier that restates *units* of *constituent* as moles of it.
+
+    The constituent qualifies the first unit in the string, as in
+    :func:`format_units`: ``"g m-2"`` of C is grams *of carbon* per square
+    meter, and ``"nmol g-1 s-1"`` of CO2 is nanomoles *of CO2* per gram of
+    something else.  Reading the whole dimensionality instead would mistake
+    the mass inside ``Pa`` or ``W`` for a mass of the substance, and lose the
+    mass in ``ug g-1`` to cancellation.
+    """
+    first = units.split()[0]
+    dimensions = unit_registry.Quantity(1.0, first).dimensionality
+    if dimensions == unit_registry.Quantity(1.0, "mol").dimensionality:
+        return unit_registry.Quantity(1.0, "1")
+    if constituent not in MOLAR_MASS:
+        raise ValueError(f"{constituent!r} has no molar mass, so only its amount converts.")
+    per_mole: pint.Quantity[Any] = 1 / unit_registry.Quantity(MOLAR_MASS[constituent], "g mol-1")
+    if dimensions == unit_registry.Quantity(1.0, "g").dimensionality:
+        return per_mole
+    length = unit_registry.Quantity(1.0, "m").dimensionality
+    if constituent in DENSITY and dimensions in (length, length**3):
+        density = unit_registry.Quantity(DENSITY[constituent], "kg m-3")
+        by_volume: pint.Quantity[Any] = density * per_mole
+        return by_volume
+    kinds = (
+        "an amount, a mass, a depth or a volume"
+        if constituent in DENSITY
+        else "an amount or a mass"
+    )
+    raise ValueError(
+        f"the constituent qualifies the first unit, and {first!r} in {units!r} is not "
+        f"{kinds} of {constituent!r}."
+    )
+
+
+def _molecule_ratio(constituent: str, to_constituent: str) -> float:
+    """Moles of *to_constituent* per mole of *constituent*."""
+    if (constituent, to_constituent) in ATOMS_PER_MOLECULE:
+        return 1 / ATOMS_PER_MOLECULE[(constituent, to_constituent)]
+    if (to_constituent, constituent) in ATOMS_PER_MOLECULE:
+        return float(ATOMS_PER_MOLECULE[(to_constituent, constituent)])
+    pairs = ", ".join(f"{a}-{b}" for a, b in ATOMS_PER_MOLECULE)
+    raise ValueError(
+        f"there is no recorded atom ratio between {constituent!r} and {to_constituent!r}; "
+        f"the pairs that convert are {pairs}."
+    )

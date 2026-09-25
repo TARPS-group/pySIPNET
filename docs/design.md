@@ -39,6 +39,8 @@ Unit strings use UDUNITS syntax, the convention of netCDF and the Climate and Fo
 
 The substance is deliberately kept out of the unit string. Pint parses `"g C m-2"` as gram·coulomb per square meter without complaint, so a qualifier inside the string would be a silent error rather than a caught one; `pysipnet.units.validate_units` refuses it. `format_units("g m-2", constituent="C")` puts it back for display as `g C m⁻²`.
 
+A substance enters a conversion the same way, as an argument beside the unit string. `pysipnet.units.conversion_factor` takes a `units` and a `constituent` for each side and supplies the chemistry Pint cannot: mass and amount convert through `MOLAR_MASS`, a depth or volume of water and a mass through `DENSITY`, and a change of constituent only for a pair in `ATOMS_PER_MOLECULE` (C–CO2, C–CH4, N–N2O), applied on an amount basis. The constituent qualifies the first unit in the string, the position `format_units` prints it in, so `"nmol g-1 s-1"` of CO2 is CO2 per gram of leaf and a `"Pa"` of C is refused. Every other pairing is refused rather than guessed. See [Running a Model](user-guide/running-a-model.md#converting-units) for examples.
+
 "Per timestep" is not a unit either. A flux integrated over the step is in `"g m-2"`, and the fact that it is a total over the step is the variable's *kind*, carried as the `time_reference` and `cell_methods` attributes on the xarray representation.
 
 ### 3. Documented parameter domains

@@ -355,6 +355,60 @@ the substance in a separate `constituent` field, because a `C` inside a unit str
 would be read as coulombs by units libraries. `formatted_units()` and `axis_label()`
 put it back for display. See [Design](../design.md) for the convention.
 
+### Converting units
+
+`pysipnet.units.conversion_factor` and `convert` translate a value from one
+`(units, constituent)` pair to another, which is what an observation operator
+needs when the observation is in different units from the model. Pint does the
+prefixes and dimensions; pySIPNET adds the chemistry, since a gram of carbon
+becomes a mole only through carbon's molar mass.
+
+```python
+from pysipnet.units import conversion_factor, convert
+from pysipnet.variables import resolve_output_variable
+
+spec = resolve_output_variable("wood_carbon")      # 'g m-2', constituent 'C'
+convert(result.outputs["wood_carbon"], units=spec.units, constituent=spec.constituent,
+        to_units="Mg ha-1", to_constituent="C")      # × 0.01
+
+# NEE is a total per step; divide by the step length in days first, then:
+conversion_factor(units="g m-2 d-1", constituent="C",
+                  to_units="umol m-2 s-1", to_constituent="CO2")   # 0.9636228519
+conversion_factor(units="cm", constituent="H2O",
+                  to_units="kg m-2", to_constituent="H2O")         # 10.0
+```
+
+The rules, in order:
+
+1. Same dimension and same constituent (or none on either side): the Pint factor.
+2. Mass to amount or back for one constituent, through `MOLAR_MASS`
+   (g mol⁻¹: C 12.011, N 14.007, H2O 18.015, CO2 44.009, CH4 16.043,
+   N2O 44.013). A depth or volume of water to a mass or back, through
+   `DENSITY` (H2O 1000 kg m⁻³).
+3. A change of constituent only for a pair in `ATOMS_PER_MOLECULE`: one C per
+   CO2, one C per CH4, two N per N2O. The ratio applies on an amount basis, so
+   `g m-2` of C to `g m-2` of CO2 is 44.009 / 12.011, not 1.
+4. Everything else raises a `ValueError` naming both unit strings and both
+   constituents: mismatched dimensions, a constituent on one side only, an
+   unknown constituent, a substance inside a unit string (`"g C m-2"`), a
+   constituent on a temperature, or an offset temperature conversion such as
+   `degC` to `K`, which is not a multiplication.
+
+For rules 2 and 3 the constituent qualifies the **first** unit in the string,
+where `formatted_units()` prints it: `"nmol g-1 s-1"` of CO2 is nanomoles of
+CO2 per gram of leaf, so it converts to `"ug g-1 s-1"` of C. That first unit
+must be an amount, a mass, or for water a depth or volume, so `"Pa"` or
+`"W m-2"` with a constituent is refused rather than converted through a molar
+mass.
+
+`photons` (the constituent of PAR) is counted in moles and has no molar mass,
+so it converts between amounts only. `convert` relabels anything that carries
+`attrs` (a `DataArray`, a pandas object): `units` and `constituent` become the
+target's, and `output_decimals` and SIPNET's internal-conversion attributes,
+which describe the original units, are dropped. A `Dataset` is refused, since
+its variables do not share a unit; convert `ds[name]`. Factors are cached, so
+calling `convert` inside a calibration loop costs one multiplication.
+
 Every column is always present. A process that is switched off writes zeros
 rather than omitting its column, so the nitrogen and methane columns are there
 but zero unless those processes are on (`requires_flag` on the spec says which).
