@@ -390,7 +390,8 @@ conversion_factor(units="cm", constituent="H2O", to_units="kg m-2") # 10.0
 
 The rules, in order:
 
-1. Same dimension and same constituent (or none on either side): the Pint factor.
+1. Same dimension and same constituent (or none on either side), with the
+   first unit measuring the same kind of thing on both sides: the Pint factor.
 2. Mass to amount or back for one constituent, through `MOLAR_MASS`
    (g mol⁻¹: C 12.011, N 14.007, H2O 18.015, CO2 44.009, CH4 16.043,
    N2O 44.013). A depth or volume of water to a mass or back, through
@@ -410,6 +411,16 @@ CO2 per gram of leaf, so it converts to `"ug g-1 s-1"` of C. That first unit
 must be an amount, a mass, or for water a depth or volume, so `"Pa"` or
 `"W m-2"` with a constituent is refused rather than converted through a molar
 mass.
+
+The same reading is why rule 1 asks about the first unit. `"umol mol-1"` and
+`"ug g-1"` are both dimensionless, so Pint alone would convert a mole fraction
+of CO2 to a mass fraction by a factor of 1. The first unit changes from an
+amount to a mass, so that conversion needs a molar mass for the numerator and
+another for the denominator (air), and it is refused. Water content by mass
+(`"kg kg-1"`) and by volume (`"m3 m-3"`) are refused for the same reason: the
+denominator would need the soil's bulk density. A volume per area and a depth
+(`"m3 m-2"` and `"mm"`) are geometry and convert freely, and a ratio to a pure
+number (`"ug g-1"` to `"1"`) keeps Pint's factor.
 
 `photons` (the constituent of PAR) is counted in moles and has no molar mass,
 so it converts between amounts only.

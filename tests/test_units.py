@@ -59,6 +59,15 @@ FACTORS = [
     ("mm", "H2O", "kg m-2", "H2O", 1.0),
     ("cm d-1", "H2O", "kg m-2 s-1", "H2O", 10 / 86400),
     ("cm", "H2O", "mol m-2", "H2O", 10_000 / 18.015),
+    # A volume per area is a depth: geometry, with or without a constituent.
+    ("m3 m-2", "H2O", "mm", "H2O", 1000.0),
+    ("m3 m-2", "", "mm", "", 1000.0),
+    # A ratio whose first unit keeps its kind, or becomes a pure number.
+    ("ug g-1", "N", "1", "N", 1e-6),
+    ("g g-1", "C", "percent", "C", 100.0),
+    ("mol mol-1", "", "1", "", 1.0),
+    ("umol mol-1", "CO2", "mol mol-1", "C", 1e-6),
+    ("ug g-1", "C", "ug g-1", "CO2", 44.009 / 12.011),
     ("m3 m-2", "H2O", "mm", "H2O", 1000.0),
     # Same dimension needs no bridge, whatever the first unit is.
     ("kPa", "H2O", "Pa", "H2O", 1000.0),
@@ -119,6 +128,13 @@ REFUSALS = [
     ("Pa", "C", "Pa", "CO2", "'Pa' in 'Pa' is not an amount or a mass of 'C'"),
     ("W m-2", "C", "W m-2", "CO2", "'W' in 'W m-2' is not an amount or a mass of 'C'"),
     ("g m-2", "C", "Pa mol g-1", "C", "'Pa' in 'Pa mol g-1' is not an amount or a mass"),
+    # Both dimensionless, so Pint alone would say 1; the first unit changes kind,
+    # and the denominator (air, soil) would need a property of its own.
+    ("umol mol-1", "CO2", "ug g-1", "CO2", "the first unit changes from an amount to a mass"),
+    ("umol mol-1", "", "ug g-1", "", "molar mass needs a substance"),
+    ("kg kg-1", "H2O", "m3 m-3", "H2O", "the first unit changes from a mass to a volume"),
+    ("kg kg-1", "", "m3 m-3", "", "which takes a density,"),
+    ("mol mol-1", "", "m3 m-3", "", "which takes a molar mass and a density"),
     ("degC", "", "K", "", "offset temperature scale"),
     ("degC", "C", "degC", "CO2", "a temperature has no constituent"),
 ]
@@ -151,11 +167,21 @@ def test_to_constituent_defaults_to_the_source_constituent():
         conversion_factor(units="g m-2", constituent="C", to_units="g m-2", to_constituent="")
 
 
+def test_a_unit_string_must_be_a_string():
+    with pytest.raises(TypeError, match="must be a str, not int"):
+        conversion_factor(units=5, to_units="m")  # type: ignore[arg-type]
+
+
 def test_convert_units_preserves_numpy_shape():
     values = np.arange(6.0).reshape(2, 3)
     out = convert_units(values, units="g m-2", constituent="C", to_units="Mg ha-1")
     assert out.shape == (2, 3)
     np.testing.assert_allclose(out, values * 0.01, rtol=1e-12)
+
+
+def test_convert_units_follows_numpy_promotion():
+    assert convert_units(np.ones(2, np.float32), units="g", to_units="kg").dtype == np.float32
+    assert convert_units(np.ones(2, np.int64), units="g", to_units="kg").dtype == np.float64
 
 
 def test_convert_units_on_a_scalar():
@@ -185,6 +211,13 @@ def test_convert_units_on_unlabeled_pandas():
 def test_convert_units_refuses_xarray(values):
     with pytest.raises(TypeError, match="convert_dataarray_units"):
         convert_units(values, units="g m-2", to_units="Mg ha-1")
+
+
+@pytest.mark.skipif(not hasattr(xr, "DataTree"), reason="xarray has no DataTree")
+def test_convert_units_refuses_a_datatree():
+    tree = xr.DataTree(xr.Dataset({"a": ("t", [1.0], {"units": "g"})}))
+    with pytest.raises(TypeError, match="DataTree"):
+        convert_units(tree, units="g", to_units="kg")
 
 
 def test_convert_units_refuses_pandas_that_carries_units():
@@ -261,6 +294,12 @@ def test_convert_dataarray_units_without_a_constituent_attribute():
 def test_convert_dataarray_units_refuses_an_array_with_no_units():
     with pytest.raises(ValueError, match="DataArray 'nee' has no 'units' attribute"):
         convert_dataarray_units(xr.DataArray([1.0], name="nee"), to_units="g m-2")
+
+
+def test_convert_dataarray_units_refuses_a_constituent_that_is_not_a_string():
+    da = xr.DataArray([1.0], attrs={"units": "g m-2", "constituent": None})
+    with pytest.raises(ValueError, match="'constituent' attribute of None"):
+        convert_dataarray_units(da, to_units="kg m-2")
 
 
 def test_convert_dataarray_units_names_the_array_in_a_refused_conversion():

@@ -507,7 +507,12 @@ as an argument beside each unit string and add the chemistry Pint lacks:
 amount basis. Anything else is refused. The constituent qualifies the
 **first** unit token (where `format_units` prints it), which must be an amount,
 a mass, or for H2O a depth or volume; whole-string dimensionality would find a
-"mass" inside `Pa` or `W` and lose the one in `ug g-1`. `photons` is in
+"mass" inside `Pa` or `W` and lose the one in `ug g-1`. The same first-unit
+reading gates Pint's plain factor: if the first unit changes kind
+(`_kind_change`: amount/mass/depth/volume, depth↔volume exempt as geometry),
+the conversion bridges through the tables or is refused, even when the whole
+dimensions match. Without that, `umol mol-1` CO2 → `ug g-1` (both
+dimensionless) returned 1, and so did `kg kg-1` → `m3 m-3` water content. `photons` is in
 `AMOUNT_ONLY_CONSTITUENTS`, and `tests/test_units.py` fails if a registry
 declares a constituent the tables do not know. `_CONSTITUENT_TOKENS`, the
 substances `validate_units` refuses inside a unit string, is derived from
