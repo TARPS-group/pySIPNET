@@ -27,7 +27,8 @@ SIPNET has no time zone of its own — but pools are written **after** the step
 has been applied, so a ``TIMESTEP_END_STATE`` value is the pool at the *end* of
 the step. ``TIMESTEP_TOTAL`` values are accumulated over the step,
 ``TIMESTEP_MEAN`` values are means over it, the single ``DAILY_RATE`` value is a
-per-day rate for the step, and ``CUMULATIVE`` values run from the start of the
+per-day rate for the step (the kind's name notwithstanding, a derived rate may
+be per hour or per second; its units say which), and ``CUMULATIVE`` values run from the start of the
 simulation to the end of the step (and continue across a restart, which carries
 them in the checkpoint).
 
@@ -48,6 +49,14 @@ length.  :data:`RESAMPLING_METHODS_FOR_KIND` records the valid methods for each
 kind and :data:`RESAMPLED_KIND` what kind the result is.  There is deliberately
 no default: :func:`pysipnet.resample.resample` requires the caller to say which
 method they want and refuses one the kind does not support.
+
+Arithmetic
+----------
+Multiplying or dividing by a time changes what a value is over its step, and
+only two such changes have a kind to name the result: a total over the step
+divided by the step's length is a rate, and a rate times it is a total.
+:data:`KIND_AFTER_TIME_POWER` records them, and
+:mod:`pysipnet.arithmetic` refuses every other change.
 
 Climate drivers
 ---------------
@@ -95,7 +104,13 @@ class VariableKind(StrEnum):
     """A quantity accumulated over the timestep: a flux integrated over it, or its duration."""
 
     DAILY_RATE = "daily_rate"
-    """A per-day transfer rate that applied during the timestep."""
+    """A transfer rate that applied during the timestep.
+
+    SIPNET's own rate column is per day, which gives the kind its name; a rate
+    derived with :mod:`pysipnet.arithmetic` or converted with
+    :func:`~pysipnet.units.convert_dataarray_units` may be per hour or per
+    second, and its units say which.
+    """
 
     TIMESTEP_MEAN = "timestep_mean"
     """A quantity averaged over the timestep."""
@@ -137,10 +152,23 @@ TIME_REFERENCE_FOR_KIND: dict[VariableKind, str] = {
     VariableKind.TIMESTEP_START_COORDINATE: "start of the timestep",
     VariableKind.TIMESTEP_END_STATE: "value at the end of the timestep",
     VariableKind.TIMESTEP_TOTAL: "total over the timestep",
-    VariableKind.DAILY_RATE: "per-day rate during the timestep",
+    VariableKind.DAILY_RATE: "rate during the timestep",
     VariableKind.TIMESTEP_MEAN: "mean over the timestep",
     VariableKind.CUMULATIVE: "running total from the start of the run to the end of the timestep",
 }
+
+KIND_AFTER_TIME_POWER: dict[tuple[VariableKind, int], VariableKind] = {
+    (VariableKind.TIMESTEP_TOTAL, -1): VariableKind.DAILY_RATE,
+    (VariableKind.DAILY_RATE, 1): VariableKind.TIMESTEP_TOTAL,
+}
+"""What a kind becomes when its value is multiplied by a time raised to a power.
+
+The key is ``(kind, power)``: ``-1`` for dividing by a time (or multiplying by
+a per-time), ``+1`` for multiplying by a time (or dividing by a per-time).  A
+power of zero leaves every kind as it is.  A pair not listed has no kind to
+name its result: a pool times a per-day turnover rate is a flux, which SIPNET
+reports itself, and a running total per day is not anything a step covers.
+"""
 
 # ``cell_methods`` vocabulary from the Climate and Forecast (CF) conventions,
 # true under the step-end ``time`` labeling in pysipnet.dataset. A cumulative
@@ -1080,6 +1108,7 @@ __all__ = [
     "ClimateVariableSpec",
     "climate_variable_records",
     "resolve_climate_variable",
+    "KIND_AFTER_TIME_POWER",
     "LEGACY_OUTPUT_COLUMNS",
     "NAME_PATTERN",
     "OUTPUT_VARIABLES",

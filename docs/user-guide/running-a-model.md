@@ -436,6 +436,75 @@ through the multiplication and the result would still claim the old units.
 Factors are cached, so converting inside a calibration loop costs one
 multiplication.
 
+### Combining variables
+
+xarray drops attributes in arithmetic, so `nee / days` comes back with no
+`units`, and `convert_dataarray_units` has nothing to read. The functions in
+`pysipnet.arithmetic` do the arithmetic and write the `units`, `constituent`
+and `kind` that are true of the result. An NEE rate, from a total per step to
+µmol of CO2 per square meter per second:
+
+```python
+from pysipnet.arithmetic import divide_with_units, multiply_with_units, step_length
+from pysipnet.units import convert_dataarray_units
+
+nee = result.outputs["nee"]            # 'g m-2' of C, kind 'timestep_total'
+days = step_length(nee)                # the time_step_length coordinate, in 'd'
+rate = divide_with_units(nee, days)    # 'g m-2 d-1' of C, kind 'daily_rate'
+flux = convert_dataarray_units(rate, to_units="umol m-2 s-1", to_constituent="CO2")
+# flux == rate × 0.9636228519, labeled 'umol m-2 s-1' of CO2
+```
+
+And leaf area index, from the leaf carbon pool and the parameter that relates
+the two:
+
+```python
+import xarray as xr
+from pysipnet.parameters.model import PARAMETER_SPECS
+
+spec = PARAMETER_SPECS["leaf.leaf_carbon_per_area"]     # 'g m-2' of C
+per_area = xr.DataArray(params.leaf.leaf_carbon_per_area, name="leaf_carbon_per_area",
+                        attrs={"units": spec.units, "constituent": spec.constituent})
+lai = divide_with_units(result.outputs["leaf_carbon"], per_area)
+# '1', no constituent (C over C cancels), kind 'timestep_end_state'
+```
+
+An operand is a `DataArray` with a `units` attribute, or a plain number
+(dimensionless). The rules:
+
+- **Values** are plain xarray arithmetic, broadcasting as usual (a `(site,)`
+  parameter against a `(site, time)` stack gives per-site results). Index
+  coordinates must match exactly: two different time axes are refused rather
+  than cut to the labels they share.
+- **Units** combine symbol by symbol, and a symbol whose exponent reaches zero
+  drops out; nothing is rescaled, so `cm` over `m` is `"cm m-1"`. The operand
+  that carries the constituent comes first, since the constituent qualifies
+  the first unit: `multiply_with_units(per_day, nee)` is `"g m-2 d-1"`, not
+  `"d-1 g m-2"`. A combination that would cancel or change that first unit
+  (`g m-2` of C divided by a mass in `g`) is refused, since the result would
+  no longer say what quantity of carbon it measures.
+- **Constituent**: at most one per product; in a quotient the numerator's is
+  kept, and the same one on both sides cancels. A constituent only in the
+  denominator, or two different ones, is refused.
+- **Kind**: at most one operand of a product or quotient may have a kind, and
+  not the denominator. A `timestep_total` divided by a time is a
+  `daily_rate`, and a `daily_rate` times a time is a `timestep_total`
+  (whatever the time unit; the units say which). Every other change of time
+  dimension is refused: a pool times a turnover rate is a flux, which SIPNET
+  reports itself.
+- `add_with_units` and `subtract_with_units` require the same units,
+  constituent and kind. The difference of two `degC` temperatures is in `K`;
+  otherwise an offset temperature is refused, since it does not multiply.
+
+The result carries `units`, `constituent`, `kind` with its `time_reference`
+and `cell_methods`, the `sign_convention` if it is still true (not after
+multiplying by a negative number, and never for a difference), and a
+`derivation` naming the operands. It keeps the model variable's time
+coordinates, so `resample` still works on it. Attributes describing the
+source rather than the result (`description`, `sipnet_name`,
+`output_decimals`) are dropped, the name is `None`, and the operands are not
+modified.
+
 Every column is always present. A process that is switched off writes zeros
 rather than omitting its column, so the nitrogen and methane columns are there
 but zero unless those processes are on (`requires_flag` on the spec says which).

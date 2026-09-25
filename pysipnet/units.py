@@ -87,6 +87,25 @@ the denominator would need the molar mass of air.  Water content by mass
 (``"kg kg-1"``) and by volume (``"m3 m-3"``) are refused for the same reason.
 A depth and a volume (``"m3 m-2"`` and ``"m"``) are the same kind, being
 geometry alone.
+
+Arithmetic
+----------
+xarray drops ``attrs`` in arithmetic, so a product or quotient of labeled
+arrays arrives with nothing for :func:`convert_dataarray_units` to read.
+:mod:`pysipnet.arithmetic` combines them and labels the result:
+``multiply_with_units`` and ``divide_with_units`` combine the unit strings
+symbol by symbol, with the operand carrying the constituent first so that the
+constituent still qualifies the first unit, and ``add_with_units`` and
+``subtract_with_units`` require the operands to agree.  ``step_length`` turns
+a pySIPNET array's step lengths into an operand, so a total per step becomes a
+rate::
+
+    rate = divide_with_units(nee, step_length(nee))  # "g m-2 d-1" of C
+    convert_dataarray_units(rate, to_units="umol m-2 s-1", to_constituent="CO2")
+
+That module also carries the variable's ``kind``, so it lives beside
+:mod:`pysipnet.variables` rather than here: the registry validates its units
+with this module at import.
 """
 
 from __future__ import annotations

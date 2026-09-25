@@ -531,6 +531,23 @@ be misstated), rewrites both on a copy, and drops `output_decimals` and the
 `units` was found to be unchecked against the `DataArray`'s own: a wrong one
 gave wrong numbers and then stamped the target units over the evidence.
 
+**Arithmetic on labeled arrays lives in `pysipnet/arithmetic.py`, not
+`units.py`,** because it reads `VariableKind` and `variables.py` imports
+`units` at import time. `multiply_with_units` / `divide_with_units` /
+`add_with_units` / `subtract_with_units` write the `units`, `constituent` and
+`kind` true of the result, since plain xarray arithmetic drops them and
+`convert_dataarray_units` would then have nothing to read. The operand with
+the constituent leads the unit string, and its first unit must come through
+unchanged (`g m-2` of C ÷ `g` is refused: `m-2` of C is not a quantity of
+carbon). Kind changes only as `KIND_AFTER_TIME_POWER` in `variables.py` says
+(total ÷ time → `daily_rate`, rate × time → total). Index coordinates must
+align exactly, so two different time axes are refused rather than
+intersected. `step_length()` makes the `time_step_length` coordinate an
+operand; the coordinate itself is a timedelta with `kind=timestep_total` and
+no `units`, so it cannot be one. `TIME_REFERENCE_FOR_KIND[DAILY_RATE]` says
+"rate during the timestep" rather than "per-day", because a derived or
+converted `daily_rate` may be per hour or per second.
+
 `SIPNETOutput` exposes `.pandas` (DataFrame), `.xarray` (xarray Dataset, one
 `time` dimension = step **end**), `["nee"]` (DataArray by name or alias),
 `[["nee", "gpp"]]` (Dataset), and `.select(names, format="xarray"|"pandas")`
@@ -825,6 +842,7 @@ pySIPNET/
 │   │   └── model.py              # ModelFlags and SIPNETParameters
 │   ├── variables.py              # the output-variable registry (names, units, kinds, labels)
 │   ├── units.py                  # UDUNITS unit strings: Pint registry, validation, formatting, constituent-aware conversion
+│   ├── arithmetic.py             # products, quotients, sums of labeled DataArrays; step_length()
 │   ├── climate.py                # ClimateDrivers + validation
 │   ├── dataset.py                # shared DataFrame → xarray builder (time = step end)
 │   ├── resample.py               # explicit, kind-checked coarsening of the time axis
@@ -851,6 +869,7 @@ pySIPNET/
 │   ├── test_integration.py       # end-to-end behavior, flags, mass balance, snow flag
 │   ├── test_variables.py         # the .out header contract and the registry's own rules
 │   ├── test_units.py             # conversion factors, refusals, and every registry constituent convertible
+│   ├── test_arithmetic.py        # units/constituent/kind of products and quotients, on Niwot output
 │   ├── test_download.py          # prebuilt-binary download and its verification
 │   ├── test_fidelity.py          # wrapper output == bare binary output
 │   ├── test_time_axis.py         # axis from the drivers, label/length continuity, time_zone

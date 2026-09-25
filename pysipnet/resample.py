@@ -69,7 +69,7 @@ _KIND_IN_WORDS: dict[VariableKind, str] = {
     VariableKind.TIMESTEP_START_COORDINATE: "a time coordinate",
     VariableKind.TIMESTEP_END_STATE: "a pool reported at the end of the timestep",
     VariableKind.TIMESTEP_TOTAL: "a total over the timestep",
-    VariableKind.DAILY_RATE: "a per-day rate during the timestep",
+    VariableKind.DAILY_RATE: "a rate during the timestep",
     VariableKind.TIMESTEP_MEAN: "a mean over the timestep",
     VariableKind.CUMULATIVE: "a running total from the start of the run",
 }
@@ -101,8 +101,9 @@ _WHY_NOT: dict[tuple[VariableKind, str], str] = {
         "the last step's total is not the total over the coarser step"
     ),
     (VariableKind.DAILY_RATE, "sum"): (
-        "adding per-day rates over steps of unequal length is not a total; multiply by "
-        "time_step_length in days first, then the variable is a total and sums"
+        "adding rates over steps of unequal length is not a total; multiply by the "
+        "step length first (pysipnet.arithmetic.multiply_with_units with step_length()), "
+        "then the variable is a total and sums"
     ),
     (VariableKind.DAILY_RATE, "last"): "a rate at the last step does not represent the whole",
     (VariableKind.TIMESTEP_MEAN, "sum"): "means do not add",
