@@ -358,15 +358,16 @@ put it back for display. See [Design](../design.md) for the convention.
 ### Converting units
 
 Three functions in `pysipnet.units` translate a value from one
-`(units, constituent)` pair to another, which is what an observation operator
-needs when the observation is in different units from the model. Pint does the
+`(units, constituent)` pair to another, for comparing model output with data
+reported in different units. Pint does the
 prefixes and dimensions; pySIPNET adds the chemistry, since a gram of carbon
 becomes a mole only through carbon's molar mass.
 
 - `convert_dataarray_units(array, to_units=..., to_constituent=...)` converts
   an xarray `DataArray`, reading the units it is in from `array.attrs["units"]`
-  and `array.attrs["constituent"]`. Every output, climate and parameter
-  `DataArray` carries both, so there is nothing to misstate.
+  and `array.attrs["constituent"]`. Every output and climate `DataArray`
+  carries both, and so does a parameter from `parameter_dataarray` (see
+  below), so there is nothing to misstate.
 - `convert_units(values, units=..., constituent=..., to_units=..., to_constituent=...)`
   converts unlabeled values (a number, a NumPy array, a pandas object), with
   the caller stating the units they are in.
@@ -435,6 +436,98 @@ object whose `attrs` has a `units` entry, because both keep their `attrs`
 through the multiplication and the result would still claim the old units.
 Factors are cached, so converting inside a calibration loop costs one
 multiplication.
+
+### Combining variables
+
+xarray drops attributes in arithmetic, so `nee / days` comes back with no
+`units`, and `convert_dataarray_units` has nothing to read. The functions in
+`pysipnet.arithmetic` do the arithmetic and write the `units`, `constituent`
+and `kind` that are true of the result. An NEE rate, from a total per step to
+µmol of CO2 per square meter per second:
+
+```python
+from pysipnet.arithmetic import divide_with_units, multiply_with_units, step_length
+from pysipnet.units import convert_dataarray_units
+
+nee = result.outputs["nee"]            # 'g m-2' of C, kind 'timestep_total'
+days = step_length(nee)                # the time_step_length coordinate, in 'd'
+rate = divide_with_units(nee, days)    # 'g m-2 d-1' of C, kind 'daily_rate'
+flux = convert_dataarray_units(rate, to_units="umol m-2 s-1", to_constituent="CO2")
+# flux == rate × 0.9636228519, labeled 'umol m-2 s-1' of CO2
+```
+
+And leaf area index, from the leaf carbon pool and the parameter that relates
+the two:
+
+```python
+per_area = params.dataarray("leaf_carbon_per_area")    # 'g m-2' of C, no kind
+lai = divide_with_units(result.outputs["leaf_carbon"], per_area)
+# '1', no constituent (C over C cancels), kind 'timestep_end_state',
+# derivation 'leaf_carbon / leaf_carbon_per_area'
+```
+
+`params.dataarray(name)` gives one parameter set's value, and
+`parameter_dataarray(name, values, dims=..., coords=...)` any values of it,
+such as one per site. Both label the array from the parameter's spec
+(`units`, `constituent`, `long_name`, `description`, `sipnet_name`, and no
+`kind`), accept an alias or SIPNET's name, and hold the values to the
+parameter's domain as `SIPNETParameters` does:
+
+```python
+from pysipnet.parameters import parameter_dataarray
+
+per_area = parameter_dataarray("leaf_carbon_per_area", [200.0, 300.0],
+                               dims="site", coords={"site": ["a", "b"]})
+```
+
+An operand is a `DataArray` with a `units` attribute, or a plain number
+(dimensionless). The unit and constituent rules are `pysipnet.units`' own, and
+`product_units`, `quotient_units`, `sum_units` and `difference_units` apply
+them to bare `(units, constituent)` pairs:
+
+```python
+from pysipnet.units import product_units
+product_units(units="d-1", other_units="g m-2", other_constituent="C")
+# ('g m-2 d-1', 'C')
+```
+
+The rules:
+
+- **Values** are plain xarray arithmetic, broadcasting as usual (a `(site,)`
+  parameter against a `(site, time)` stack gives per-site results). Index
+  coordinates must match exactly: two different time axes are refused rather
+  than cut to the labels they share, and so is a coordinate such as
+  `time_step_start` that both operands carry with different values, which
+  xarray would otherwise drop.
+- **Units** combine symbol by symbol, and a symbol whose exponent reaches zero
+  drops out; nothing is rescaled, so `cm` over `m` is `"cm m-1"`. The operand
+  that carries the constituent comes first, since the constituent qualifies
+  the first unit: `multiply_with_units(per_day, nee)` is `"g m-2 d-1"`, not
+  `"d-1 g m-2"`. A combination that would cancel or change that first unit
+  (`g m-2` of C divided by a mass in `g`) is refused, since the result would
+  no longer say what quantity of carbon it measures.
+- **Constituent**: at most one per product; in a quotient the numerator's is
+  kept, and the same one on both sides cancels. A constituent only in the
+  denominator, or two different ones, is refused.
+- **Kind**: at most one operand of a product or quotient may have a kind, and
+  not the denominator. A `timestep_total` divided by a time is a
+  `daily_rate`, and a `daily_rate` times a time is a `timestep_total`
+  (whatever the time unit; the units say which). Every other change of time
+  dimension is refused: a pool times a turnover rate is a flux, which SIPNET
+  reports itself.
+- `add_with_units` and `subtract_with_units` require the same units,
+  constituent and kind. A bare `degC` temperature does not multiply or add,
+  and the difference of two is in `K`; degree-days in `degC d` combine like
+  any other unit, since Pint already reads `degC` there as a difference.
+
+The result carries `units`, `constituent`, `kind` with its `time_reference`
+and `cell_methods`, the `sign_convention` if it is still true (not after
+multiplying by a negative number, and never for a difference), and a
+`derivation` naming the operands. It keeps the model variable's time
+coordinates, so `resample` still works on it. Attributes describing the
+source rather than the result (`description`, `sipnet_name`,
+`output_decimals`) are dropped, the name is `None`, and the operands are not
+modified.
 
 Every column is always present. A process that is switched off writes zeros
 rather than omitting its column, so the nitrogen and methane columns are there
@@ -514,8 +607,8 @@ ds.to_netcdf("run.nc")  # self-describing on disk; needs a netCDF backend
 ```
 
 `time_bounds` is the Climate and Forecast conventions' way of saying which
-interval each value covers, which is what an observation operator needs in order
-to decide how observations line up with model steps. It adds a second dimension,
+interval each value covers, which is what you need in order to decide how
+measurements over some other interval line up with model steps. It adds a second dimension,
 `bounds`, so `ds.sizes` reads `{'time': 365, 'bounds': 2}`; use `result.outputs.pandas`
 when you want a flat table. The Dataset declares `Conventions = "CF-1.11"`.
 Writing it needs a netCDF backend that stores 64-bit integers (`h5netcdf` or

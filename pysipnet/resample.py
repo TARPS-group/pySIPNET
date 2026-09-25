@@ -69,7 +69,7 @@ _KIND_IN_WORDS: dict[VariableKind, str] = {
     VariableKind.TIMESTEP_START_COORDINATE: "a time coordinate",
     VariableKind.TIMESTEP_END_STATE: "a pool reported at the end of the timestep",
     VariableKind.TIMESTEP_TOTAL: "a total over the timestep",
-    VariableKind.DAILY_RATE: "a per-day rate during the timestep",
+    VariableKind.DAILY_RATE: "a rate during the timestep",
     VariableKind.TIMESTEP_MEAN: "a mean over the timestep",
     VariableKind.CUMULATIVE: "a running total from the start of the run",
 }
@@ -95,14 +95,16 @@ _WHY_NOT: dict[tuple[VariableKind, str], str] = {
     ),
     (VariableKind.TIMESTEP_TOTAL, "mean"): (
         "the mean of per-step totals depends on how long the steps happened to be; sum "
-        "them, and divide by the new time_step_length yourself if you want a rate"
+        "them, and for a rate divide by the step length "
+        "(pysipnet.arithmetic.divide_with_units with step_length())"
     ),
     (VariableKind.TIMESTEP_TOTAL, "last"): (
         "the last step's total is not the total over the coarser step"
     ),
     (VariableKind.DAILY_RATE, "sum"): (
-        "adding per-day rates over steps of unequal length is not a total; multiply by "
-        "time_step_length in days first, then the variable is a total and sums"
+        "adding rates over steps of unequal length is not a total; multiply by the "
+        "step length first (pysipnet.arithmetic.multiply_with_units with step_length()), "
+        "then the variable is a total and sums"
     ),
     (VariableKind.DAILY_RATE, "last"): "a rate at the last step does not represent the whole",
     (VariableKind.TIMESTEP_MEAN, "sum"): "means do not add",
@@ -167,11 +169,13 @@ def resample(
     import xarray as xr
 
     if isinstance(data, xr.DataArray):
-        if data.name is None:
-            raise ValueError("The DataArray has no name; resample the Dataset it came from.")
         if isinstance(how, Mapping):
             raise TypeError("Pass how as a single method for a DataArray, e.g. how='sum'.")
-        return resample(data.to_dataset(), freq, how=how)[data.name]
+        # An arithmetic result has no name; it resamples under its derivation, which
+        # is what a refusal should call it.
+        name = data.name if data.name is not None else data.attrs.get("derivation") or "array"
+        resampled = resample(data.to_dataset(name=name), freq, how=how)[name]
+        return resampled.rename(data.name)
 
     _require_time_layout(data)
     methods = _methods_for(data, how)

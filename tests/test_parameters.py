@@ -3,17 +3,22 @@
 These tests do not require a compiled SIPNET binary.
 """
 
+import numpy as np
 import pytest
+import xarray as xr
 from pydantic import ValidationError
 
 from pysipnet.parameters.base import ParameterDomain, get_parameter_specs
 from pysipnet.parameters.model import (
+    PARAMETER_SPECS,
     UNSUPPORTED_FLAGS,
     AllocationParams,
     ModelFlags,
     PhotosynthesisParams,
     SIPNETParameters,
+    parameter_dataarray,
 )
+from pysipnet.units import convert_dataarray_units
 
 
 class TestParameterSpec:
@@ -548,3 +553,99 @@ class TestParameterSpecConventions:
         model = SIPNETModel(MagicMock(), base_params=minimal_params, base_climate=MagicMock())
         with pytest.raises(ValueError, match="max_photosynthesis_rate"):
             model(a_max=100.0)
+
+
+class TestParameterDataArray:
+    def test_labels_come_from_the_spec(self):
+        spec = PARAMETER_SPECS["leaf.leaf_carbon_per_area"]
+        array = parameter_dataarray("leaf_carbon_per_area", 270.0)
+        assert array.name == "leaf_carbon_per_area"
+        assert array.dims == ()
+        assert float(array) == 270.0
+        assert array.attrs == spec.xarray_attributes()
+        assert array.attrs["units"] == "g m-2" and array.attrs["constituent"] == "C"
+        assert "kind" not in array.attrs
+
+    def test_no_constituent_means_no_attribute(self):
+        array = parameter_dataarray("leaf_turnover_rate", 0.3)
+        assert array.attrs["units"] == "yr-1"
+        assert "constituent" not in array.attrs
+
+    @pytest.mark.parametrize("name", ["leaf_carbon_per_area", "leafCSpWt"])
+    def test_a_sipnet_name_resolves_to_the_field_name(self, name):
+        assert parameter_dataarray(name, 270.0).name == "leaf_carbon_per_area"
+
+    def test_one_value_per_site(self):
+        array = parameter_dataarray(
+            "leaf_carbon_per_area", [200.0, 300.0], dims="site", coords={"site": ["a", "b"]}
+        )
+        assert array.dims == ("site",)
+        assert array.sel(site="b").item() == 300.0
+        assert array.dtype == np.float64
+
+    def test_it_converts(self):
+        in_mg_ha = convert_dataarray_units(
+            parameter_dataarray("leaf_carbon_per_area", 270.0), to_units="Mg ha-1"
+        )
+        assert float(in_mg_ha) == pytest.approx(2.7, rel=1e-12)
+
+    @pytest.mark.parametrize("values", [0.0, [100.0, -1.0], [100.0, np.nan], np.inf])
+    def test_values_outside_the_domain_are_refused(self, values):
+        with pytest.raises(ValueError, match="not finite and in its domain \\(positive\\)"):
+            parameter_dataarray("leaf_carbon_per_area", values)
+
+    def test_an_unknown_name_is_refused(self):
+        with pytest.raises(KeyError, match="not a SIPNET parameter"):
+            parameter_dataarray("leaf_carbon", 1.0)
+
+    def test_from_a_parameter_set(self, minimal_params):
+        array = minimal_params.dataarray("leafCSpWt")
+        assert array.name == "leaf_carbon_per_area"
+        assert float(array) == minimal_params.leaf.leaf_carbon_per_area
+        assert array.attrs["constituent"] == "C"
+
+    def test_an_unset_optional_parameter_is_refused(self, minimal_params):
+        assert minimal_params.phenology.leaf_on_day is None
+        with pytest.raises(ValueError, match="phenology.leaf_on_day is not set"):
+            minimal_params.dataarray("leaf_on_day")
+
+
+@pytest.mark.parametrize(
+    ("domain", "inside", "outside"),
+    [
+        (ParameterDomain.REAL, [-1.0, 0.0, 1e9], [np.nan, np.inf]),
+        (ParameterDomain.POSITIVE, [1e-9, 5.0], [0.0, -1.0, np.inf]),
+        (ParameterDomain.NON_NEGATIVE, [0.0, 5.0], [-1e-9, np.nan]),
+        (ParameterDomain.UNIT_INTERVAL, [0.0, 0.5, 1.0], [-0.1, 1.1]),
+        (ParameterDomain.OPEN_UNIT_INTERVAL, [0.1, 0.9], [0.0, 1.0]),
+    ],
+)
+def test_domain_contains_matches_the_pydantic_bounds(domain, inside, outside):
+    assert domain.contains(inside).all()
+    assert not domain.contains(outside).any()
+
+
+class TestParameterDataArrayFromADataArray:
+    def test_dims_and_coords_are_kept_and_attrs_replaced(self):
+        draws = xr.DataArray(
+            [200.0, 300.0], dims="member", coords={"member": [0, 1]}, attrs={"units": "kg"}
+        )
+        array = parameter_dataarray("leafCSpWt", draws)
+        assert array.dims == ("member",)
+        assert list(array["member"].values) == [0, 1]
+        assert array.attrs["units"] == "g m-2" and array.attrs["constituent"] == "C"
+        assert draws.attrs == {"units": "kg"}
+
+    def test_dims_with_a_dataarray_are_refused(self):
+        draws = xr.DataArray([200.0], dims="member")
+        with pytest.raises(TypeError, match="carries its own dims"):
+            parameter_dataarray("leafCSpWt", draws, dims="site")
+
+    def test_domain_still_applies(self):
+        with pytest.raises(ValueError, match="1 of 2 values"):
+            parameter_dataarray("leafCSpWt", xr.DataArray([200.0, -1.0], dims="member"))
+
+
+def test_domain_contains_returns_an_array_for_a_scalar():
+    result = ParameterDomain.POSITIVE.contains(3.0)
+    assert isinstance(result, np.ndarray) and result.shape == () and bool(result)

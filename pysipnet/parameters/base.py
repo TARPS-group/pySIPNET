@@ -80,6 +80,8 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import Any, cast
 
+import numpy as np
+import numpy.typing as npt
 from pydantic import BaseModel, ConfigDict, Field
 
 from pysipnet.units import UnitStyle, format_units, validate_units
@@ -109,6 +111,41 @@ class ParameterDomain(StrEnum):
 
     OPEN_UNIT_INTERVAL = "open_unit_interval"
     """(0, 1) — logit bijector."""
+
+    @property
+    def bounds(self) -> dict[str, float]:
+        """The domain as Pydantic's ``gt`` / ``ge`` / ``lt`` / ``le`` keywords."""
+        return dict(_DOMAIN_BOUNDS[self])
+
+    def contains(self, values: npt.ArrayLike) -> npt.NDArray[np.bool_]:
+        """Elementwise, whether each value is finite and in this domain.
+
+        Uses :attr:`bounds`, which :func:`param_field` gives Pydantic, so an
+        array of values is held to what a single :class:`SIPNETParameters`
+        field is.
+        """
+        v = np.asarray(values, dtype=float)
+        inside = np.asarray(np.isfinite(v))
+        with np.errstate(invalid="ignore"):
+            for keyword, bound in _DOMAIN_BOUNDS[self].items():
+                inside &= _COMPARISONS[keyword](v, bound)
+        return inside
+
+
+_DOMAIN_BOUNDS: dict[ParameterDomain, dict[str, float]] = {
+    ParameterDomain.REAL: {},
+    ParameterDomain.POSITIVE: {"gt": 0},
+    ParameterDomain.NON_NEGATIVE: {"ge": 0},
+    ParameterDomain.UNIT_INTERVAL: {"ge": 0, "le": 1},
+    ParameterDomain.OPEN_UNIT_INTERVAL: {"gt": 0, "lt": 1},
+}
+
+_COMPARISONS: dict[str, Any] = {
+    "gt": np.greater,
+    "ge": np.greater_equal,
+    "lt": np.less,
+    "le": np.less_equal,
+}
 
 
 class ParameterGroup(BaseModel):
@@ -179,6 +216,24 @@ class ParameterSpec:
         """``"Maximum photosynthesis rate (nmol CO2 g⁻¹ s⁻¹)"``, for a plot axis."""
         return f"{self.long_label} ({self.formatted_units(style)})"
 
+    def xarray_attributes(self) -> dict[str, Any]:
+        """Attributes for an :class:`xarray.DataArray` holding this parameter.
+
+        ``units`` and ``constituent`` are what
+        :func:`~pysipnet.units.convert_dataarray_units` and
+        :mod:`pysipnet.arithmetic` read; there is no ``kind``, since a
+        parameter is not a value over a timestep.
+        """
+        attrs: dict[str, Any] = {
+            "units": self.units,
+            "long_name": self.long_label,
+            "description": self.description,
+            "sipnet_name": self.sipnet_name,
+        }
+        if self.constituent:
+            attrs["constituent"] = self.constituent
+        return attrs
+
     def to_record(self) -> dict[str, Any]:
         """A plain, JSON-serializable dict of every field."""
         record = asdict(self)
@@ -241,17 +296,7 @@ def param_field(
     # any lower bound. Either reaches SIPNET, which parses it with strtod and
     # runs to completion — a NaN temperature parameter produces a whole run of
     # zero productivity, exit code 0, and no warning anywhere.
-    pydantic_kwargs: dict[str, Any] = {"allow_inf_nan": False}
-    if domain == ParameterDomain.POSITIVE:
-        pydantic_kwargs["gt"] = 0
-    elif domain == ParameterDomain.NON_NEGATIVE:
-        pydantic_kwargs["ge"] = 0
-    elif domain == ParameterDomain.UNIT_INTERVAL:
-        pydantic_kwargs["ge"] = 0
-        pydantic_kwargs["le"] = 1
-    elif domain == ParameterDomain.OPEN_UNIT_INTERVAL:
-        pydantic_kwargs["gt"] = 0
-        pydantic_kwargs["lt"] = 1
+    pydantic_kwargs: dict[str, Any] = {"allow_inf_nan": False, **domain.bounds}
 
     spec = ParameterSpec(
         sipnet_name=sipnet_name,

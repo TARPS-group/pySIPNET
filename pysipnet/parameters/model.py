@@ -85,6 +85,12 @@ provided given the active :class:`ModelFlags`.
 
 from __future__ import annotations
 
+from collections.abc import Hashable, Mapping, Sequence
+from typing import Any
+
+import numpy as np
+import numpy.typing as npt
+import xarray as xr
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from pysipnet.parameters.base import (
@@ -1122,6 +1128,20 @@ class SIPNETParameters(BaseModel):
             )
         return self
 
+    def dataarray(self, name: str) -> xr.DataArray:
+        """This parameter set's value of *name* as a labeled, zero-dimensional ``DataArray``.
+
+        *name* is a field name, an alias or SIPNET's name.  See
+        :func:`parameter_dataarray` for the labels; raises ``ValueError`` if the
+        parameter is optional and not set here.
+        """
+        path = _PARAMETER_PATHS[resolve_parameter_name(name)]
+        group, field = path.split(".")
+        value = getattr(getattr(self, group), field)
+        if value is None:
+            raise ValueError(f"{path} is not set in this parameter set, so it has no value.")
+        return parameter_dataarray(name, value)
+
     def validate_for_flags(self, flags: ModelFlags) -> None:
         """Raise :class:`ValueError` if any flag-required parameter is ``None``.
 
@@ -1241,6 +1261,62 @@ def _build_parameter_alias_index() -> dict[str, str]:
 
 
 _PARAMETER_ALIASES: dict[str, str] = _build_parameter_alias_index()
+
+
+_PARAMETER_PATHS: dict[str, str] = {path.split(".")[1]: path for path in PARAMETER_SPECS}
+
+
+def parameter_dataarray(
+    name: str,
+    values: npt.ArrayLike,
+    *,
+    dims: str | Sequence[Hashable] = (),
+    coords: Mapping[Hashable, Any] | None = None,
+) -> xr.DataArray:
+    """*values* of the parameter *name* as a ``DataArray`` labeled from its spec.
+
+    *name* is a field name, an alias or SIPNET's name; the array is named by
+    the field name, so a derivation reads ``"leaf_carbon /
+    leaf_carbon_per_area"``.  Its attributes are
+    :meth:`~pysipnet.parameters.base.ParameterSpec.xarray_attributes`:
+    ``units`` and ``constituent``, which
+    :func:`~pysipnet.units.convert_dataarray_units` and
+    :mod:`pysipnet.arithmetic` read, and no ``kind``.  *dims* and *coords* are
+    passed to ``xr.DataArray``, so one value per site is::
+
+        parameter_dataarray("leaf_carbon_per_area", [200.0, 300.0],
+                            dims="site", coords={"site": ["a", "b"]})
+
+    *values* may already be a ``DataArray`` (an ensemble's draws, say), whose
+    dims and coords are kept and whose attributes are replaced; *dims* and
+    *coords* are then refused, since the array states its own.
+
+    For a single :class:`SIPNETParameters`, use
+    :meth:`SIPNETParameters.dataarray`.
+
+    The values are held to the parameter's domain, as a field of
+    :class:`SIPNETParameters` is: every one must be finite and inside it,
+    or ``ValueError`` names how many are not.  Raises ``KeyError`` for a name
+    that is not a parameter.
+    """
+    field = resolve_parameter_name(name)
+    spec = PARAMETER_SPECS[_PARAMETER_PATHS[field]]
+    if isinstance(values, xr.DataArray):
+        if dims != () or coords is not None:
+            raise TypeError(
+                "parameter_dataarray(): values is a DataArray, which carries its own dims "
+                "and coords; pass dims and coords only with plain values."
+            )
+        dims, coords = values.dims, values.coords
+    data = np.asarray(values, dtype=float)
+    outside = ~spec.domain.contains(data)
+    if outside.any():
+        first = data[outside].flat[0]
+        raise ValueError(
+            f"{outside.sum()} of {data.size} values of {field} are not finite and in its "
+            f"domain ({spec.domain.value}); the first is {first!r}."
+        )
+    return xr.DataArray(data, dims=dims, coords=coords, name=field, attrs=spec.xarray_attributes())
 
 
 def resolve_parameter_name(name: str) -> str:

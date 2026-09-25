@@ -31,6 +31,7 @@
 
 ::: pysipnet.variables
 ::: pysipnet.units
+::: pysipnet.arithmetic
 
 ## Run configuration
 
