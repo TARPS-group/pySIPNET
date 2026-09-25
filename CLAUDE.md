@@ -621,7 +621,23 @@ length, and an invalid pairing raises with the reason and the valid menu.
 `RESAMPLED_KIND` gives the result's kind (a pool averaged is a
 `timestep_mean`), and the result's `kind`/`cell_methods`/`time_reference`
 attributes are rewritten accordingly. The old `aggregation` attribute and
-`Aggregation` enum are gone.
+`Aggregation` enum are gone. `check_resampling_method(kind, method, name=)` is
+that refusal on its own, public so a downstream reduction offering more
+methods (min, max, first) can refuse in the same words.
+
+`resample` reduces `time` only, so a stack of runs resamples in one call: a
+variable may be on `(member, site, time)` in any order, and every coordinate
+not on `time` (`lon`/`lat` on `site`, a scalar `member`) is carried. The one
+set of cells is shared by the whole Dataset, so `time_step_start` and
+`time_step_length` must be on `time` alone; xarray gives them a `site`
+dimension when runs on different axes are concatenated, and that is refused.
+Selecting one run from such a stack leaves `NaT` padding rows, which are
+dropped rather than resampled (left in, a `NaT` length casts to the `int64`
+minimum). The combined `time_step_length` is summed as `int64` nanoseconds in
+NumPy, not by xarray: xarray casts to float64 to fill empty cells, which is
+exact only to about 104 days. A zero, negative or unparseable `freq` is
+refused, and so is one whose every cell is shorter than the shortest step,
+which would return the input under a false `resampling_frequency`.
 
 Step lengths come from the climate's `time_step_length`
 column; when the output has no climate attached they are **inferred** from
