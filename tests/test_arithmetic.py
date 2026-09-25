@@ -15,7 +15,7 @@ from pysipnet.arithmetic import (
     subtract_with_units,
 )
 from pysipnet.io.reference import niwot_reference_output
-from pysipnet.parameters.model import PARAMETER_SPECS
+from pysipnet.parameters import parameter_dataarray
 from pysipnet.units import conversion_factor, convert_dataarray_units
 from pysipnet.variables import (
     KIND_AFTER_TIME_POWER,
@@ -37,13 +37,8 @@ def nee(niwot) -> xr.DataArray:
     return niwot["net_ecosystem_exchange"]
 
 
-def _parameter(path: str, value: float | list[float], **dims: list[str]) -> xr.DataArray:
-    """A parameter as a DataArray labeled from its spec, as a caller would build one."""
-    spec = PARAMETER_SPECS[path]
-    attrs = {"units": spec.units}
-    if spec.constituent:
-        attrs["constituent"] = spec.constituent
-    return xr.DataArray(value, dims=list(dims), coords=dims, name=path.split(".")[1], attrs=attrs)
+def _parameter(name: str, value: float | list[float], **dims: list[str]) -> xr.DataArray:
+    return parameter_dataarray(name, value, dims=list(dims), coords=dims)
 
 
 def _per_day() -> xr.DataArray:
@@ -149,13 +144,14 @@ def test_a_product_puts_the_constituent_first_whichever_operand_it_is(niwot, nee
 
 def test_leaf_carbon_over_leaf_carbon_per_area_is_leaf_area_index(niwot):
     leaf_carbon = niwot["leaf_carbon"]
-    per_area = _parameter("leaf.leaf_carbon_per_area", 270.0)
+    per_area = _parameter("leaf_carbon_per_area", 270.0)
     lai = divide_with_units(leaf_carbon, per_area)
     np.testing.assert_allclose(lai.values, leaf_carbon.values / 270.0, **EXACT)
     assert lai.attrs["units"] == "1"
     assert "constituent" not in lai.attrs
     assert lai.attrs["kind"] == VariableKind.TIMESTEP_END_STATE
     assert lai.attrs["cell_methods"] == "time: point"
+    assert lai.attrs["derivation"] == "leaf_carbon / leaf_carbon_per_area"
     in_m2 = convert_dataarray_units(lai, to_units="m2 m-2")
     np.testing.assert_allclose(in_m2.values, lai.values, **EXACT)
 
@@ -246,7 +242,7 @@ def test_a_total_times_a_per_time_is_a_rate_and_a_rate_per_per_time_is_a_total(n
 
 
 def test_a_pool_times_a_turnover_rate_is_refused(niwot):
-    turnover = _parameter("phenology.leaf_turnover_rate", 0.3)
+    turnover = _parameter("leaf_turnover_rate", 0.3)
     with pytest.raises(ValueError, match="no pySIPNET kind names the result"):
         multiply_with_units(niwot["leaf_carbon"], turnover)
 
@@ -324,7 +320,7 @@ def test_the_result_keeps_the_kinded_operands_time_coordinates(niwot, nee):
 
 def test_a_site_parameter_broadcasts_over_a_stack_of_records(niwot):
     leaf_carbon = xr.concat([niwot["leaf_carbon"]] * 2, dim="site").assign_coords(site=["a", "b"])
-    per_area = _parameter("leaf.leaf_carbon_per_area", [200.0, 300.0], site=["a", "b"])
+    per_area = _parameter("leaf_carbon_per_area", [200.0, 300.0], site=["a", "b"])
     lai = divide_with_units(leaf_carbon, per_area)
     assert lai.dims == ("site", "time")
     np.testing.assert_allclose(

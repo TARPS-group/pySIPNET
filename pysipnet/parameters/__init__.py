@@ -16,6 +16,7 @@ from pysipnet.parameters.model import (
     RespirationParams,
     SIPNETParameters,
     WaterParams,
+    parameter_dataarray,
 )
 
 __all__ = [
@@ -29,4 +30,5 @@ __all__ = [
     "SIPNET_PARAMS_BY_GROUP",
     "SIPNETParameters",
     "WaterParams",
+    "parameter_dataarray",
 ]

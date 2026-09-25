@@ -366,7 +366,8 @@ becomes a mole only through carbon's molar mass.
 - `convert_dataarray_units(array, to_units=..., to_constituent=...)` converts
   an xarray `DataArray`, reading the units it is in from `array.attrs["units"]`
   and `array.attrs["constituent"]`. Every output and climate `DataArray`
-  carries both, so there is nothing to misstate.
+  carries both, and so does a parameter from `parameter_dataarray` (see
+  below), so there is nothing to misstate.
 - `convert_units(values, units=..., constituent=..., to_units=..., to_constituent=...)`
   converts unlabeled values (a number, a NumPy array, a pandas object), with
   the caller stating the units they are in.
@@ -459,14 +460,24 @@ And leaf area index, from the leaf carbon pool and the parameter that relates
 the two:
 
 ```python
-import xarray as xr
-from pysipnet.parameters.model import PARAMETER_SPECS
-
-spec = PARAMETER_SPECS["leaf.leaf_carbon_per_area"]     # 'g m-2' of C
-per_area = xr.DataArray(params.leaf.leaf_carbon_per_area, name="leaf_carbon_per_area",
-                        attrs={"units": spec.units, "constituent": spec.constituent})
+per_area = params.dataarray("leaf_carbon_per_area")    # 'g m-2' of C, no kind
 lai = divide_with_units(result.outputs["leaf_carbon"], per_area)
-# '1', no constituent (C over C cancels), kind 'timestep_end_state'
+# '1', no constituent (C over C cancels), kind 'timestep_end_state',
+# derivation 'leaf_carbon / leaf_carbon_per_area'
+```
+
+`params.dataarray(name)` gives one parameter set's value, and
+`parameter_dataarray(name, values, dims=..., coords=...)` any values of it,
+such as one per site. Both label the array from the parameter's spec
+(`units`, `constituent`, `long_name`, `description`, `sipnet_name`, and no
+`kind`), accept an alias or SIPNET's name, and hold the values to the
+parameter's domain as `SIPNETParameters` does:
+
+```python
+from pysipnet.parameters import parameter_dataarray
+
+per_area = parameter_dataarray("leaf_carbon_per_area", [200.0, 300.0],
+                               dims="site", coords={"site": ["a", "b"]})
 ```
 
 An operand is a `DataArray` with a `units` attribute, or a plain number

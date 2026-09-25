@@ -420,8 +420,9 @@ def convert_dataarray_units(
     The source is ``array.attrs["units"]`` (required) and
     ``array.attrs.get("constituent", "")``, read by
     :func:`read_dataarray_units`.  Every pySIPNET output and climate
-    ``DataArray`` carries both, so the units the values are in cannot be
-    misstated.  *to_constituent* defaults to the
+    ``DataArray`` carries both, as does a parameter from
+    :func:`~pysipnet.parameters.model.parameter_dataarray`, so the units the
+    values are in cannot be misstated.  *to_constituent* defaults to the
     source constituent; ``""`` means none.  Only the data is scaled:
     coordinates, dimensions and the name are unchanged.
 

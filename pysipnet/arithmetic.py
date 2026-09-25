@@ -24,8 +24,10 @@ Operands
 An operand is a ``DataArray`` with a ``units`` attribute (and optionally
 ``constituent`` and ``kind``), or a plain real number, which is dimensionless
 with no constituent and no kind.  At least one operand must be a
-``DataArray``.  A parameter the caller labels from its
-:data:`~pysipnet.parameters.model.PARAMETER_SPECS` entry carries ``units`` and
+``DataArray``.  A parameter from
+:func:`~pysipnet.parameters.model.parameter_dataarray` (or
+:meth:`SIPNETParameters.dataarray
+<pysipnet.parameters.model.SIPNETParameters.dataarray>`) carries ``units`` and
 ``constituent`` and no ``kind``; a model variable carries all three.
 
 Values

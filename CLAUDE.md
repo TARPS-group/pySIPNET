@@ -680,6 +680,12 @@ it sets. `PARAMETER_SPECS` in `pysipnet/parameters/model.py` is the flat
 `{"group.field": spec}` view; `PYTHON_TO_SIPNET` in `param_io.py` is derived
 from it, and `tests/test_param_name_mapping.py` restates the mapping by hand.
 `resolve_parameter_name()` accepts a field name, an alias or a SIPNET name.
+`parameter_dataarray(name, values, dims=, coords=)` and
+`SIPNETParameters.dataarray(name)` give a parameter as a `DataArray` labeled by
+`ParameterSpec.xarray_attributes()` (`units`, `constituent`, no `kind`), for
+`convert_dataarray_units` and `pysipnet.arithmetic`; the values are held to
+the domain by `ParameterDomain.contains`, the same bounds `param_field` gives
+Pydantic, so an array cannot carry a value a field would refuse.
 Parameter groups forbid unknown keys, so a parameter set saved under an old
 name fails loudly on load. The docs page `reference/parameters.md` is
 generated from the specs.
