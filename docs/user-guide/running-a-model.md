@@ -357,25 +357,35 @@ put it back for display. See [Design](../design.md) for the convention.
 
 ### Converting units
 
-`pysipnet.units.conversion_factor` and `convert` translate a value from one
+Three functions in `pysipnet.units` translate a value from one
 `(units, constituent)` pair to another, which is what an observation operator
 needs when the observation is in different units from the model. Pint does the
 prefixes and dimensions; pySIPNET adds the chemistry, since a gram of carbon
 becomes a mole only through carbon's molar mass.
 
-```python
-from pysipnet.units import conversion_factor, convert
-from pysipnet.variables import resolve_output_variable
+- `convert_dataarray_units(array, to_units=..., to_constituent=...)` converts
+  an xarray `DataArray`, reading the units it is in from `array.attrs["units"]`
+  and `array.attrs["constituent"]`. Every output, climate and parameter
+  `DataArray` carries both, so there is nothing to misstate.
+- `convert_units(values, units=..., constituent=..., to_units=..., to_constituent=...)`
+  converts unlabeled values (a number, a NumPy array, a pandas object), with
+  the caller stating the units they are in.
+- `conversion_factor(...)` takes the same four strings and returns the number.
 
-spec = resolve_output_variable("wood_carbon")      # 'g m-2', constituent 'C'
-convert(result.outputs["wood_carbon"], units=spec.units, constituent=spec.constituent,
-        to_units="Mg ha-1", to_constituent="C")      # × 0.01
+In all three, `to_constituent` defaults to the source constituent, so a change
+of units alone names the substance once; pass `""` for none.
+
+```python
+from pysipnet.units import conversion_factor, convert_dataarray_units, convert_units
+
+convert_dataarray_units(result.outputs["wood_carbon"], to_units="Mg ha-1")   # × 0.01
+
+convert_units(obs_values, units="g m-2", constituent="C", to_units="Mg ha-1")
 
 # NEE is a total per step; divide by the step length in days first, then:
 conversion_factor(units="g m-2 d-1", constituent="C",
                   to_units="umol m-2 s-1", to_constituent="CO2")   # 0.9636228519
-conversion_factor(units="cm", constituent="H2O",
-                  to_units="kg m-2", to_constituent="H2O")         # 10.0
+conversion_factor(units="cm", constituent="H2O", to_units="kg m-2") # 10.0
 ```
 
 The rules, in order:
@@ -402,12 +412,18 @@ must be an amount, a mass, or for water a depth or volume, so `"Pa"` or
 mass.
 
 `photons` (the constituent of PAR) is counted in moles and has no molar mass,
-so it converts between amounts only. `convert` relabels anything that carries
-`attrs` (a `DataArray`, a pandas object): `units` and `constituent` become the
-target's, and `output_decimals` and SIPNET's internal-conversion attributes,
-which describe the original units, are dropped. A `Dataset` is refused, since
-its variables do not share a unit; convert `ds[name]`. Factors are cached, so
-calling `convert` inside a calibration loop costs one multiplication.
+so it converts between amounts only.
+
+`convert_dataarray_units` relabels its result: `units` and `constituent`
+become the target's, and `output_decimals` and SIPNET's internal-conversion
+attributes, which describe the original units, are dropped. Coordinates and
+the name are unchanged, and the input is not modified. It refuses an array with
+no `units` attribute, and a `Dataset`, whose variables do not share a unit;
+convert `ds[name]`. `convert_units` refuses any xarray object and any pandas
+object whose `attrs` has a `units` entry, because both keep their `attrs`
+through the multiplication and the result would still claim the old units.
+Factors are cached, so converting inside a calibration loop costs one
+multiplication.
 
 Every column is always present. A process that is switched off writes zeros
 rather than omitting its column, so the nitrogen and methane columns are there

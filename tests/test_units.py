@@ -20,7 +20,8 @@ from pysipnet.units import (
     DENSITY,
     MOLAR_MASS,
     conversion_factor,
-    convert,
+    convert_dataarray_units,
+    convert_units,
 )
 from pysipnet.variables import CLIMATE_VARIABLES, OUTPUT_VARIABLES
 
@@ -143,36 +144,91 @@ def test_constituent_change_goes_through_amount_not_mass():
     assert factor("g m-2", "C", "g m-2", "CO2") != pytest.approx(1.0)
 
 
-def test_convert_preserves_numpy_shape():
+def test_to_constituent_defaults_to_the_source_constituent():
+    assert conversion_factor(units="g m-2", constituent="C", to_units="Mg ha-1") == 0.01
+    assert conversion_factor(units="g m-2", to_units="Mg ha-1") == 0.01
+    with pytest.raises(ValueError, match="one side only"):
+        conversion_factor(units="g m-2", constituent="C", to_units="g m-2", to_constituent="")
+
+
+def test_convert_units_preserves_numpy_shape():
     values = np.arange(6.0).reshape(2, 3)
-    out = convert(values, units="g m-2", constituent="C", to_units="Mg ha-1", to_constituent="C")
+    out = convert_units(values, units="g m-2", constituent="C", to_units="Mg ha-1")
     assert out.shape == (2, 3)
     np.testing.assert_allclose(out, values * 0.01, rtol=1e-12)
 
 
-def test_convert_preserves_dataarray_shape_and_coordinates():
-    da = xr.DataArray(np.ones((4, 2)), dims=("time", "site"), coords={"site": ["a", "b"]})
-    out = convert(
-        da, units="g m-2 d-1", constituent="C", to_units="umol m-2 s-1", to_constituent="CO2"
+def test_convert_units_on_a_scalar():
+    assert convert_units(2.0, units="cm", constituent="H2O", to_units="kg m-2") == 20.0
+
+
+def test_convert_units_on_unlabeled_pandas():
+    s = pd.Series([1.0, 2.0], index=["a", "b"])
+    out = convert_units(s, units="g m-2", constituent="C", to_units="Mg ha-1")
+    assert isinstance(out, pd.Series) and list(out.index) == ["a", "b"]
+    np.testing.assert_allclose(out.to_numpy(), [0.01, 0.02], rtol=1e-12)
+    df = pd.DataFrame({"x": [1.0], "y": [2.0]})
+    out_df = convert_units(df, units="g m-2", constituent="C", to_units="Mg ha-1")
+    assert list(out_df.columns) == ["x", "y"]
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        xr.DataArray([1.0], attrs={"units": "g m-2"}),
+        xr.DataArray([1.0]),
+        xr.Dataset({"a": ("t", [1.0])}),
+        xr.Variable("t", [1.0]),
+    ],
+    ids=["labeled-dataarray", "unlabeled-dataarray", "dataset", "variable"],
+)
+def test_convert_units_refuses_xarray(values):
+    with pytest.raises(TypeError, match="convert_dataarray_units"):
+        convert_units(values, units="g m-2", to_units="Mg ha-1")
+
+
+def test_convert_units_refuses_pandas_that_carries_units():
+    # pandas keeps attrs through multiplication, so the result would still say g m-2.
+    s = pd.Series([1.0])
+    s.attrs = {"units": "g m-2"}
+    with pytest.raises(TypeError, match="attrs\\['units'\\]"):
+        convert_units(s, units="g m-2", to_units="Mg ha-1")
+
+
+def test_convert_dataarray_units_reads_the_source_units_from_attrs():
+    da = xr.DataArray([1.0, 2.0], attrs={"units": "kg m-2", "constituent": "C"})
+    out = convert_dataarray_units(da, to_units="g m-2")
+    np.testing.assert_allclose(out.values, [1000.0, 2000.0], rtol=1e-12)
+
+
+def test_convert_dataarray_units_preserves_shape_coordinates_and_name():
+    da = xr.DataArray(
+        np.ones((4, 2)),
+        dims=("time", "site"),
+        coords={"site": ["a", "b"]},
+        name="nee",
+        attrs={"units": "g m-2 d-1", "constituent": "C"},
     )
-    assert isinstance(out, xr.DataArray)
+    out = convert_dataarray_units(da, to_units="umol m-2 s-1", to_constituent="CO2")
+    assert isinstance(out, xr.DataArray) and out.name == "nee"
     assert out.shape == da.shape and list(out["site"].values) == ["a", "b"]
     np.testing.assert_allclose(out.values, 1e6 / 12.011 / 86400, rtol=1e-12)
 
 
-def test_convert_relabels_a_dataarray_and_leaves_the_input_alone():
+def test_convert_dataarray_units_relabels_and_leaves_the_input_alone():
     from pysipnet.io.reference import niwot_reference_output
 
     wood = niwot_reference_output()["wood_carbon"]
     before = dict(wood.attrs)
-    out = convert(wood, units="g m-2", constituent="C", to_units="Mg ha-1", to_constituent="C")
+    out = convert_dataarray_units(wood, to_units="Mg ha-1")
+    np.testing.assert_allclose(out.values, wood.values * 0.01, rtol=1e-12)
     assert out.attrs["units"] == "Mg ha-1" and out.attrs["constituent"] == "C"
     assert "output_decimals" not in out.attrs
     assert out.attrs["long_name"] == before["long_name"]
     assert wood.attrs == before
 
 
-def test_convert_relabels_constituent_and_drops_sipnet_conversion_attrs():
+def test_convert_dataarray_units_relabels_constituent_and_drops_sipnet_conversion_attrs():
     da = xr.DataArray(
         [1.0],
         attrs={
@@ -182,36 +238,47 @@ def test_convert_relabels_constituent_and_drops_sipnet_conversion_attrs():
             "sipnet_internal_conversion": "x 0.1",
         },
     )
-    out = convert(da, units="cm", constituent="H2O", to_units="kg m-2", to_constituent="H2O")
+    out = convert_dataarray_units(da, to_units="kg m-2")
     assert out.attrs == {"units": "kg m-2", "constituent": "H2O"}
-    out = convert(
-        xr.DataArray([1.0], attrs={"units": "g m-2", "constituent": "C"}),
-        units="g m-2",
-        constituent="C",
-        to_units="g m-2",
-        to_constituent="CO2",
-    )
+    carbon = xr.DataArray([1.0], attrs={"units": "g m-2", "constituent": "C"})
+    out = convert_dataarray_units(carbon, to_units="g m-2", to_constituent="CO2")
     assert out.attrs["constituent"] == "CO2"
 
 
-def test_convert_relabels_a_pandas_series():
-    s = pd.Series([1.0, 2.0])
-    s.attrs = {"units": "g m-2", "constituent": "C"}
-    out = convert(s, units="g m-2", constituent="C", to_units="Mg ha-1", to_constituent="C")
-    assert out.attrs["units"] == "Mg ha-1"
-    assert s.attrs["units"] == "g m-2"
+def test_convert_dataarray_units_relabels_even_when_xarray_drops_attrs():
+    da = xr.DataArray([1.0], attrs={"units": "g m-2", "long_name": "x"})
+    with xr.set_options(keep_attrs=False):
+        out = convert_dataarray_units(da, to_units="Mg ha-1")
+    assert out.attrs == {"units": "Mg ha-1", "long_name": "x"}
 
 
-def test_convert_refuses_a_dataset():
-    ds = xr.Dataset({"a": ("t", [1.0]), "b": ("t", [2.0])})
-    with pytest.raises(TypeError, match="one variable at a time"):
-        convert(ds, units="g m-2", to_units="Mg ha-1")
+def test_convert_dataarray_units_without_a_constituent_attribute():
+    da = xr.DataArray([1.0], attrs={"units": "d"})
+    out = convert_dataarray_units(da, to_units="h")
+    assert out.values[0] == 24.0 and "constituent" not in out.attrs
 
 
-def test_convert_on_a_scalar():
-    assert (
-        convert(2.0, units="cm", constituent="H2O", to_units="kg m-2", to_constituent="H2O") == 20.0
-    )
+def test_convert_dataarray_units_refuses_an_array_with_no_units():
+    with pytest.raises(ValueError, match="DataArray 'nee' has no 'units' attribute"):
+        convert_dataarray_units(xr.DataArray([1.0], name="nee"), to_units="g m-2")
+
+
+def test_convert_dataarray_units_names_the_array_in_a_refused_conversion():
+    da = xr.DataArray([1.0], name="nee", attrs={"units": "g m-2", "constituent": "C"})
+    with pytest.raises(ValueError, match="DataArray 'nee': Cannot convert 'g m-2'"):
+        convert_dataarray_units(da, to_units="K")
+
+
+@pytest.mark.parametrize(
+    ("values", "text"),
+    [
+        (xr.Dataset({"a": ("t", [1.0])}), "convert ds\\[name\\]"),
+        (np.ones(2), "convert_units"),
+    ],
+)
+def test_convert_dataarray_units_refuses_anything_but_a_dataarray(values, text):
+    with pytest.raises(TypeError, match=text):
+        convert_dataarray_units(values, to_units="Mg ha-1")
 
 
 def test_factor_is_cached():

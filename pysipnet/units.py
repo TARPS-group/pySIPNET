@@ -46,7 +46,14 @@ string in the package is checked at import time.
 Conversion
 ----------
 :func:`conversion_factor` returns the number that takes a value in one
-``(units, constituent)`` pair to another, and :func:`convert` multiplies by it.
+``(units, constituent)`` pair to another.  Two functions apply it:
+
+- :func:`convert_units` multiplies unlabeled values (a number, a NumPy array,
+  a pandas object) by it, with the caller stating the units they are in.
+- :func:`convert_dataarray_units` reads the units and constituent from an
+  xarray ``DataArray``'s ``attrs``, so they cannot be misstated, and relabels
+  the result.
+
 The factor is a pure function of the four strings, so a test can pin it.  In
 order, the rules are:
 
@@ -77,9 +84,13 @@ import re
 from collections.abc import Mapping
 from functools import lru_cache
 from types import MappingProxyType
-from typing import Any, Literal
+from typing import Any, Literal, overload
 
+import numpy as np
+import numpy.typing as npt
+import pandas as pd
 import pint
+import xarray as xr
 
 # 'm-2' -> 'm**-2', 'm2' -> 'm**2'.  Only digits directly following a letter
 # are exponents; a bare '1' (dimensionless) has no letter before it.
@@ -146,8 +157,9 @@ It converts between physical units only::
     from pysipnet.units import unit_registry
     q = unit_registry.Quantity(values, "g m-2 d-1").to("kg m-2 s-1")
 
-For a quantity with a ``constituent``, use :func:`conversion_factor` or
-:func:`convert` instead, which apply the constituent rules as well.
+For a quantity with a ``constituent``, use :func:`conversion_factor`,
+:func:`convert_units` or :func:`convert_dataarray_units` instead, which apply
+the constituent rules as well.
 """
 
 
@@ -231,15 +243,19 @@ def _render_token(symbol: str, exponent: str | None, style: UnitStyle) -> str:
 
 @lru_cache(maxsize=256)
 def conversion_factor(
-    *, units: str, constituent: str = "", to_units: str, to_constituent: str = ""
+    *, units: str, constituent: str = "", to_units: str, to_constituent: str | None = None
 ) -> float:
     """Return the factor taking *units* of *constituent* to *to_units* of *to_constituent*.
 
     ``conversion_factor(units="g m-2", constituent="C", to_units="g m-2",
-    to_constituent="CO2")`` is ``44.009 / 12.011``.  See the module docstring
-    for the rules; anything they do not cover raises ``ValueError``.  The
-    result is cached, since it depends on nothing but the four strings.
+    to_constituent="CO2")`` is ``44.009 / 12.011``.  *to_constituent*
+    defaults to *constituent*, so a change of units alone names the substance
+    once; ``""`` means no constituent.  See the module docstring for the
+    rules; anything they do not cover raises ``ValueError``.  The result is
+    cached, since it depends on nothing but the four strings.
     """
+    if to_constituent is None:
+        to_constituent = constituent
     try:
         return _conversion_factor(units, constituent, to_units, to_constituent)
     except ValueError as exc:
@@ -249,36 +265,132 @@ def conversion_factor(
         ) from None
 
 
-def convert(
-    values: Any, *, units: str, constituent: str = "", to_units: str, to_constituent: str = ""
-) -> Any:
-    """Return *values* multiplied by :func:`conversion_factor` for the same arguments.
+@overload
+def convert_units(
+    values: float,
+    *,
+    units: str,
+    constituent: str = "",
+    to_units: str,
+    to_constituent: str | None = None,
+) -> float: ...
+@overload
+def convert_units(
+    values: npt.NDArray[Any],
+    *,
+    units: str,
+    constituent: str = "",
+    to_units: str,
+    to_constituent: str | None = None,
+) -> npt.NDArray[np.float64]: ...
+# The installed pandas has no type information, so mypy sees pd.Series as Any and
+# this signature as unreachable.  It is kept for readers and for pandas-stubs.
+@overload
+def convert_units(  # type: ignore[overload-cannot-match]
+    values: pd.Series | pd.DataFrame,
+    *,
+    units: str,
+    constituent: str = "",
+    to_units: str,
+    to_constituent: str | None = None,
+) -> pd.Series | pd.DataFrame: ...
+def convert_units(
+    values: float | npt.NDArray[Any] | pd.Series | pd.DataFrame,
+    *,
+    units: str,
+    constituent: str = "",
+    to_units: str,
+    to_constituent: str | None = None,
+) -> float | npt.NDArray[np.float64] | pd.Series | pd.DataFrame:
+    """Convert unlabeled *values* from *units* of *constituent* to *to_units* of *to_constituent*.
 
-    Works on anything that multiplies by a float (a scalar, a NumPy array, a
-    pandas object or an xarray ``DataArray``) and preserves its shape.  An
-    object that carries ``attrs`` comes back relabeled: ``units`` and
-    ``constituent`` say *to_units* and *to_constituent*, and the attributes
-    that described the original units (``output_decimals`` and SIPNET's
-    internal conversion) are dropped.  An xarray ``Dataset`` is refused,
-    because its variables do not share one unit.
+    Returns ``values * conversion_factor(...)`` for the same keyword
+    arguments, with the shape and type of *values*: a number, a NumPy array,
+    or a pandas ``Series`` or ``DataFrame``.  The caller states the units the
+    values are in; nothing about *values* is read or rewritten.
+    *to_constituent* defaults to *constituent*.
+
+    Refused with ``TypeError``: any xarray object, and a pandas object whose
+    ``attrs`` has a ``"units"`` entry.  Both keep their ``attrs`` through the
+    multiplication, so the result would still claim the old units.  Convert a
+    ``DataArray`` with :func:`convert_dataarray_units`, which reads the units
+    from its attributes and relabels the result.
     """
-    if hasattr(values, "data_vars"):
+    if isinstance(values, (xr.DataArray, xr.Dataset, xr.Variable)):
         raise TypeError(
-            "convert() takes one variable at a time; a Dataset's variables have their own "
-            "units. Convert ds[name] instead."
+            f"convert_units() takes unlabeled values, not an xarray {type(values).__name__}, "
+            "whose units attribute would survive the conversion unchanged. Use "
+            "convert_dataarray_units(), which reads the units from the attributes and "
+            "relabels the result."
+        )
+    attrs = getattr(values, "attrs", None)
+    if isinstance(attrs, dict) and "units" in attrs:
+        raise TypeError(
+            f"convert_units() takes unlabeled values, but this {type(values).__name__} has "
+            f"attrs['units'] = {attrs['units']!r}, which would survive the conversion "
+            "unchanged. Pass its .to_numpy(), or clear its attrs first."
         )
     factor = conversion_factor(
         units=units, constituent=constituent, to_units=to_units, to_constituent=to_constituent
     )
-    result = values * factor
-    attrs = getattr(result, "attrs", None)
-    if isinstance(attrs, dict):
-        relabeled = {k: v for k, v in attrs.items() if k not in _UNIT_DEPENDENT_ATTRS}
-        relabeled["units"] = to_units
-        relabeled.pop("constituent", None)
-        if to_constituent:
-            relabeled["constituent"] = to_constituent
-        result.attrs = relabeled
+    return values * factor
+
+
+def convert_dataarray_units(
+    array: xr.DataArray, *, to_units: str, to_constituent: str | None = None
+) -> xr.DataArray:
+    """Convert *array* to *to_units* of *to_constituent*, reading its current units from ``attrs``.
+
+    The source is ``array.attrs["units"]`` (required) and
+    ``array.attrs.get("constituent", "")``, the attributes every pySIPNET
+    output, climate and parameter ``DataArray`` carries, so the units the
+    values are in cannot be misstated.  *to_constituent* defaults to the
+    source constituent; ``""`` means none.  Only the data is scaled:
+    coordinates, dimensions and the name are unchanged.
+
+    The result's attributes are *array*'s, with ``units`` set to *to_units*,
+    ``constituent`` set to *to_constituent* (or removed if it is ``""``), and
+    the attributes that describe the original units removed:
+    ``output_decimals``, ``sipnet_internal_units`` and
+    ``sipnet_internal_conversion``.  *array* itself is not modified.
+
+    Raises ``TypeError`` for anything but a ``DataArray`` (for a ``Dataset``,
+    convert ``ds[name]``), and ``ValueError`` if ``attrs`` has no ``units`` or
+    the conversion is not one :func:`conversion_factor` makes.
+    """
+    if not isinstance(array, xr.DataArray):
+        hint = (
+            " A Dataset's variables have their own units; convert ds[name] instead."
+            if isinstance(array, xr.Dataset)
+            else " For unlabeled values, use convert_units()."
+        )
+        raise TypeError(
+            f"convert_dataarray_units() takes an xarray DataArray, not {type(array).__name__}."
+            + hint
+        )
+    label = f"DataArray {array.name!r}" if array.name is not None else "DataArray"
+    units = array.attrs.get("units")
+    if not isinstance(units, str):
+        raise ValueError(
+            f"{label} has no 'units' attribute, so its current units are unknown. Set "
+            "array.attrs['units'], or convert array.values with convert_units()."
+        )
+    constituent = array.attrs.get("constituent", "")
+    if to_constituent is None:
+        to_constituent = constituent
+    try:
+        factor = conversion_factor(
+            units=units, constituent=constituent, to_units=to_units, to_constituent=to_constituent
+        )
+    except ValueError as exc:
+        raise ValueError(f"{label}: {exc}") from None
+    result = array * factor
+    relabeled = {k: v for k, v in array.attrs.items() if k not in _UNIT_DEPENDENT_ATTRS}
+    relabeled["units"] = to_units
+    relabeled.pop("constituent", None)
+    if to_constituent:
+        relabeled["constituent"] = to_constituent
+    result.attrs = relabeled
     return result
 
 
