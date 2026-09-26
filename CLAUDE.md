@@ -307,7 +307,7 @@ registry names in `CLIMATE_VARIABLES` (`pysipnet/variables.py`):
 `photosynthetically_active_radiation` (par), `precipitation` (precip),
 `vapor_pressure_deficit` (vpd), `soil_vapor_pressure_deficit` (vpdSoil),
 `vapor_pressure` (vPress), `wind_speed` (wspd), and the shared time columns
-`year`, `day_of_year`, `hour_of_day`, `time_step_length`. Each spec records
+`year`, `day_of_year`, `hour_of_day`, `timestep_length`. Each spec records
 the file units and SIPNET's internal conversion below as `units` /
 `internal_units` / `internal_conversion`. `ClimateDrivers.from_dataframe`
 accepts the old short names and SIPNET's names as aliases and renames them;
@@ -546,7 +546,7 @@ because it reads `VariableKind` and `variables.py` imports `units` at import
 time. Kind changes only as `KIND_AFTER_TIME_POWER` in `variables.py` says
 (total ÷ time → `daily_rate`, rate × time → total). Index coordinates must
 align exactly, so two different time axes are refused rather than
-intersected. `step_length()` makes the `time_step_length` coordinate an
+intersected. `step_length()` makes the `timestep_length` coordinate an
 operand; the coordinate itself is a timedelta with `kind=timestep_total` and
 no `units`, so it cannot be one. `TIME_REFERENCE_FOR_KIND[DAILY_RATE]` says
 "rate during the timestep" rather than "per-day", because a derived or
@@ -571,8 +571,8 @@ is the one labeling under which every variable's CF `cell_methods` is literally
 true: a pool is `time: point` at `time`, a total is `time: sum` over the bounds.
 Under start labeling `time: point` would have claimed the pool was the
 start-of-step value, which it is not. The Dataset states the interval each row
-covers: `time_step_start`, `time_step_length` and a CF `time_bounds` variable
-named by `time`'s `bounds` attribute, so `[time_step_start, time]` is
+covers: `timestep_start`, `timestep_length` and a CF `time_bounds` variable
+named by `time`'s `bounds` attribute, so `[timestep_start, time]` is
 machine-readable — which is what deciding which steps a measurement spans
 requires. A single variable (`ds["nee"]`) keeps `time`'s attributes but not the
 two-dimensional `time_bounds`, so its `bounds` would name something absent;
@@ -591,20 +591,20 @@ unrounded values; `.pandas` keeps the printed ones, being a view of the file.
 Without drivers (an output file re-opened with `from_path`/`from_dataframe`
 and no `climate`) the axis falls back to the printed labels and the lengths
 are inferred from them, so there is nothing to check labels against; the
-Dataset's `time_axis_source` and `time_step_length_source` say so. The old
-`time_step_length=` argument is gone: it was a third mode (printed starts,
+Dataset's `time_axis_source` and `timestep_length_source` say so. The old
+`timestep_length=` argument is gone: it was a third mode (printed starts,
 supplied lengths) that the runner no longer used, and it needed its own looser
 tolerance. Pass `climate=` instead — `climate.head(n)` for the first `n`
-rows. `SIPNETOutput.time_step_length` remains, read from the climate.
+rows. `SIPNETOutput.timestep_length` remains, read from the climate.
 
 `build_time_axis` takes lengths from exactly one place: a `ClimateDrivers`
-(already checked, not re-checked), a bare frame's own `time_step_length`
+(already checked, not re-checked), a bare frame's own `timestep_length`
 column (checked there, since nothing else has), or inference from the labels
 (consistent by construction).
 
 A declared end within 60 s of the next row's start snaps to it, so
 three-decimal `.clim` lengths do not put `time` seconds off the clock;
-`time_step_length` itself is never adjusted. The snap is still needed for
+`timestep_length` itself is never adjusted. The snap is still needed for
 that, but it no longer hides anything: it shares its tolerance with the
 continuity check, which has already refused any overlap or drift it could
 absorb. (It used to absorb the 2.46 s-per-step drift silently — though nothing
@@ -619,7 +619,7 @@ has `standard_name`/`axis`, and no coordinate gets a `_FillValue` on encoding.
 **no default method**: `RESAMPLING_METHODS_FOR_KIND` in `variables.py` says
 which of `sum`/`mean`/`last` are meaningful for each `VariableKind` (totals
 sum; pools last or mean; rates and means mean; cumulatives last), `mean` is
-weighted by `time_step_length` because Niwot's day/night steps differ in
+weighted by `timestep_length` because Niwot's day/night steps differ in
 length, and an invalid pairing raises with the reason and the valid menu.
 `RESAMPLED_KIND` gives the result's kind (a pool averaged is a
 `timestep_mean`), and the result's `kind`/`cell_methods`/`time_reference`
@@ -646,14 +646,14 @@ is the one parser of a declared `kind` (arithmetic uses it too), and
 `resample` reduces `time` only, so a stack of runs resamples in one call: a
 variable may be on `(member, site, time)` in any order, and every coordinate
 not on `time` (`lon`/`lat` on `site`, a scalar `member`) is carried. The one
-set of cells is shared by the whole Dataset, so `time_step_start` and
-`time_step_length` must be on `time` alone; xarray gives them a `site`
+set of cells is shared by the whole Dataset, so `timestep_start` and
+`timestep_length` must be on `time` alone; xarray gives them a `site`
 dimension when runs on different axes are concatenated, and that is refused.
 Selecting one run from such a stack leaves padding rows (`NaT` interval, every
 value missing), which are dropped rather than resampled (left in, a `NaT`
 length casts to the `int64` minimum). A row with a value but a `NaT` interval
 is not padding and is refused, since dropping it would lose the value
-silently. The combined `time_step_length` is summed as `int64` nanoseconds in
+silently. The combined `timestep_length` is summed as `int64` nanoseconds in
 NumPy, not by xarray: xarray casts to float64 to fill empty cells, which is
 exact only to about 104 days. Which cell each step falls in is computed for
 that sum with `searchsorted` and checked against xarray's own per-cell counts,
@@ -663,8 +663,8 @@ negative or unparseable `freq` is refused (with pandas' reason, which is where
 shortest step, within `STEP_TOLERANCE`, which would return the input under a
 false `resampling_frequency`.
 
-A record with none of the interval coordinates (`time_step_start`,
-`time_step_length`, `time_bounds`) — an observation, typically — resamples on
+A record with none of the interval coordinates (`timestep_start`,
+`timestep_length`, `time_bounds`) — an observation, typically — resamples on
 calendar cells alone; one with only some of them is refused as a half-built
 layout. With nothing saying where its steps end, each cell is labeled at its
 **right edge**, the result has no interval coordinates, and the `resampling`
@@ -675,10 +675,10 @@ dropped. On both paths `sum` and `mean` are `NaN` where the cell holds a
 `NaN`, and `last` is the cell's last value, `NaN` only if that is; downstream
 code that must see a gap anywhere in a cell counts missing values itself.
 
-Step lengths come from the climate's `time_step_length`
+Step lengths come from the climate's `timestep_length`
 column; when the output has no climate attached they are **inferred** from
 consecutive timestamps (exact except for the last step, which repeats its
-predecessor), and `time_step_length_source` in the Dataset's attributes says
+predecessor), and `timestep_length_source` in the Dataset's attributes says
 which happened. `time_zone` is the drivers' declaration, or `"undeclared"`.
 `run_id` and
 `model_flags` (JSON) travel as attributes too, so an archived prediction says

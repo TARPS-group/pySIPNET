@@ -41,8 +41,8 @@ Time convention
 SIPNET labels each row with the **start** of its timestep.  Pools are reported
 at the **end** of the step, fluxes are totals **over** the step.  The Dataset
 therefore puts its ``time`` coordinate at the step **end**, the one instant at
-which every variable's CF ``cell_methods`` is literally true; ``time_step_start``,
-``time_step_length`` and a CF ``time_bounds`` variable give the interval each
+which every variable's CF ``cell_methods`` is literally true; ``timestep_start``,
+``timestep_length`` and a CF ``time_bounds`` variable give the interval each
 row covers, and every data variable has ``kind`` and ``time_reference``
 attributes in words.  See :mod:`pysipnet.dataset` for the reasoning, and
 :func:`pysipnet.resample.resample` for combining steps into coarser ones.
@@ -126,7 +126,7 @@ class SIPNETOutput:
         building the Dataset raises.  Without it — an output file re-opened
         on its own — the axis is rebuilt from the labels SIPNET printed and
         the step lengths are inferred from them; the Dataset's
-        ``time_axis_source`` and ``time_step_length_source`` attributes say
+        ``time_axis_source`` and ``timestep_length_source`` attributes say
         so.
     flags:
         The :class:`~pysipnet.parameters.model.ModelFlags` the run used, so that
@@ -307,8 +307,8 @@ class SIPNETOutput:
         -------
         xarray.Dataset or pandas.DataFrame
             The Dataset has one dimension, ``time``, whose coordinate is the
-            **end** of each timestep as ``datetime64``; ``time_step_start``,
-            ``time_step_length`` and a CF ``time_bounds`` variable describing
+            **end** of each timestep as ``datetime64``; ``timestep_start``,
+            ``timestep_length`` and a CF ``time_bounds`` variable describing
             the interval each row covers; ``year``, ``day_of_year`` and
             ``hour_of_day`` for the start of the step, from the climate
             drivers when this output has them; and one
@@ -330,7 +330,7 @@ class SIPNETOutput:
         ``output[["nee", "gpp"]]`` is shorthand for :meth:`select` and returns
         both in one Dataset, read in one go.
 
-        A single array carries ``time_step_start`` and ``time_step_length``
+        A single array carries ``timestep_start`` and ``timestep_length``
         but not the two-dimensional ``time_bounds``, so its ``time`` has no
         ``bounds`` attribute; the Dataset from ``output[[...]]`` has both.
         """
@@ -356,7 +356,7 @@ class SIPNETOutput:
         )
 
     @property
-    def time_step_length(self) -> np.ndarray | None:
+    def timestep_length(self) -> np.ndarray | None:
         """Timestep lengths in days, one per row, from the climate drivers.
 
         ``None`` when this output has no drivers; its Dataset then infers the
@@ -364,7 +364,7 @@ class SIPNETOutput:
         """
         if self.climate is None:
             return None
-        return self.climate.pandas["time_step_length"].to_numpy(dtype=float)
+        return self.climate.pandas["timestep_length"].to_numpy(dtype=float)
 
     @property
     def n_timesteps(self) -> int:

@@ -8,7 +8,7 @@ read.  The functions here do the arithmetic and write the ``units``,
 - :func:`multiply_with_units` and :func:`divide_with_units`;
 - :func:`add_with_units` and :func:`subtract_with_units`, which require the
   operands to agree;
-- :func:`step_length`, a pySIPNET array's ``time_step_length`` as a float
+- :func:`step_length`, a pySIPNET array's ``timestep_length`` as a float
   array with units, so that a per-step total divides into a rate.
 
 Leaf area index, for example, is ``leaf_carbon`` over the
@@ -36,7 +36,7 @@ Plain xarray arithmetic, broadcasting as usual, with nothing rescaled.  Index
 coordinates must match exactly where both operands have them: two time axes
 that differ are refused rather than silently cut to the labels they share.
 Non-index coordinates of the operands carry through, so the result keeps a
-model variable's ``time_step_start`` and ``time_step_length`` and can still be
+model variable's ``timestep_start`` and ``timestep_length`` and can still be
 passed to :func:`pysipnet.resample.resample`; a coordinate both operands carry
 with different values, which xarray would silently drop, is refused.
 
@@ -74,7 +74,7 @@ values at or below zero, in a sum when both operands state the same one, and
 never in a difference.  A lazy (dask-backed) other operand drops it rather
 than being computed to decide one attribute.  ``long_name`` and
 ``derivation`` name the operation (``"net_ecosystem_exchange /
-time_step_length"``), with an unnamed operand given by its own derivation in
+timestep_length"``), with an unnamed operand given by its own derivation in
 parentheses.  Nothing describing a source rather than the result is carried:
 not ``description``, ``sipnet_name``, ``output_decimals`` or SIPNET's
 internal-conversion attributes.  The result's name is ``None``, and the
@@ -116,7 +116,7 @@ Operand: TypeAlias = xr.DataArray | float | np.integer[Any] | np.floating[Any]
 
 StepLengthUnits = Literal["d", "h", "s"]
 
-_STEP_LENGTH_COORDINATE = "time_step_length"
+_STEP_LENGTH_COORDINATE = "timestep_length"
 _NANOSECONDS_PER: dict[str, float] = {"d": 86_400e9, "h": 3_600e9, "s": 1e9}
 _ALIGNMENT_ERROR: type[Exception] = getattr(xr, "AlignmentError", ValueError)
 
@@ -241,7 +241,7 @@ def subtract_with_units(a: Operand, b: Operand) -> xr.DataArray:
 def step_length(data: xr.DataArray | xr.Dataset, units: StepLengthUnits = "d") -> xr.DataArray:
     """The length of each of *data*'s timesteps, as a float array in *units*.
 
-    Reads the ``time_step_length`` coordinate every pySIPNET output carries
+    Reads the ``timestep_length`` coordinate every pySIPNET output carries
     and returns it with the coordinate's own dimensions and coordinates, in
     ``"d"``, ``"h"`` or ``"s"``, with a ``units`` attribute and no ``kind``, so
     that ``divide_with_units(total, step_length(total))`` is a rate.  A missing
@@ -252,7 +252,7 @@ def step_length(data: xr.DataArray | xr.Dataset, units: StepLengthUnits = "d") -
     with no ``units``, and it declares the kind ``timestep_total``, so dividing
     by it would be refused.
 
-    Raises ``ValueError`` if *data* has no ``time_step_length`` coordinate or
+    Raises ``ValueError`` if *data* has no ``timestep_length`` coordinate or
     *units* is not one of the three, and ``TypeError`` for anything but a
     ``DataArray`` or ``Dataset``.
     """
@@ -444,7 +444,7 @@ def _refuse_conflicting_coordinates(x: _Labeled, y: _Labeled, op: str) -> None:
     """Refuse non-index coordinates both operands carry with different values.
 
     xarray drops such a coordinate from the result without a word, so the
-    result would lose ``time_step_start`` or ``time_step_length`` and could no
+    result would lose ``timestep_start`` or ``timestep_length`` and could no
     longer be resampled.
     """
     a, b = x.value, y.value

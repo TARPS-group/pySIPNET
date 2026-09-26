@@ -24,7 +24,7 @@ def _make_df(
             "year": year,
             "day_of_year": range(start_doy, start_doy + n_days),
             "hour_of_day": 0.0,
-            "time_step_length": 1.0,
+            "timestep_length": 1.0,
             # Every column a distinct, non-round value. With repeated or round
             # numbers a round trip proves only the shape: swapping two columns
             # in the writer, or truncating precision, would still compare equal.
@@ -93,14 +93,14 @@ class TestValidation:
 
     def test_zero_length_raises(self):
         df = _make_df()
-        df.loc[0, "time_step_length"] = 0.0
-        with pytest.raises(ValueError, match="time_step_length"):
+        df.loc[0, "timestep_length"] = 0.0
+        with pytest.raises(ValueError, match="timestep_length"):
             ClimateDrivers.from_dataframe(df)
 
     def test_negative_length_raises(self):
         df = _make_df()
-        df.loc[0, "time_step_length"] = -1.0
-        with pytest.raises(ValueError, match="time_step_length"):
+        df.loc[0, "timestep_length"] = -1.0
+        with pytest.raises(ValueError, match="timestep_length"):
             ClimateDrivers.from_dataframe(df)
 
     def test_non_monotonic_doy_raises(self):
@@ -498,7 +498,7 @@ class TestClimateRegistry:
             columns={
                 "day_of_year": "day",
                 "hour_of_day": "time",
-                "time_step_length": "length",
+                "timestep_length": "length",
                 "air_temperature": "tair",
                 "soil_temperature": "tsoil",
                 "photosynthetically_active_radiation": "par",
@@ -522,14 +522,14 @@ class TestClimateRegistry:
         ds = cd.xarray
         assert dict(ds.sizes) == {"time": 3, "bounds": 2}
         assert ds["air_temperature"].dims == ("time",)
-        assert ds["time_step_start"].values[0] == np.datetime64("2020-04-09T00:00")
+        assert ds["timestep_start"].values[0] == np.datetime64("2020-04-09T00:00")
         assert ds["time"].values[0] == np.datetime64("2020-04-10T00:00")
-        assert ds["time"].values[0] == ds["time_step_start"].values[1]
+        assert ds["time"].values[0] == ds["timestep_start"].values[1]
         assert ds["time"].attrs["bounds"] == "time_bounds"
         assert ds["air_temperature"].attrs["units"] == "degC"
         assert ds["precipitation"].attrs["time_reference"] == "total over the timestep"
         assert ds["precipitation"].attrs["sipnet_internal_units"] == "cm"
-        assert "time_step_length" in ds.coords and "time_step_length" not in ds.data_vars
+        assert "timestep_length" in ds.coords and "timestep_length" not in ds.data_vars
 
     def test_alias_and_canonical_column_together_is_an_error(self):
         df = _make_df()

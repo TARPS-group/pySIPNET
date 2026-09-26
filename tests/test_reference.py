@@ -127,7 +127,7 @@ def test_climate_loads_without_warnings(recwarn: pytest.WarningsRecorder):
 
 def test_climate_step_lengths_are_not_uniform():
     """The record's whole point for weighting tests: day and night steps differ."""
-    lengths = niwot_reference_climate().pandas["time_step_length"]
+    lengths = niwot_reference_climate().pandas["timestep_length"]
     assert lengths.min() < 0.3 < 0.6 < lengths.max()
 
 
@@ -139,10 +139,10 @@ def test_output_is_the_golden_with_the_climates_step_lengths():
     pd.testing.assert_frame_equal(output.pandas, golden)
 
     climate = niwot_reference_climate().pandas.head(len(golden))
-    assert output.time_step_length is not None
-    np.testing.assert_array_equal(output.time_step_length, climate["time_step_length"])
+    assert output.timestep_length is not None
+    np.testing.assert_array_equal(output.timestep_length, climate["timestep_length"])
     ds = output.xarray
-    assert ds.attrs["time_step_length_source"] == "climate drivers"
+    assert ds.attrs["timestep_length_source"] == "climate drivers"
     assert ds.attrs["run_id"] == NIWOT_OUTPUT_RUN_ID
 
 

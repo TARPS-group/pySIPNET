@@ -30,9 +30,9 @@ convention of the CLM and ELM land models, and it is the natural one for data
 assimilation, where ``ds.sel(time=t)`` should give the state valid at the
 analysis time and the fluxes over the interval that led up to it.
 
-Every row also describes the interval it covers: ``time_step_start`` and
-``time_step_length`` coordinates, and a CF ``time_bounds`` variable giving
-``[time_step_start, time]``.  ``time`` carries the standard ``bounds``
+Every row also describes the interval it covers: ``timestep_start`` and
+``timestep_length`` coordinates, and a CF ``time_bounds`` variable giving
+``[timestep_start, time]``.  ``time`` carries the standard ``bounds``
 attribute naming it, which is what lets CF-aware tooling decide whether an
 observation falls inside a step and how to combine steps.  ``year``,
 ``day_of_year`` and ``hour_of_day`` are the start of the step, and say so in
@@ -57,7 +57,7 @@ to the printed labels, and the step lengths are inferred from consecutive
 labels (exact for every step but the last, which is assumed to repeat the one
 before it).  A single row with no declared length cannot be placed on the axis
 at all and is refused.  The Dataset's ``time_axis_source`` and
-``time_step_length_source`` attributes say which happened.
+``timestep_length_source`` attributes say which happened.
 
 Labels and lengths must agree
 -----------------------------
@@ -65,7 +65,7 @@ SIPNET never checks that a row's start plus its length is the next row's
 start.  :func:`check_step_continuity` does, once for every set of drivers:
 when a :class:`~pysipnet.climate.ClimateDrivers` loads its data (see
 :meth:`~pysipnet.climate.ClimateDrivers.validate`), or, for a bare frame that
-carries its own ``time_step_length`` column, when its axis is built.  An axis
+carries its own ``timestep_length`` column, when its axis is built.  An axis
 built from a ``ClimateDrivers`` does not repeat it.  The rule:
 
 - an **overlap**, a row starting more than a minute before the previous one
@@ -89,7 +89,7 @@ within the same minute of that instant, the end snaps to the next start, so
 that rounded lengths do not leave ``time`` a few seconds off the clock and the
 cells overlapping or gapped by the rounding error.  Because the continuity
 check has already refused anything the snap could hide, the snap only ever
-moves a boundary by an amount that is rounding.  ``time_step_length`` is never
+moves a boundary by an amount that is rounding.  ``timestep_length`` is never
 adjusted, because the declared length is what the model actually used; only
 the placement of the boundary is.
 
@@ -138,9 +138,9 @@ CF_CONVENTIONS = "CF-1.11"
 
 TIME_CONVENTION = (
     "The 'time' coordinate is the END of each timestep, the instant at which state "
-    "variables are valid. 'time_step_start' is the start, which is how SIPNET labels its "
+    "variables are valid. 'timestep_start' is the start, which is how SIPNET labels its "
     "rows ('year', 'day_of_year', 'hour_of_day'). Fluxes are totals over "
-    "[time_step_start, time], also given as 'time_bounds'. Each variable's 'kind', "
+    "[timestep_start, time], also given as 'time_bounds'. Each variable's 'kind', "
     "'time_reference' and 'cell_methods' attributes say which applies to it. SIPNET "
     "has no time zone: the times are on whatever clock the climate drivers use, which "
     "'time_zone' names when the drivers declare it."
@@ -259,7 +259,7 @@ def sipnet_row_labels(start: np.ndarray) -> dict[str, np.ndarray]:
 
 def days_to_timedelta(days: np.ndarray) -> np.ndarray:
     """Lengths in days as ``timedelta64[ns]``, rounded to the nearest nanosecond."""
-    values = _finite(np.asarray(days, dtype=float), "time_step_length")
+    values = _finite(np.asarray(days, dtype=float), "timestep_length")
     return np.rint(values * NS_PER_DAY).astype("int64").view("timedelta64[ns]")
 
 
@@ -452,7 +452,7 @@ def assemble_time_coords(
                 "time_zone": time_zone,
             },
         ),
-        "time_step_start": (
+        "timestep_start": (
             TIME_DIMENSION,
             start,
             {
@@ -461,7 +461,7 @@ def assemble_time_coords(
                 "drivers' clock, as the drivers label the row.",
             },
         ),
-        "time_step_length": (
+        "timestep_length": (
             TIME_DIMENSION,
             length,
             {
@@ -477,7 +477,7 @@ def assemble_time_coords(
             np.stack([start, end], axis=1),
             {
                 "long_name": "Timestep bounds",
-                "description": "The interval [time_step_start, time] each row covers, in the "
+                "description": "The interval [timestep_start, time] each row covers, in the "
                 "Climate and Forecast conventions' bounds form.",
             },
         ),
@@ -504,11 +504,11 @@ class TimeAxis:
 
 def _declared_lengths(values: np.ndarray) -> np.ndarray:
     """Step lengths in days, refusing a value no interval can have."""
-    length = _finite(np.asarray(values, dtype=float), "time_step_length")
+    length = _finite(np.asarray(values, dtype=float), "timestep_length")
     if len(length) and length.min() <= 0:
         row = int(np.argmin(length))
         raise ValueError(
-            f"time_step_length is {length[row]} days at row {row}. A step must have a "
+            f"timestep_length is {length[row]} days at row {row}. A step must have a "
             "positive duration for the interval it covers to mean anything."
         )
     return length
@@ -563,7 +563,7 @@ def build_time_axis(
        against them, row for row.  Their labels and lengths are not checked
        against each other again: a :class:`~pysipnet.climate.ClimateDrivers`
        did that when its data was loaded.
-    2. *df*'s own ``time_step_length`` column, when it has one: the frame
+    2. *df*'s own ``timestep_length`` column, when it has one: the frame
        carries its whole clock, as a ``.clim`` file does.  Nothing has checked
        it yet, so :func:`check_step_continuity` runs here.
     3. Otherwise the lengths are inferred from consecutive labels, which
@@ -600,13 +600,13 @@ def build_time_axis(
         if clock is not df:
             _check_labels_match(df, clock)
         start = timestep_start(clock)
-        length = clock["time_step_length"].to_numpy(dtype=float)
+        length = clock["timestep_length"].to_numpy(dtype=float)
         axis_source = TIME_AXIS_FROM_DRIVERS
         length_source = STEP_LENGTH_FROM_DRIVERS
         time_zone = drivers.time_zone
-    elif "time_step_length" in df.columns:
+    elif "timestep_length" in df.columns:
         start = timestep_start(df)
-        length = _declared_lengths(df["time_step_length"].to_numpy())
+        length = _declared_lengths(df["timestep_length"].to_numpy())
         if len(start) > 1:
             _gaps_in_days(start)
         check_step_continuity(start, days_to_timedelta(length))
@@ -620,7 +620,7 @@ def build_time_axis(
                 f"Cannot place {len(df)} row(s) on a time axis without knowing the step length: "
                 "the 'time' coordinate is the end of each step, and with fewer than two rows "
                 "there is nothing to infer it from. Pass the climate drivers the rows were "
-                "produced from, or give the frame a time_step_length column (days)."
+                "produced from, or give the frame a timestep_length column (days)."
             )
         length = inferred
         axis_source = TIME_AXIS_FROM_PRINTED_LABELS
@@ -697,8 +697,8 @@ def dataset_from_dataframe(
     if len(df) != axis.n_rows:
         raise ValueError(f"Frame has {len(df)} rows but the time axis was built for {axis.n_rows}.")
 
-    # The time columns and a time_step_length column are the axis, not data.
-    as_coordinate = {*TIME_COORDINATE_NAMES, "time_step_length"}
+    # The time columns and a timestep_length column are the axis, not data.
+    as_coordinate = {*TIME_COORDINATE_NAMES, "timestep_length"}
     data_vars = {
         name: (TIME_DIMENSION, df[name].to_numpy(), attributes_for(name))
         for name in df.columns
@@ -711,7 +711,7 @@ def dataset_from_dataframe(
         "time_convention": TIME_CONVENTION,
         "time_zone": axis.time_zone,
         "time_axis_source": axis.axis_source,
-        "time_step_length_source": axis.step_length_source,
+        "timestep_length_source": axis.step_length_source,
     }
     attrs.update(extra_attrs or {})
 

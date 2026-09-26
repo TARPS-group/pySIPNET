@@ -44,7 +44,7 @@ def _make_climate(n_days: int = 30, year: int = 2010, start_doy: int = 150):
                 "year": year,
                 "day_of_year": start_doy + i,
                 "hour_of_day": 0.0,
-                "time_step_length": 1.0,
+                "timestep_length": 1.0,
                 "air_temperature": 18.0 + 5.0 * np.sin(np.pi * i / n_days),
                 "soil_temperature": 12.0 + 3.0 * np.sin(np.pi * i / n_days),
                 "photosynthetically_active_radiation": 15.0,
@@ -139,8 +139,8 @@ class TestEndToEnd:
         assert not ds["net_ecosystem_exchange"].isnull().any()
         assert ds["time"].attrs["long_name"] == "End of timestep"
         expected_end = (
-            ds["time_step_start"].values
-            + pd.to_timedelta(climate.pandas["time_step_length"].to_numpy(), unit="D").to_numpy()
+            ds["timestep_start"].values
+            + pd.to_timedelta(climate.pandas["timestep_length"].to_numpy(), unit="D").to_numpy()
         )
         np.testing.assert_array_equal(ds["time"].values, expected_end)
         assert ds["wood_carbon"].attrs["time_reference"] == "value at the end of the timestep"
@@ -156,7 +156,7 @@ class TestEndToEnd:
         attrs = result.outputs.xarray.attrs
         assert attrs["run_id"] == "calibration_042" == result.provenance.run_id
         assert json.loads(attrs["model_flags"]) == result.flags.model_dump()
-        assert attrs["time_step_length_source"] == "climate drivers"
+        assert attrs["timestep_length_source"] == "climate drivers"
         assert attrs["time_axis_source"] == "climate drivers"
         assert attrs["time_zone"] == "undeclared"
         assert result.outputs.xarray["time"].attrs["time_zone"] == attrs["time_zone"]
@@ -576,7 +576,7 @@ class TestOutputIO:
 
         ds = result.outputs[["nee"]]
         assert set(ds.data_vars) == {"net_ecosystem_exchange"}
-        assert "time_step_start" in ds.coords
+        assert "timestep_start" in ds.coords
 
     def test_getitem_with_a_list_gives_a_dataset(self, minimal_params, tmp_path):
         runner = SIPNETRunner(flags=ModelFlags.standard(), output_dir=tmp_path / "outputs")
@@ -938,7 +938,7 @@ class TestSnowFlag:
                 "year": 2010,
                 "day_of_year": 10 + i,
                 "hour_of_day": 0.0,
-                "time_step_length": 1.0,
+                "timestep_length": 1.0,
                 "air_temperature": -5.0,
                 "soil_temperature": -2.0,
                 "photosynthetically_active_radiation": 5.0,
@@ -962,7 +962,7 @@ class TestSnowFlag:
         result = SIPNETRunner(flags=ModelFlags.standard()).run(minimal_params, climate)
         assert result.provenance.success
         assert climate._data is None, "building the result must not read the climate file"
-        assert "time_step_start" in result.outputs.xarray.coords
+        assert "timestep_start" in result.outputs.xarray.coords
         assert climate._data is not None, "the Dataset needs the step lengths"
 
     def test_snow_melts_identically_with_the_flag_off_when_the_rate_is_supplied(

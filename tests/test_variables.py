@@ -316,7 +316,7 @@ def test_dataset_is_one_dimensional_in_time():
     ds = build_output_dataset(_frame())
     assert dict(ds.sizes) == {"time": 4, "bounds": 2}
     # Rows start at 00:00 and 12:00; time is the END of each step.
-    assert ds["time_step_start"].values[1] == np.datetime64("2020-01-01T12:00")
+    assert ds["timestep_start"].values[1] == np.datetime64("2020-01-01T12:00")
     assert ds["time"].values[1] == np.datetime64("2020-01-02T00:00")
     assert ds["time"].attrs["standard_name"] == "time" and ds["time"].attrs["axis"] == "T"
     assert ds.attrs["Conventions"] == "CF-1.11"
@@ -330,29 +330,29 @@ def test_dataset_infers_the_step_length_when_it_is_not_given():
     from pysipnet.output import build_output_dataset
 
     ds = build_output_dataset(_frame())
-    assert ds.attrs["time_step_length_source"].startswith("inferred")
+    assert ds.attrs["timestep_length_source"].startswith("inferred")
     # Rows are 12 h apart, and the last step repeats the one before it.
-    assert list(ds["time_step_length"].values) == [np.timedelta64(12, "h")] * 4
+    assert list(ds["timestep_length"].values) == [np.timedelta64(12, "h")] * 4
     assert ds["time"].values[-1] == np.datetime64("2020-01-03T00:00")
 
 
 def test_dataset_step_bounds_from_lengths():
     from pysipnet.output import build_output_dataset
 
-    ds = build_output_dataset(_frame().assign(time_step_length=0.5))
-    assert ds.attrs["time_step_length_source"] == "climate drivers"
+    ds = build_output_dataset(_frame().assign(timestep_length=0.5))
+    assert ds.attrs["timestep_length_source"] == "climate drivers"
     assert ds["time"].values[0] == np.datetime64("2020-01-01T12:00")
-    assert ds["time_step_length"].values[0] == np.timedelta64(12, "h")
+    assert ds["timestep_length"].values[0] == np.timedelta64(12, "h")
 
 
 def test_dataset_carries_cf_time_bounds():
     """The interval each row covers, in the form CF-aware tooling looks for."""
     from pysipnet.output import build_output_dataset
 
-    ds = build_output_dataset(_frame().assign(time_step_length=0.5))
+    ds = build_output_dataset(_frame().assign(timestep_length=0.5))
     assert ds["time"].attrs["bounds"] == "time_bounds"
     assert ds["time_bounds"].dims == ("time", "bounds")
-    np.testing.assert_array_equal(ds["time_bounds"].values[:, 0], ds["time_step_start"].values)
+    np.testing.assert_array_equal(ds["time_bounds"].values[:, 0], ds["timestep_start"].values)
     np.testing.assert_array_equal(ds["time_bounds"].values[:, 1], ds["time"].values)
     for name in ds.coords:
         assert ds[name].encoding["_FillValue"] is None, "CF: no _FillValue on coordinates"
@@ -362,9 +362,9 @@ def test_dataset_refuses_a_row_it_cannot_place_in_time():
     """One row with no declared length has no end, so no time coordinate."""
     from pysipnet.output import build_output_dataset
 
-    with pytest.raises(ValueError, match="time_step_length column"):
+    with pytest.raises(ValueError, match="timestep_length column"):
         build_output_dataset(_frame().head(1))
-    ds = build_output_dataset(_frame().head(1).assign(time_step_length=0.5))
+    ds = build_output_dataset(_frame().head(1).assign(timestep_length=0.5))
     assert ds["time"].values[0] == np.datetime64("2020-01-01T12:00")
 
 
@@ -385,12 +385,12 @@ def test_step_end_snaps_to_the_next_start_within_a_minute():
     )
     # 0.292 d is 7 h less 28.8 s; the third step is followed by nothing, so it
     # keeps its declared end.
-    ds = build_output_dataset(frame.assign(time_step_length=[0.292, 0.417, 0.583]))
+    ds = build_output_dataset(frame.assign(timestep_length=[0.292, 0.417, 0.583]))
     assert ds["time"].values[0] == np.datetime64("1998-11-01T07:00")
     assert ds["time"].values[1] == np.datetime64("1998-11-01T17:00")
-    assert ds["time_step_length"].values[0] == np.timedelta64(25_228_800, "ms")
+    assert ds["timestep_length"].values[0] == np.timedelta64(25_228_800, "ms")
     # A three-hour hole is left alone.
-    gapped = build_output_dataset(frame.assign(time_step_length=[0.1667, 0.417, 0.583]))
+    gapped = build_output_dataset(frame.assign(timestep_length=[0.1667, 0.417, 0.583]))
     assert gapped["time"].values[0] == np.datetime64("1998-11-01T04:00:02.880")
 
 
@@ -470,7 +470,7 @@ EXPECTED_CLIMATE_NAMES: dict[str, str] = {
     "year": "year",
     "day": "day_of_year",
     "time": "hour_of_day",
-    "length": "time_step_length",
+    "length": "timestep_length",
     "tair": "air_temperature",
     "tsoil": "soil_temperature",
     "par": "photosynthetically_active_radiation",
@@ -514,7 +514,7 @@ def test_climate_conversion_note_survives_without_internal_units():
 
     attrs = CLIMATE_VARIABLES_BY_NAME["wind_speed"].xarray_attributes()
     assert "sipnet_internal_conversion" in attrs and "sipnet_internal_units" not in attrs
-    length = CLIMATE_VARIABLES_BY_NAME["time_step_length"]
+    length = CLIMATE_VARIABLES_BY_NAME["timestep_length"]
     assert RESAMPLING_METHODS_FOR_KIND[length.kind] == {"sum"}, "a duration only sums"
 
 
@@ -532,7 +532,7 @@ def test_previous_climate_names_still_resolve():
         "tair": "air_temperature",
         "vpd_soil": "soil_vapor_pressure_deficit",
         "vPress": "vapor_pressure",
-        "length": "time_step_length",
+        "length": "timestep_length",
         "day": "day_of_year",
     }.items():
         assert resolve_climate_variable(old).name == new
@@ -657,7 +657,7 @@ def test_step_lengths_must_increase_the_clock():
         build_output_dataset(repeated)
     # Supplying the lengths does not excuse the timestamps.
     with pytest.raises(ValueError, match="do not increase"):
-        build_output_dataset(repeated.assign(time_step_length=[0.5, 0.5, 1.0]))
+        build_output_dataset(repeated.assign(timestep_length=[0.5, 0.5, 1.0]))
 
 
 def test_a_sub_minute_step_still_snaps_forward():
@@ -675,26 +675,26 @@ def test_a_sub_minute_step_still_snaps_forward():
         }
     )
     # 0.0001 d is 8.6 s, 27 s short of the next start: within the snap tolerance.
-    ds = build_output_dataset(frame.assign(time_step_length=[0.0001, 0.5]))
-    assert ds["time"].values[0] == ds["time_step_start"].values[1]
-    assert (ds["time"].values > ds["time_step_start"].values).all()
+    ds = build_output_dataset(frame.assign(timestep_length=[0.0001, 0.5]))
+    assert ds["time"].values[0] == ds["timestep_start"].values[1]
+    assert (ds["time"].values > ds["timestep_start"].values).all()
 
 
 def test_supplied_step_lengths_must_be_positive():
     from pysipnet.output import build_output_dataset
 
     with pytest.raises(ValueError, match="positive duration"):
-        build_output_dataset(_frame().assign(time_step_length=[0.5, 0.5, 0.0, 0.5]))
+        build_output_dataset(_frame().assign(timestep_length=[0.5, 0.5, 0.0, 0.5]))
 
 
 def test_a_frames_own_step_lengths_beat_the_inferred_ones():
     """The drivers state their lengths; measuring the gaps would discard the last one."""
     from pysipnet.dataset import build_xarray_dataset
 
-    frame = _frame().assign(time_step_length=[0.5, 0.5, 0.5, 0.25])
+    frame = _frame().assign(timestep_length=[0.5, 0.5, 0.5, 0.25])
     ds = build_xarray_dataset(frame, attributes_for=lambda _: {}, source="test")
-    assert ds.attrs["time_step_length_source"] == "climate drivers"
-    assert ds["time_step_length"].values[-1] == np.timedelta64(6, "h")
+    assert ds.attrs["timestep_length_source"] == "climate drivers"
+    assert ds["timestep_length"].values[-1] == np.timedelta64(6, "h")
 
 
 def test_select_returns_the_format_it_was_asked_for():
@@ -764,9 +764,9 @@ def test_an_unknown_kind_raises_unless_a_default_is_given():
         variable_kind("mystery")
     with pytest.raises(ValueError, match="quantity 'array' is"):
         variable_kind(xr.DataArray([1.0], dims="time"))
-    derived = xr.DataArray([1.0], dims="time", attrs={"derivation": "nee / time_step_length"})
-    assert variable_label(derived) == "nee / time_step_length"
-    with pytest.raises(ValueError, match="quantity 'nee / time_step_length' is"):
+    derived = xr.DataArray([1.0], dims="time", attrs={"derivation": "nee / timestep_length"})
+    assert variable_label(derived) == "nee / timestep_length"
+    with pytest.raises(ValueError, match="quantity 'nee / timestep_length' is"):
         variable_kind(derived)
     assert variable_kind("mystery", default=None) is None
     assert variable_kind(xr.DataArray([1.0]), default="?") == "?"

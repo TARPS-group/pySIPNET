@@ -893,7 +893,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
         group="time",
     ),
     _climate(
-        name="time_step_length",
+        name="timestep_length",
         sipnet_name="length",
         kind=VariableKind.TIMESTEP_TOTAL,
         units="d",
@@ -937,7 +937,7 @@ CLIMATE_VARIABLES: tuple[ClimateVariableSpec, ...] = (
         short_label="PAR",
         aliases=("par",),
         internal_units="mol m-2 d-1",
-        internal_conversion="÷ time_step_length (total over step → per day)",
+        internal_conversion="÷ timestep_length (total over step → per day)",
         group="meteorology",
     ),
     _climate(

@@ -28,7 +28,7 @@ def in_memory_climate() -> ClimateDrivers:
                 "year": [2020] * _CLIM_ROWS,
                 "day_of_year": list(range(1, _CLIM_ROWS + 1)),
                 "hour_of_day": [0.0] * _CLIM_ROWS,
-                "time_step_length": [1.0] * _CLIM_ROWS,
+                "timestep_length": [1.0] * _CLIM_ROWS,
                 "air_temperature": [15.0] * _CLIM_ROWS,
                 "soil_temperature": [12.0] * _CLIM_ROWS,
                 "photosynthetically_active_radiation": [8.0] * _CLIM_ROWS,

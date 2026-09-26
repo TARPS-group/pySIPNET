@@ -25,7 +25,7 @@ always the registry names.
 +----+-------------------------------------+---------+----------------------------------+
 |  3 | hour_of_day                         | h       | After midnight, start of step    |
 +----+-------------------------------------+---------+----------------------------------+
-|  4 | time_step_length                    | d       | Timestep duration                |
+|  4 | timestep_length                     | d       | Timestep duration                |
 +----+-------------------------------------+---------+----------------------------------+
 |  5 | air_temperature                     | °C      | Mean over the step               |
 +----+-------------------------------------+---------+----------------------------------+
@@ -66,7 +66,7 @@ cannot.
 
 Labels and lengths
 ~~~~~~~~~~~~~~~~~~
-SIPNET integrates each row over ``time_step_length`` and never checks that a
+SIPNET integrates each row over ``timestep_length`` and never checks that a
 row's start plus its length is the next row's start.
 :meth:`ClimateDrivers.validate` does: it refuses a row that starts before the
 previous one ends and labels that drift away from the running sum of the
@@ -77,7 +77,7 @@ PAR units note
 ~~~~~~~~~~~~~~
 ``photosynthetically_active_radiation`` holds the **total** over the timestep
 in mol photons m⁻² ground. When converting from an instantaneous flux
-(µmol m⁻² s⁻¹), multiply by ``time_step_length × 86400 / 1e6``.
+(µmol m⁻² s⁻¹), multiply by ``timestep_length × 86400 / 1e6``.
 
 VPD and wind speed
 ~~~~~~~~~~~~~~~~~~
@@ -352,8 +352,8 @@ class ClimateDrivers:
         """The drivers as an :class:`xarray.Dataset` on the same ``time`` axis as outputs.
 
         ``time`` is the end of each step, as for outputs, and an output run on
-        these drivers has exactly this axis; ``time_step_start``,
-        ``time_step_length`` and ``time_bounds`` are coordinates; ``time``
+        these drivers has exactly this axis; ``timestep_start``,
+        ``timestep_length`` and ``time_bounds`` are coordinates; ``time``
         carries the declared ``time_zone``; every variable carries its units,
         description and time reference from
         :data:`pysipnet.variables.CLIMATE_VARIABLES`.
@@ -426,9 +426,9 @@ class ClimateDrivers:
             )
 
     def _check_positive_length(self) -> None:
-        if (self.pandas["time_step_length"] <= 0).any():
+        if (self.pandas["timestep_length"] <= 0).any():
             raise ValueError(
-                "All 'time_step_length' values must be > 0 (timestep duration in days)."
+                "All 'timestep_length' values must be > 0 (timestep duration in days)."
             )
 
     def _check_monotonic_time(self) -> None:
@@ -453,7 +453,7 @@ class ClimateDrivers:
 
         d = self.pandas
         start = timestep_start(d)
-        length = days_to_timedelta(d["time_step_length"].to_numpy())
+        length = days_to_timedelta(d["timestep_length"].to_numpy())
         gaps = check_step_continuity(start, length)
         if len(gaps):
             row = int(gaps[0])
