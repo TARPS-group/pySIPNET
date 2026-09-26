@@ -1115,6 +1115,18 @@ def parse_variable_kind(value: VariableKind | str, *, name: str) -> VariableKind
         ) from None
 
 
+def variable_label(array: Any) -> str:
+    """The name a DataArray goes by in pySIPNET's messages.
+
+    Its name, or for an unnamed arithmetic result its ``derivation``
+    (:mod:`pysipnet.arithmetic`), or ``"array"``.
+    """
+    if array.name is not None:
+        return str(array.name)
+    derivation = array.attrs.get("derivation")
+    return derivation if isinstance(derivation, str) and derivation else "array"
+
+
 _T = TypeVar("_T")
 _NO_DEFAULT: Any = object()
 
@@ -1135,6 +1147,9 @@ def variable_kind(data: Any, *, default: Any = _NO_DEFAULT) -> Any:
     by registry name, alias or SIPNET name, so ``"nee"``, ``"NEE"`` and
     ``"net_ecosystem_exchange"`` all give ``timestep_total``.  The two
     registries share only the time columns, which have the same kind in both.
+    A datetime array is never looked up: the registries' time columns are
+    numbers, and ``"time"`` there is SIPNET's hour-of-day column, not
+    pySIPNET's step-end ``time`` coordinate.
 
     Parameters
     ----------
@@ -1158,8 +1173,10 @@ def variable_kind(data: Any, *, default: Any = _NO_DEFAULT) -> Any:
         name = None if data.name is None else str(data.name)
         declared = data.attrs.get("kind")
         if declared is not None:
-            return parse_variable_kind(declared, name=name or "the array")
-    if name is not None:
+            return parse_variable_kind(declared, name=variable_label(data))
+    # The registries' time columns are numbers; a datetime array named "time" is
+    # pySIPNET's step-end coordinate, not SIPNET's hour-of-day column.
+    if name is not None and getattr(getattr(data, "dtype", None), "kind", None) != "M":
         for resolve in (resolve_output_variable, resolve_climate_variable):
             try:
                 return resolve(name).kind
@@ -1167,7 +1184,7 @@ def variable_kind(data: Any, *, default: Any = _NO_DEFAULT) -> Any:
                 continue
     if default is not _NO_DEFAULT:
         return default
-    what = "an unnamed array" if name is None else repr(name)
+    what = repr(data if isinstance(data, str) else variable_label(data))
     raise ValueError(
         f"Cannot tell what kind of quantity {what} is: it carries no 'kind' attribute and "
         "is not a SIPNET output or climate variable or alias. Set attrs['kind'] to one of "
@@ -1205,8 +1222,8 @@ def check_variable_is_written(name: str, flags: ModelFlags) -> None:
         raise ValueError(
             f"{spec.name!r} is constant zero with these model flags: SIPNET only fills it "
             f"when the {flag!r} flag is on, and it is off. Run with ModelFlags(..., "
-            f"{flag}=True), or read the raw column from output.pandas if the zeros are "
-            "genuinely what you want."
+            f"{flag}=True), or, if the zeros are genuinely what you want, read the raw "
+            "column from the output's .pandas view."
         )
 
 
@@ -1236,7 +1253,11 @@ __all__ = [
     "TIME_REFERENCE_FOR_KIND",
     "VariableKind",
     "VariableSpec",
+    "check_variable_is_written",
     "output_variable_records",
+    "parse_variable_kind",
     "resolve_output_variable",
     "resolve_output_variable_names",
+    "variable_kind",
+    "variable_label",
 ]

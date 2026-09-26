@@ -628,14 +628,20 @@ attributes are rewritten accordingly. The old `aggregation` attribute and
 that refusal on its own, public so a downstream reduction offering more
 methods (min, max, first) can refuse in the same words. The other pieces are
 public for the same reason, and `resample` is built from them rather than
-from private copies: `check_frequency(freq)` (the offset, or pandas' reason),
-`check_not_upsampling(data, freq)`, `drop_padding(data)`,
-`resampled_attributes(attrs, kind, method)` (kind, time reference, cell
-methods, `output_decimals` dropped; `resample` adds the `resampling`
-sentence), and `variables.variable_kind(array_or_name, default=)`, which reads
-`attrs["kind"]` and otherwise resolves the name, aliases included, through
-the output and then the climate registry. The two share only the time
-columns, with the same kind in both, which a test pins.
+from private copies. They live in `pysipnet.resample`, not the top-level
+namespace: `check_frequency(freq)` (the offset, or pandas' reason),
+`check_not_upsampling(data, freq)`, `drop_padding(data)`, and
+`resampled_attributes(attrs, kind, method, *, name)` (kind, time reference,
+cell methods, `output_decimals` dropped; `resample` adds the `resampling`
+sentence). The kind they start from is `variable_kind(array_or_name,
+default=)` in `variables.py` (also top-level), which reads `attrs["kind"]` and
+otherwise resolves the name, aliases included, through the output and then
+the climate registry; a datetime array is never looked up, because `"time"`
+there is SIPNET's hour-of-day column. The two registries share only the time
+columns, with the same kind in both, which a test pins. `parse_variable_kind`
+is the one parser of a declared `kind` (arithmetic uses it too), and
+`variable_label` the one rule for what an unnamed array is called (its
+`derivation`, else `"array"`).
 
 `resample` reduces `time` only, so a stack of runs resamples in one call: a
 variable may be on `(member, site, time)` in any order, and every coordinate
@@ -905,7 +911,7 @@ pySIPNET/
 │   ├── arithmetic.py             # products, quotients, sums of labeled DataArrays, with kind; step_length()
 │   ├── climate.py                # ClimateDrivers + validation
 │   ├── dataset.py                # shared DataFrame → xarray builder (time = step end)
-│   ├── resample.py               # explicit, kind-checked coarsening of the time axis
+│   ├── resample.py               # explicit, kind-checked coarsening of the time axis, and its rules as public checks
 │   ├── events.py                 # management events (arity checked against SIPNET)
 │   ├── io/
 │   │   ├── param_io.py           # read/write .param
@@ -933,6 +939,7 @@ pySIPNET/
 │   ├── test_download.py          # prebuilt-binary download and its verification
 │   ├── test_fidelity.py          # wrapper output == bare binary output
 │   ├── test_time_axis.py         # axis from the drivers, label/length continuity, time_zone
+│   ├── test_resample.py          # kind-checked resampling, both paths, and the public rules it is built from
 │   ├── test_golden.py            # frozen numeric baseline
 │   ├── test_reference.py         # bundled data ships in the wheel and matches the submodule
 │   ├── test_bundle_hook.py       # platform wheels carry the binary and the right tag
@@ -1004,6 +1011,12 @@ Worth knowing which test to look at when something breaks:
   and `time_zone` survives the run, `RunConfig` and `resample`. Catches the
   axis silently reverting to SIPNET's rounded labels, and a tolerance change
   that would start accepting drift or refusing Niwot.
+- `test_resample.py` — `resample` against hand-computed Niwot sums, lasts and
+  length-weighted means, stacks slice by slice, exact combined lengths, and
+  the calendar-cell path against the interval path on the same record; the
+  public checks refuse what `resample` refuses, in the same words. Catches a
+  method silently accepted for a kind that does not admit it, and the two
+  paths drifting apart.
 - `test_units.py` — every conversion factor, stated as arithmetic on the
   molar masses by hand, every refusal by message, round trips, relabeling of
   `attrs`, and that every constituent a registry declares is one the

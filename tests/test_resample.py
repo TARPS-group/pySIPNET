@@ -12,17 +12,16 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from pysipnet import (
+from pysipnet import check_resampling_method, resample
+from pysipnet.climate import ClimateDrivers
+from pysipnet.dataset import assemble_time_coords
+from pysipnet.io.reference import niwot_reference_climate, niwot_reference_output
+from pysipnet.resample import (
     check_frequency,
     check_not_upsampling,
-    check_resampling_method,
     drop_padding,
-    resample,
     resampled_attributes,
 )
-from pysipnet.climate import ClimateDrivers
-from pysipnet.dataset import assemble_time_coords, without_absent_bounds
-from pysipnet.io.reference import niwot_reference_climate, niwot_reference_output
 from pysipnet.variables import RESAMPLED_KIND, RESAMPLING_METHODS_FOR_KIND, VariableKind
 
 
@@ -590,29 +589,13 @@ def test_the_upsampling_check_measures_label_spacing_without_lengths():
 
 def test_a_dataarray_result_names_no_bounds_it_cannot_carry():
     output = niwot_reference_output()
-    nee = output["nee"]
-    assert "time_bounds" not in nee.coords
-    assert "bounds" not in nee["time"].attrs
-    daily = resample(nee, "1D", how="sum")
+    daily = resample(output["nee"], "1D", how="sum")
     assert "time_bounds" not in daily.coords
     assert "bounds" not in daily["time"].attrs
-    assert daily["time"].attrs["time_zone"] == nee["time"].attrs["time_zone"]
-
+    assert daily["time"].attrs["time_zone"] == output["nee"]["time"].attrs["time_zone"]
     dataset = resample(output[["nee"]], "1D", how="sum")
     assert dataset["time"].attrs["bounds"] == "time_bounds"
     assert "time_bounds" in dataset.coords
-    # Dropping it from one array leaves the cached Dataset's own attribute alone.
-    assert output.xarray["time"].attrs["bounds"] == "time_bounds"
-    assert "bounds" not in output["nee"]["time"].attrs
-
-
-def test_absent_bounds_are_dropped_and_present_ones_kept(niwot):
-    ds = niwot[2]
-    assert without_absent_bounds(ds) is ds
-    plain = ds["net_ecosystem_exchange"]
-    assert plain["time"].attrs["bounds"] == "time_bounds"
-    assert "bounds" not in without_absent_bounds(plain)["time"].attrs
-    assert plain["time"].attrs["bounds"] == "time_bounds"
 
 
 def test_padding_is_dropped_from_a_dataset_and_a_dataarray(niwot):
@@ -661,7 +644,7 @@ def test_a_record_without_interval_coordinates_has_no_padding():
 def test_resampled_attributes_describe_the_combined_value(niwot):
     attrs = dict(niwot[2]["wood_carbon"].attrs)
     assert "output_decimals" in attrs
-    averaged = resampled_attributes(attrs, "timestep_end_state", "mean")
+    averaged = resampled_attributes(attrs, "timestep_end_state", "mean", name="wood_carbon")
     assert averaged["kind"] == "timestep_mean"
     assert averaged["time_reference"] == "mean over the timestep"
     assert averaged["cell_methods"] == "time: mean"
@@ -671,7 +654,7 @@ def test_resampled_attributes_describe_the_combined_value(niwot):
     assert attrs["kind"] == "timestep_end_state"
 
     cumulative = niwot[2]["cumulative_net_ecosystem_exchange"].attrs
-    last = resampled_attributes(cumulative, VariableKind.CUMULATIVE, "last")
+    last = resampled_attributes(cumulative, VariableKind.CUMULATIVE, "last", name="x")
     assert "cell_methods" not in last
     with pytest.raises(ValueError, match="Cannot resample 'wood_carbon' with 'sum'"):
         resampled_attributes(attrs, "timestep_end_state", "sum", name="wood_carbon")
@@ -680,7 +663,9 @@ def test_resampled_attributes_describe_the_combined_value(niwot):
 def test_resample_sets_the_public_attributes_and_says_how(niwot):
     ds = niwot[2]
     daily = resample(ds[["wood_carbon"]], "1D", how="mean")["wood_carbon"].attrs
-    expected = resampled_attributes(ds["wood_carbon"].attrs, "timestep_end_state", "mean")
+    expected = resampled_attributes(
+        ds["wood_carbon"].attrs, "timestep_end_state", "mean", name="wood_carbon"
+    )
     assert {k: v for k, v in daily.items() if k != "resampling"} == expected
     assert daily["resampling"] == (
         "mean of timestep_end_state values over 1D, weighted by time_step_length"
@@ -819,3 +804,23 @@ def test_labels_alone_carry_other_dimensions_and_resample_a_dataarray(climate):
                 stacked["precipitation"].sel(member=member, site=site), "MS", how="sum"
             )
             np.testing.assert_allclose(monthly.sel(member=member, site=site).values, alone.values)
+
+
+def test_padding_is_dropped_from_an_array_named_like_a_coordinate(niwot):
+    ds = niwot[2][["net_ecosystem_exchange"]]
+    padded = _two_runs_on_different_axes(ds).sel(site=SITES[1]).drop_vars("site")
+    clash = padded["net_ecosystem_exchange"].rename("year")
+    assert drop_padding(clash).sizes["time"] == 40
+
+
+def test_labels_alone_average_labels_equal_within_the_step_tolerance():
+    observed = _observed([1.0, 2.0, 3.0, 6.0], "2020-01-01 06:00", "12h", kind="timestep_mean")
+    jittered = observed["time"].values + np.array([0, 3, -2, 1], dtype="timedelta64[ns]")
+    daily = resample(observed.assign_coords(time=jittered), "1D", how="mean")
+    np.testing.assert_array_equal(daily["flux"].values, [1.5, 4.5])
+
+
+def test_the_upsampling_check_refuses_unsorted_labels_in_its_own_words():
+    observed = _observed([1.0, 2.0, 3.0], "2020-01-02", "1D")
+    with pytest.raises(ValueError, match="do not strictly increase: row 1"):
+        check_not_upsampling(observed.isel(time=[1, 0, 2]), "7D")

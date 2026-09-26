@@ -758,7 +758,8 @@ and wants the same refusals in the same words:
 | [`variable_kind`][pysipnet.variables.variable_kind] | the kind all of these start from, by attribute or registry |
 
 ```python
-from pysipnet import check_frequency, check_resampling_method
+from pysipnet import check_resampling_method
+from pysipnet.resample import check_frequency
 
 check_frequency("M")
 # ValueError: freq must be a pandas offset alias such as '1D', 'MS' or 'YS',

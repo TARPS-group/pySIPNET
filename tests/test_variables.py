@@ -40,6 +40,7 @@ from pysipnet.variables import (
     resolve_output_variable,
     resolve_output_variable_names,
     variable_kind,
+    variable_label,
 )
 
 GOLDEN = niwot_reference_files().output
@@ -748,13 +749,25 @@ def test_a_kind_attribute_wins_over_the_registry():
     assert variable_kind(unnamed) is VariableKind.TIMESTEP_MEAN
 
 
+def test_a_datetime_time_coordinate_is_not_taken_for_sipnets_hour_column():
+    from pysipnet.io.reference import niwot_reference_output
+
+    time = niwot_reference_output().xarray["time"]
+    assert variable_kind("time") is VariableKind.TIMESTEP_START_COORDINATE
+    assert variable_kind(time, default=None) is None
+
+
 def test_an_unknown_kind_raises_unless_a_default_is_given():
     import xarray as xr
 
     with pytest.raises(ValueError, match="'mystery'.*attrs\\['kind'\\]"):
         variable_kind("mystery")
-    with pytest.raises(ValueError, match="an unnamed array"):
+    with pytest.raises(ValueError, match="quantity 'array' is"):
         variable_kind(xr.DataArray([1.0], dims="time"))
+    derived = xr.DataArray([1.0], dims="time", attrs={"derivation": "nee / time_step_length"})
+    assert variable_label(derived) == "nee / time_step_length"
+    with pytest.raises(ValueError, match="quantity 'nee / time_step_length' is"):
+        variable_kind(derived)
     assert variable_kind("mystery", default=None) is None
     assert variable_kind(xr.DataArray([1.0]), default="?") == "?"
 

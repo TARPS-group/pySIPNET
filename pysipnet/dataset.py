@@ -131,6 +131,9 @@ _Xarray = TypeVar("_Xarray", "xr.DataArray", "xr.Dataset")
 TIME_DIMENSION = "time"
 BOUNDS_DIMENSION = "bounds"
 
+TIME_AXIS_ATTRIBUTES: dict[str, str] = {"standard_name": "time", "axis": "T"}
+"""What identifies ``time`` as the time axis to Climate and Forecast readers."""
+
 CF_CONVENTIONS = "CF-1.11"
 
 TIME_CONVENTION = (
@@ -438,8 +441,7 @@ def assemble_time_coords(
             TIME_DIMENSION,
             end,
             {
-                "standard_name": "time",
-                "axis": "T",
+                **TIME_AXIS_ATTRIBUTES,
                 "long_name": "End of timestep",
                 "description": (
                     "Calendar time at the end of the timestep, on the climate drivers' clock: "

@@ -365,7 +365,9 @@ def test_two_numbers_are_refused():
 def test_an_unknown_kind_is_refused(nee):
     odd = nee.copy()
     odd.attrs["kind"] = "flux"
-    with pytest.raises(ValueError, match="not one of pySIPNET's kinds"):
+    with pytest.raises(
+        ValueError, match="multiply_with_units\\(\\): 'net_ecosystem_exchange' has kind 'flux'"
+    ):
         multiply_with_units(odd, 2)
 
 
