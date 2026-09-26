@@ -28,7 +28,7 @@ from pysipnet.variables import RESAMPLED_KIND, RESAMPLING_METHODS_FOR_KIND, Vari
 @pytest.fixture(scope="module")
 def niwot() -> tuple[pd.DataFrame, np.ndarray, xr.Dataset]:
     output = niwot_reference_output()
-    length = output.time_step_length
+    length = output.timestep_length
     assert length is not None
     return output.pandas, length, output.xarray
 
@@ -68,7 +68,7 @@ def test_means_are_weighted_by_step_length(niwot):
     plain = frame["soil_wetness_fraction"].groupby(key).mean()
     np.testing.assert_allclose(daily.values, weighted.values)
     assert not np.allclose(daily.values, plain.values), "unequal steps make the two differ"
-    assert daily.attrs["resampling"].endswith("weighted by time_step_length")
+    assert daily.attrs["resampling"].endswith("weighted by timestep_length")
     # The two-point qualification no longer applies once steps are combined.
     assert daily.attrs["cell_methods"] == "time: mean"
 
@@ -88,17 +88,15 @@ def test_result_has_the_same_time_layout(niwot):
     assert daily["time"].attrs["standard_name"] == "time"
     assert daily["time"].attrs["bounds"] == "time_bounds"
     np.testing.assert_array_equal(daily["time_bounds"].values[:, 1], daily["time"].values)
-    np.testing.assert_array_equal(
-        daily["time_bounds"].values[:, 0], daily["time_step_start"].values
-    )
+    np.testing.assert_array_equal(daily["time_bounds"].values[:, 0], daily["timestep_start"].values)
     # Cells are contiguous and tile the record exactly.
-    assert daily["time_step_start"].values[0] == ds["time_step_start"].values[0]
+    assert daily["timestep_start"].values[0] == ds["timestep_start"].values[0]
     assert daily["time"].values[-1] == ds["time"].values[-1]
-    np.testing.assert_array_equal(daily["time_step_start"].values[1:], daily["time"].values[:-1])
-    # time_step_length is the coverage: the declared lengths that went in.
-    total = ds["time_step_length"].values.astype("int64").sum()
-    assert daily["time_step_length"].values.astype("int64").sum() == total
-    assert daily.attrs["time_step_length_source"].startswith("sum of the declared")
+    np.testing.assert_array_equal(daily["timestep_start"].values[1:], daily["time"].values[:-1])
+    # timestep_length is the coverage: the declared lengths that went in.
+    total = ds["timestep_length"].values.astype("int64").sum()
+    assert daily["timestep_length"].values.astype("int64").sum() == total
+    assert daily.attrs["timestep_length_source"].startswith("sum of the declared")
     for name in daily.coords:
         assert daily[name].encoding["_FillValue"] is None
 
@@ -106,7 +104,7 @@ def test_result_has_the_same_time_layout(niwot):
 def test_row_labels_are_the_start_of_the_coarser_step(niwot):
     _, _, ds = niwot
     daily = resample(ds[["net_ecosystem_exchange"]], "1D", how="sum")
-    starts = pd.DatetimeIndex(daily["time_step_start"].values)
+    starts = pd.DatetimeIndex(daily["timestep_start"].values)
     np.testing.assert_array_equal(daily["year"].values, starts.year)
     np.testing.assert_array_equal(daily["day_of_year"].values, starts.dayofyear)
     np.testing.assert_allclose(daily["hour_of_day"].values, starts.hour + starts.minute / 60)
@@ -208,8 +206,8 @@ def test_a_dataarray_resamples_to_a_dataarray(niwot):
 
 
 def test_a_dataset_with_only_part_of_the_time_layout_is_refused(niwot):
-    half = niwot[2][["net_ecosystem_exchange"]].drop_vars("time_step_length")
-    with pytest.raises(ValueError, match="lacks the pySIPNET time coordinates.*time_step_length"):
+    half = niwot[2][["net_ecosystem_exchange"]].drop_vars("timestep_length")
+    with pytest.raises(ValueError, match="lacks the pySIPNET time coordinates.*timestep_length"):
         resample(half, "1D", how="sum")
 
 
@@ -219,7 +217,7 @@ def test_a_daily_record_resamples_daily_to_itself():
             "year": 2020,
             "day_of_year": range(100, 105),
             "hour_of_day": 0.0,
-            "time_step_length": 1.0,
+            "timestep_length": 1.0,
             "air_temperature": [1.0, 2.0, 3.0, 4.0, 5.0],
             "soil_temperature": 0.0,
             "photosynthetically_active_radiation": 1.0,
@@ -368,8 +366,8 @@ def _two_runs_on_different_axes(ds: xr.Dataset) -> xr.Dataset:
 
 def test_interval_coordinates_that_vary_by_site_are_refused(niwot):
     stack = _two_runs_on_different_axes(niwot[2][["net_ecosystem_exchange"]])
-    assert stack["time_step_start"].dims == ("site", "time")
-    with pytest.raises(ValueError, match="time_step_start.*each site, separately"):
+    assert stack["timestep_start"].dims == ("site", "time")
+    with pytest.raises(ValueError, match="timestep_start.*each site, separately"):
         resample(stack, "1D", how="sum")
 
 
@@ -377,7 +375,7 @@ def test_a_run_selected_from_such_a_stack_drops_its_padding(niwot):
     ds = niwot[2][["net_ecosystem_exchange"]]
     stack = _two_runs_on_different_axes(ds)
     padded = stack.sel(site=SITES[1]).drop_vars("site")
-    assert np.isnat(padded["time_step_length"].values).sum() == 20
+    assert np.isnat(padded["timestep_length"].values).sum() == 20
     alone = resample(ds.isel(time=slice(0, 40)), "1D", how="sum")
     xr.testing.assert_identical(resample(padded, "1D", how="sum"), alone)
 
@@ -394,7 +392,7 @@ def test_padding_in_mid_record_is_dropped():
         [full, short], dim="site", coords="different", compat="equals", join="outer"
     ).assign_coords(site=SITES)
     padded_full = stack.sel(site=SITES[0]).drop_vars("site")
-    assert np.isnat(padded_full["time_step_length"].values).sum() == 1
+    assert np.isnat(padded_full["timestep_length"].values).sum() == 1
     for run, padded in ((full, padded_full), (short, stack.sel(site=SITES[1]).drop_vars("site"))):
         xr.testing.assert_identical(
             resample(padded, "1D", how="sum"), resample(run, "1D", how="sum")
@@ -403,9 +401,9 @@ def test_padding_in_mid_record_is_dropped():
 
 def test_a_value_on_a_row_with_no_interval_is_refused_not_dropped(niwot):
     ds = niwot[2][["net_ecosystem_exchange"]]
-    lengths = ds["time_step_length"].values.copy()
+    lengths = ds["timestep_length"].values.copy()
     lengths[10] = np.timedelta64("NaT")
-    ds = ds.assign_coords(time_step_length=("time", lengths, ds["time_step_length"].attrs))
+    ds = ds.assign_coords(timestep_length=("time", lengths, ds["timestep_length"].attrs))
     with pytest.raises(ValueError, match="net_ecosystem_exchange.*1 rows.*not padding"):
         resample(ds, "MS", how="sum")
 
@@ -421,9 +419,9 @@ def test_a_transposed_time_bounds_is_accepted(niwot):
 
 def test_time_coordinates_of_the_wrong_dtype_are_refused(niwot):
     ds = niwot[2][["net_ecosystem_exchange"]]
-    days = ds["time_step_length"].values.astype("int64") / 86_400e9
-    in_days = ds.assign_coords(time_step_length=("time", days))
-    with pytest.raises(ValueError, match="'time_step_length': 'float64'.*days_to_timedelta"):
+    days = ds["timestep_length"].values.astype("int64") / 86_400e9
+    in_days = ds.assign_coords(timestep_length=("time", days))
+    with pytest.raises(ValueError, match="'timestep_length': 'float64'.*days_to_timedelta"):
         resample(in_days, "1D", how="sum")
 
 
@@ -464,18 +462,18 @@ def test_combined_lengths_are_exact_to_the_nanosecond():
     # 2000 is a leap year, so the 8760 steps end well inside it.
     annual = resample(_record(step, 8760, "2000-01-01"), "YS", how="sum")
     assert annual.sizes["time"] == 1
-    assert int(annual["time_step_length"].values.astype("int64")[0]) == 8760 * (3_600 * 10**9 + 1)
+    assert int(annual["timestep_length"].values.astype("int64")[0]) == 8760 * (3_600 * 10**9 + 1)
 
 
 @pytest.mark.parametrize("freq", ["1D", "7D", "MS", "YS"])
 def test_combined_lengths_are_the_sum_over_each_cell(climate, freq):
     resampled = resample(climate[["precipitation"]], freq, how="sum")
     ends = pd.DatetimeIndex(climate["time"].values)
-    cells = pd.Series(climate["time_step_length"].values.astype("int64"), index=ends)
+    cells = pd.Series(climate["timestep_length"].values.astype("int64"), index=ends)
     expected = cells.resample(freq, closed="right", label="right").sum()
     expected = expected[cells.resample(freq, closed="right", label="right").count() > 0]
     np.testing.assert_array_equal(
-        resampled["time_step_length"].values.astype("int64"), expected.to_numpy()
+        resampled["timestep_length"].values.astype("int64"), expected.to_numpy()
     )
 
 
@@ -613,9 +611,9 @@ def test_padding_is_dropped_from_a_dataset_and_a_dataarray(niwot):
 
 def test_padding_with_a_value_is_refused_by_name(niwot):
     ds = niwot[2][["net_ecosystem_exchange", "wood_carbon"]]
-    lengths = ds["time_step_length"].values.copy()
+    lengths = ds["timestep_length"].values.copy()
     lengths[10] = np.timedelta64("NaT")
-    ds = ds.assign_coords(time_step_length=("time", lengths, ds["time_step_length"].attrs))
+    ds = ds.assign_coords(timestep_length=("time", lengths, ds["timestep_length"].attrs))
     with pytest.raises(ValueError, match="\\['net_ecosystem_exchange', 'wood_carbon'\\].*1 rows"):
         drop_padding(ds)
     with pytest.raises(ValueError, match="\\['wood_carbon'\\] have values.*not padding"):
@@ -630,9 +628,9 @@ def test_padding_needs_one_run_and_some_steps(niwot):
     with pytest.raises(ValueError, match="vary along more than time"):
         drop_padding(_two_runs_on_different_axes(ds))
     empty = ds.assign_coords(
-        time_step_start=("time", np.full(ds.sizes["time"], np.datetime64("NaT", "ns")))
+        timestep_start=("time", np.full(ds.sizes["time"], np.datetime64("NaT", "ns")))
     ).assign(net_ecosystem_exchange=ds["net_ecosystem_exchange"] * np.nan)
-    with pytest.raises(ValueError, match="Every row's time_step_start"):
+    with pytest.raises(ValueError, match="Every row's timestep_start"):
         drop_padding(empty)
 
 
@@ -668,7 +666,7 @@ def test_resample_sets_the_public_attributes_and_says_how(niwot):
     )
     assert {k: v for k, v in daily.items() if k != "resampling"} == expected
     assert daily["resampling"] == (
-        "mean of timestep_end_state values over 1D, weighted by time_step_length"
+        "mean of timestep_end_state values over 1D, weighted by timestep_length"
     )
 
 
@@ -718,7 +716,7 @@ def test_labels_alone_are_labeled_at_the_cell_edge_and_carry_no_intervals():
         daily["time"].values, pd.to_datetime(["2020-01-02", "2020-01-03"]).values
     )
     np.testing.assert_array_equal(daily["flux"].values, [3.0, 7.0])
-    assert not {"time_step_start", "time_step_length", "time_bounds"} & set(daily.coords)
+    assert not {"timestep_start", "timestep_length", "time_bounds"} & set(daily.coords)
     assert "bounds" not in daily["time"].attrs
     assert daily["time"].attrs["time_zone"] == "UTC"
     assert daily["time"].attrs["long_name"] == "End of calendar cell"
@@ -728,7 +726,7 @@ def test_labels_alone_are_labeled_at_the_cell_edge_and_carry_no_intervals():
     assert daily["flux"].attrs["cell_methods"] == "time: sum"
     assert daily.attrs["resampling_frequency"] == "1D"
     assert daily.attrs["source"] == "a flux tower"
-    assert "time_step_length_source" not in daily.attrs
+    assert "timestep_length_source" not in daily.attrs
 
 
 def test_labels_alone_drop_empty_cells_and_keep_nan_cells():

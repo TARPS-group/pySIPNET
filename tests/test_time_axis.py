@@ -60,7 +60,7 @@ def _climate_frame(start: str, n_steps: int, step: pd.Timedelta) -> pd.DataFrame
             "year": stamps.year,
             "day_of_year": stamps.dayofyear,
             "hour_of_day": stamps.hour + stamps.minute / 60 + stamps.second / 3600,
-            "time_step_length": step / pd.Timedelta(days=1),
+            "timestep_length": step / pd.Timedelta(days=1),
             "air_temperature": 12.0 + 6.0 * np.sin(phase),
             "soil_temperature": 9.0,
             "photosynthetically_active_radiation": np.clip(np.sin(phase), 0, None)
@@ -95,7 +95,7 @@ def _drifted_frame(years: list[int]) -> pd.DataFrame:
 
 
 def _axis_parts(frame: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
-    return timestep_start(frame), days_to_timedelta(frame["time_step_length"].to_numpy())
+    return timestep_start(frame), days_to_timedelta(frame["timestep_length"].to_numpy())
 
 
 @pytest.fixture
@@ -143,15 +143,15 @@ class TestStepContinuity:
 
     def test_an_overlap_is_caught(self):
         frame = _climate_frame("2012-01-01", 200, pd.Timedelta(hours=3))
-        frame.loc[100, "time_step_length"] = 0.25
+        frame.loc[100, "timestep_length"] = 0.25
         with pytest.raises(ValueError, match="Row 101 starts .* 3 h before row 100 ends"):
             ClimateDrivers.from_dataframe(frame)
 
     def test_an_overlap_too_short_to_drift_is_caught(self):
         """Two minutes is under the drift tolerance, so only the per-step check can see it."""
         frame = _climate_frame("2012-01-01", 200, pd.Timedelta(hours=3))
-        frame.loc[100, "time_step_length"] += 120 / 86_400
-        frame.loc[101, "time_step_length"] -= 120 / 86_400
+        frame.loc[100, "timestep_length"] += 120 / 86_400
+        frame.loc[101, "timestep_length"] -= 120 / 86_400
         with pytest.raises(ValueError, match="overlap"):
             ClimateDrivers.from_dataframe(frame)
 
@@ -165,18 +165,18 @@ class TestStepContinuity:
 
         ds = climate.xarray
         assert ds["time"].values[199] == np.datetime64("2012-01-26T00:00")
-        assert ds["time_step_start"].values[200] == np.datetime64("2012-01-27T00:00")
+        assert ds["timestep_start"].values[200] == np.datetime64("2012-01-27T00:00")
 
     def test_hourly_lengths_rounded_to_three_decimals_are_refused(self):
         """0.042 days is 24.19 h of forcing a day: the lengths, not the labels, are wrong."""
         frame = _climate_frame("2012-01-01", 48, pd.Timedelta(hours=1))
-        frame["time_step_length"] = 0.042
+        frame["timestep_length"] = 0.042
         with pytest.raises(ValueError, match="labels drift.* 28.8 s less"):
             ClimateDrivers.from_dataframe(frame)
 
     def test_the_last_row_of_a_record_can_end_anywhere(self):
         frame = _climate_frame("2012-01-01", 10, pd.Timedelta(hours=3))
-        frame.loc[9, "time_step_length"] = 5.0
+        frame.loc[9, "timestep_length"] = 5.0
         ClimateDrivers.from_dataframe(frame)
 
 
@@ -204,12 +204,12 @@ class TestAxisFromDrivers:
             _printed(climate.pandas, net_ecosystem_exchange=np.arange(72.0)), climate=climate
         )
         ds, cx = output.xarray, climate.xarray
-        for name in ("time", "time_step_start", "time_step_length", "time_bounds", "hour_of_day"):
+        for name in ("time", "timestep_start", "timestep_length", "time_bounds", "hour_of_day"):
             np.testing.assert_array_equal(ds[name].values, cx[name].values)
         assert ds["time"].values[0] == np.datetime64("2012-06-01T00:20")
         assert ds.attrs["time_axis_source"] == TIME_AXIS_FROM_DRIVERS
-        assert output.time_step_length is not None
-        np.testing.assert_array_equal(output.time_step_length, climate.pandas["time_step_length"])
+        assert output.timestep_length is not None
+        np.testing.assert_array_equal(output.timestep_length, climate.pandas["timestep_length"])
 
     def test_without_drivers_the_axis_is_the_printed_labels(self):
         """An output re-opened on its own can only use SIPNET's rounded labels, and says so."""
@@ -218,9 +218,9 @@ class TestAxisFromDrivers:
             _printed(climate, net_ecosystem_exchange=np.arange(72.0))
         ).xarray
         assert alone.attrs["time_axis_source"] == TIME_AXIS_FROM_PRINTED_LABELS
-        assert alone.attrs["time_step_length_source"].startswith("inferred")
+        assert alone.attrs["timestep_length_source"].startswith("inferred")
         assert alone["time"].attrs["time_zone"] == "undeclared"
-        off = np.abs(alone["time_step_start"].values - timestep_start(climate))
+        off = np.abs(alone["timestep_start"].values - timestep_start(climate))
         assert off.max() == np.timedelta64(12, "s")
 
     def test_a_row_count_mismatch_is_refused(self):
@@ -257,9 +257,9 @@ class TestAxisFromDrivers:
         from pysipnet.output import build_output_dataset
 
         frame = _climate_frame("2012-06-01", 10, pd.Timedelta(hours=3))
-        frame.loc[4, "time_step_length"] = 0.25
+        frame.loc[4, "timestep_length"] = 0.25
         with pytest.raises(ValueError, match="overlap"):
-            build_output_dataset(frame[["year", "day_of_year", "hour_of_day", "time_step_length"]])
+            build_output_dataset(frame[["year", "day_of_year", "hour_of_day", "timestep_length"]])
 
 
 # ---------------------------------------------------------------------------
@@ -452,7 +452,7 @@ class TestRuns:
         assert not np.array_equal(printed, climate.pandas["hour_of_day"].to_numpy())
 
         ds, cx = result.outputs.xarray, climate.xarray
-        for name in ("time", "time_step_start", "time_bounds", "hour_of_day", "day_of_year"):
+        for name in ("time", "timestep_start", "time_bounds", "hour_of_day", "day_of_year"):
             np.testing.assert_array_equal(ds[name].values, cx[name].values)
         assert ds.attrs["time_axis_source"] == TIME_AXIS_FROM_DRIVERS
         assert ds["time"].attrs["time_zone"] == ds.attrs["time_zone"] == "UTC-07:00"
@@ -512,7 +512,7 @@ def test_one_output_variable_names_no_bounds_it_cannot_carry():
     nee = output["nee"]
     assert "time_bounds" not in nee.coords
     assert "bounds" not in nee["time"].attrs
-    assert {"time_step_start", "time_step_length"} <= set(nee.coords)
+    assert {"timestep_start", "timestep_length"} <= set(nee.coords)
     # Dropping it from one array leaves the cached Dataset's own attribute alone.
     assert output.xarray["time"].attrs["bounds"] == "time_bounds"
     assert "bounds" not in output["nee"]["time"].attrs

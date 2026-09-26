@@ -46,7 +46,7 @@ def _per_day() -> xr.DataArray:
 
 
 def _days(niwot: xr.Dataset) -> np.ndarray:
-    return niwot["time_step_length"].values / np.timedelta64(1, "D")
+    return niwot["timestep_length"].values / np.timedelta64(1, "D")
 
 
 # ── step_length ──────────────────────────────────────────────────────────────
@@ -64,8 +64,8 @@ def test_step_length_is_the_coordinate_in_the_units_asked_for(niwot, nee, units,
 
 def test_step_length_goes_into_a_dataset(nee):
     lengths = step_length(nee)
-    assert "time_step_length" not in lengths.coords
-    assert "time_step_length" in lengths.to_dataset().data_vars
+    assert "timestep_length" not in lengths.coords
+    assert "timestep_length" in lengths.to_dataset().data_vars
 
 
 def test_step_length_reads_a_dataset(niwot):
@@ -73,9 +73,9 @@ def test_step_length_reads_a_dataset(niwot):
 
 
 def test_step_length_of_a_missing_step_is_nan(nee):
-    lengths = nee["time_step_length"].values.copy()
+    lengths = nee["timestep_length"].values.copy()
     lengths[3] = np.timedelta64("NaT")
-    padded = nee.assign_coords(time_step_length=("time", lengths))
+    padded = nee.assign_coords(timestep_length=("time", lengths))
     days = step_length(padded)
     assert np.isnan(days.values[3])
     assert np.isfinite(np.delete(days.values, 3)).all()
@@ -83,17 +83,17 @@ def test_step_length_of_a_missing_step_is_nan(nee):
 
 def test_step_length_keeps_a_two_dimensional_coordinate(nee):
     stacked = xr.concat([nee, nee], dim="site")
-    lengths = np.stack([nee["time_step_length"].values] * 2)
+    lengths = np.stack([nee["timestep_length"].values] * 2)
     lengths[1, -1] = np.timedelta64("NaT")
-    stacked = stacked.assign_coords(time_step_length=(("site", "time"), lengths))
+    stacked = stacked.assign_coords(timestep_length=(("site", "time"), lengths))
     days = step_length(stacked)
     assert days.dims == ("site", "time")
     assert np.isnan(days.values[1, -1]) and not np.isnan(days.values[0, -1])
 
 
 def test_step_length_refuses_an_array_without_the_coordinate(nee):
-    with pytest.raises(ValueError, match="no 'time_step_length' coordinate"):
-        step_length(nee.drop_vars("time_step_length"))
+    with pytest.raises(ValueError, match="no 'timestep_length' coordinate"):
+        step_length(nee.drop_vars("timestep_length"))
 
 
 def test_step_length_refuses_other_units_and_types(nee):
@@ -105,7 +105,7 @@ def test_step_length_refuses_other_units_and_types(nee):
 
 def test_the_raw_coordinate_is_not_an_operand(nee):
     with pytest.raises(ValueError, match="Use step_length()"):
-        divide_with_units(nee, nee["time_step_length"])
+        divide_with_units(nee, nee["timestep_length"])
 
 
 # ── the two uses ─────────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ def test_nee_over_step_length_is_a_daily_rate_that_converts_to_co2(niwot, nee):
     assert rate.attrs["time_reference"] == TIME_REFERENCE_FOR_KIND[VariableKind.DAILY_RATE]
     assert rate.attrs["cell_methods"] == "time: mean"
     assert rate.attrs["sign_convention"] == nee.attrs["sign_convention"]
-    assert rate.attrs["derivation"] == "net_ecosystem_exchange / time_step_length"
+    assert rate.attrs["derivation"] == "net_ecosystem_exchange / timestep_length"
     assert rate.attrs["long_name"] == rate.attrs["derivation"]
 
     factor = conversion_factor(
@@ -300,7 +300,7 @@ def test_the_operands_are_not_modified(nee):
 def test_a_chained_derivation_names_every_step(nee):
     rate = divide_with_units(nee, step_length(nee))
     assert divide_with_units(rate, 2.0).attrs["derivation"] == (
-        "(net_ecosystem_exchange / time_step_length) / 2.0"
+        "(net_ecosystem_exchange / timestep_length) / 2.0"
     )
 
 
@@ -311,7 +311,7 @@ def test_a_negative_factor_drops_the_sign_convention(nee, other):
 
 def test_the_result_keeps_the_kinded_operands_time_coordinates(niwot, nee):
     rate = divide_with_units(nee, step_length(nee))
-    for name in ("time_step_start", "time_step_length", "year", "day_of_year", "hour_of_day"):
+    for name in ("timestep_start", "timestep_length", "year", "day_of_year", "hour_of_day"):
         xr.testing.assert_identical(rate[name], nee[name])
     daily = resample(rate, "1D", how="mean")
     assert daily.attrs["kind"] == VariableKind.DAILY_RATE
@@ -332,8 +332,8 @@ def test_a_site_parameter_broadcasts_over_a_stack_of_records(niwot):
 
 
 def test_conflicting_time_coordinates_are_refused_not_dropped(nee):
-    shifted = nee.assign_coords(time_step_start=nee["time_step_start"] + np.timedelta64(1, "h"))
-    with pytest.raises(ValueError, match="time_step_start"):
+    shifted = nee.assign_coords(timestep_start=nee["timestep_start"] + np.timedelta64(1, "h"))
+    with pytest.raises(ValueError, match="timestep_start"):
         divide_with_units(nee, step_length(shifted))
 
 

@@ -44,7 +44,7 @@ A SIPNET run requires two inputs: climate drivers and a parameter set.
 Climate forcing is stored in a SIPNET `.clim` file — one row per timestep.
 The current layout has 12 columns: four identifying the timestep (SIPNET's
 `year day time length`, which become `year`, `day_of_year`, `hour_of_day`,
-`time_step_length` in Python) and eight meteorological values. Every column's
+`timestep_length` in Python) and eight meteorological values. Every column's
 name, units and the conversion SIPNET applies on read are on the
 [Climate drivers](../reference/climate-drivers.md) page.
 
@@ -450,7 +450,7 @@ from pysipnet.arithmetic import divide_with_units, multiply_with_units, step_len
 from pysipnet.units import convert_dataarray_units
 
 nee = result.outputs["nee"]            # 'g m-2' of C, kind 'timestep_total'
-days = step_length(nee)                # the time_step_length coordinate, in 'd'
+days = step_length(nee)                # the timestep_length coordinate, in 'd'
 rate = divide_with_units(nee, days)    # 'g m-2 d-1' of C, kind 'daily_rate'
 flux = convert_dataarray_units(rate, to_units="umol m-2 s-1", to_constituent="CO2")
 # flux == rate × 0.9636228519, labeled 'umol m-2 s-1' of CO2
@@ -497,7 +497,7 @@ The rules:
   parameter against a `(site, time)` stack gives per-site results). Index
   coordinates must match exactly: two different time axes are refused rather
   than cut to the labels they share, and so is a coordinate such as
-  `time_step_start` that both operands carry with different values, which
+  `timestep_start` that both operands carry with different values, which
   xarray would otherwise drop.
 - **Units** combine symbol by symbol, and a symbol whose exponent reaches zero
   drops out; nothing is rescaled, so `cm` over `m` is `"cm m-1"`. The operand
@@ -555,12 +555,12 @@ log warning rather than an output column, so a failed check appears in
     attributes. The xarray `time` coordinate is therefore the **end** of the
     step, the one instant at which a pool is the value "at `time`" and a flux
     is the total "over the bounds", as the Climate and Forecast (CF)
-    `cell_methods` attributes say; `time_step_start` is the row's label.
+    `cell_methods` attributes say; `timestep_start` is the row's label.
 
 !!! note "SIPNET has no time zone; the drivers declare the clock"
     SIPNET computes no solar geometry and never interprets its labels: it
     echoes each climate row's `year`, `day` and `time` into the matching
-    output row and integrates on `time_step_length`. So the times are on
+    output row and integrates on `timestep_length`. So the times are on
     whatever clock your climate drivers use. Say which when you build them —
     `ClimateDrivers.from_file(path, time_zone="UTC")`, or a fixed offset such
     as `"UTC-07:00"` for local standard time — and the declaration is recorded
@@ -597,12 +597,12 @@ ds["net_ecosystem_exchange"].attrs
 #  'sign_convention': 'positive is a flux from the ecosystem to the atmosphere', ...}
 
 ds["time"]              # datetime64, END of each timestep (CF standard_name "time")
-ds["time_step_start"]   # datetime64, start of each timestep, as the drivers label the row
-ds["time_step_length"]  # timedelta64, the length declared to SIPNET
-ds["time_bounds"]       # (time, bounds) — the interval [time_step_start, time]
+ds["timestep_start"]   # datetime64, start of each timestep, as the drivers label the row
+ds["timestep_length"]  # timedelta64, the length declared to SIPNET
+ds["time_bounds"]       # (time, bounds) — the interval [timestep_start, time]
 
 ds.attrs["run_id"]                   # which run produced this
-ds.attrs["time_step_length_source"]  # measured from the drivers, or inferred
+ds.attrs["timestep_length_source"]  # measured from the drivers, or inferred
 ds.attrs["time_axis_source"]         # the drivers, or SIPNET's printed labels
 ds.attrs["time_zone"]                # the drivers' declared clock, or "undeclared"
 
@@ -615,7 +615,7 @@ interval each value covers, which is what you need in order to decide how
 measurements over some other interval line up with model steps. It adds a second dimension,
 `bounds`, so `ds.sizes` reads `{'time': 365, 'bounds': 2}`; use `result.outputs.pandas`
 when you want a flat table. A single variable, `result.outputs["nee"]`, carries
-`time_step_start` and `time_step_length` but cannot carry the two-dimensional
+`timestep_start` and `timestep_length` but cannot carry the two-dimensional
 `time_bounds`, so its `time` has no `bounds` attribute pointing at it. The
 Dataset declares `Conventions = "CF-1.11"`.
 Writing it needs a netCDF backend that stores 64-bit integers (`h5netcdf` or
@@ -657,10 +657,10 @@ resample(result.outputs[["wood_carbon"]], "1D", how="sum")
 |:-----|:--------------|:-------------|
 | `timestep_total` (fluxes) | `sum` | the total over the coarser step |
 | `timestep_end_state` (pools) | `last`, `mean` | the pool at the end, or its time-weighted mean (now a `timestep_mean`) |
-| `daily_rate`, `timestep_mean` | `mean` | the mean weighted by `time_step_length` |
+| `daily_rate`, `timestep_mean` | `mean` | the mean weighted by `timestep_length` |
 | `cumulative` | `last` | the running total so far |
 
-Means are weighted by `time_step_length` because SIPNET steps need not be
+Means are weighted by `timestep_length` because SIPNET steps need not be
 equal: the Niwot record alternates day and night steps of 0.29 and 0.63 days,
 and a plain mean would be biased toward the short ones. The result keeps the
 same layout, with `time` at the end of each coarser step and `kind`,
@@ -680,7 +680,7 @@ before it can be resampled.
 #### Records without step intervals
 
 An observation record usually has `time` labels and nothing else: no
-`time_step_start` or `time_step_length` saying where each measurement's
+`timestep_start` or `timestep_length` saying where each measurement's
 interval began. `resample` takes it anyway, on calendar cells alone:
 
 ```python
@@ -732,7 +732,7 @@ monthly["net_ecosystem_exchange"].dims   # ('member', 'time')
 
 Each member's slice is exactly what resampling that run alone gives. The
 cells are shared by the whole Dataset, so the runs must share one time axis:
-`time_step_start` and `time_step_length` have to be on `time` alone. If you
+`timestep_start` and `timestep_length` have to be on `time` alone. If you
 concatenate runs over different periods, xarray gives those coordinates a
 `member` or `site` dimension, and `resample` refuses the stack; resample each
 run separately. Selecting one run out of such a stack leaves rows of padding,

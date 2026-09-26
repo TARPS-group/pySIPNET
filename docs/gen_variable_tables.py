@@ -137,7 +137,7 @@ clim_lines = [
     "whatever clock the drivers were written in. SIPNET has no time zone; the",
     "drivers declare it, as `ClimateDrivers(time_zone=\"UTC-07:00\")` or similar, and",
     "the declaration travels on the `time` coordinate of every Dataset. Each row must",
-    "start where the previous one ends (its start plus `time_step_length`):",
+    "start where the previous one ends (its start plus `timestep_length`):",
     "`ClimateDrivers.validate` refuses an overlap or a drift and warns about a gap.",
     "Means are over the step; `photosynthetically_active_radiation` and",
     "`precipitation` are totals over the step.",

@@ -36,7 +36,7 @@ constant, and ``soilWetness`` a placeholder; see :data:`_SOIL_WETNESS_FILL`.
 Column 8 (``par``) units
 ~~~~~~~~~~~~~~~~~~~~~~~~
 ``photosynthetically_active_radiation`` is the **total** PAR over the timestep
-in Einstein m⁻². SIPNET divides by ``time_step_length`` to obtain the per-day
+in Einstein m⁻². SIPNET divides by ``timestep_length`` to obtain the per-day
 rate. Ensure values are consistent with the timestep length.
 
 Column 10 (``vpd``) and column 13 (``wspd``)
@@ -242,7 +242,7 @@ def _write_14_column(climate: ClimateDrivers, path: Path) -> None:
             str(int(row["year"])),
             str(int(row["day_of_year"])),
             f"{row['hour_of_day']:.6g}",
-            f"{row['time_step_length']:.6g}",
+            f"{row['timestep_length']:.6g}",
             f"{row['air_temperature']:.6g}",
             f"{row['soil_temperature']:.6g}",
             f"{row['photosynthetically_active_radiation']:.10g}",
@@ -265,7 +265,7 @@ def _write_12_column(climate: ClimateDrivers, path: Path) -> None:
             str(int(row["year"])),
             str(int(row["day_of_year"])),
             f"{row['hour_of_day']:.6g}",
-            f"{row['time_step_length']:.6g}",
+            f"{row['timestep_length']:.6g}",
             f"{row['air_temperature']:.6g}",
             f"{row['soil_temperature']:.6g}",
             f"{row['photosynthetically_active_radiation']:.10g}",

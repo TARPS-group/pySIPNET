@@ -79,7 +79,7 @@ at construction time.  The runner serializes this to disk as a new `.clim` file
 in the working directory.
 
 Columns are named as on the [Climate drivers](../reference/climate-drivers.md)
-page (`air_temperature`, `vapor_pressure_deficit`, `time_step_length`, ...).
+page (`air_temperature`, `vapor_pressure_deficit`, `timestep_length`, ...).
 `from_dataframe` also accepts the short names pySIPNET used previously and
 SIPNET's own column names (`tair`, `vpdSoil`, `length`) and renames them; the
 stored columns are always the full names.
@@ -143,7 +143,7 @@ caches the result.
 
 #### Labels, lengths and the clock
 
-SIPNET integrates each row over its `time_step_length` and never checks that
+SIPNET integrates each row over its `timestep_length` and never checks that
 the row's start plus that length is where the next row starts. pySIPNET checks
 it whenever climate data is loaded (at construction for `from_file` and
 `from_dataframe`, on first read for `from_path`):
@@ -432,7 +432,7 @@ paths = niwot_reference_files()       # paths.param, paths.clim, paths.output, p
 ```
 
 The output loader returns the golden already paired with the climate's
-`time_step_length` column and flagged `ModelFlags.standard()`, so its Dataset
+`timestep_length` column and flagged `ModelFlags.standard()`, so its Dataset
 carries the same time axis a live run would, and selecting a column SIPNET wrote
 as constant zero is refused just as it is for a live run.
 
