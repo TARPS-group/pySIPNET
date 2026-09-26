@@ -574,7 +574,10 @@ start-of-step value, which it is not. The Dataset states the interval each row
 covers: `time_step_start`, `time_step_length` and a CF `time_bounds` variable
 named by `time`'s `bounds` attribute, so `[time_step_start, time]` is
 machine-readable — which is what deciding which steps a measurement spans
-requires.
+requires. A single variable (`ds["nee"]`) keeps `time`'s attributes but not the
+two-dimensional `time_bounds`, so its `bounds` would name something absent;
+`dataset.without_absent_bounds` drops it, and `SIPNETOutput.__getitem__` and
+`resample` of a DataArray apply it. Plain `ds["nee"]` is xarray's and keeps it.
 
 **The axis comes from the climate drivers, not from SIPNET's printed labels.**
 Every output the runner returns carries its `ClimateDrivers`
@@ -623,7 +626,16 @@ length, and an invalid pairing raises with the reason and the valid menu.
 attributes are rewritten accordingly. The old `aggregation` attribute and
 `Aggregation` enum are gone. `check_resampling_method(kind, method, name=)` is
 that refusal on its own, public so a downstream reduction offering more
-methods (min, max, first) can refuse in the same words.
+methods (min, max, first) can refuse in the same words. The other pieces are
+public for the same reason, and `resample` is built from them rather than
+from private copies: `check_frequency(freq)` (the offset, or pandas' reason),
+`check_not_upsampling(data, freq)`, `drop_padding(data)`,
+`resampled_attributes(attrs, kind, method)` (kind, time reference, cell
+methods, `output_decimals` dropped; `resample` adds the `resampling`
+sentence), and `variables.variable_kind(array_or_name, default=)`, which reads
+`attrs["kind"]` and otherwise resolves the name, aliases included, through
+the output and then the climate registry. The two share only the time
+columns, with the same kind in both, which a test pins.
 
 `resample` reduces `time` only, so a stack of runs resamples in one call: a
 variable may be on `(member, site, time)` in any order, and every coordinate
@@ -644,6 +656,18 @@ negative or unparseable `freq` is refused (with pandas' reason, which is where
 "`M` is now `ME`" lives), and so is one whose every cell is shorter than the
 shortest step, within `STEP_TOLERANCE`, which would return the input under a
 false `resampling_frequency`.
+
+A record with none of the interval coordinates (`time_step_start`,
+`time_step_length`, `time_bounds`) — an observation, typically — resamples on
+calendar cells alone; one with only some of them is refused as a half-built
+layout. With nothing saying where its steps end, each cell is labeled at its
+**right edge**, the result has no interval coordinates, and the `resampling`
+attribute says "calendar cells". `sum` and `last` need strictly increasing
+datetime labels; `mean` weighs steps equally and is refused unless the labels
+are equally spaced. Upsampling is measured on label spacing. Empty cells are
+dropped. On both paths `sum` and `mean` are `NaN` where the cell holds a
+`NaN`, and `last` is the cell's last value, `NaN` only if that is; downstream
+code that must see a gap anywhere in a cell counts missing values itself.
 
 Step lengths come from the climate's `time_step_length`
 column; when the output has no climate attached they are **inferred** from
@@ -676,7 +700,11 @@ to whatever the platform produces.
 Selecting a variable whose `requires_flag` is off (e.g. `litter_carbon` without
 `litter_pool`) **raises**: SIPNET writes it as constant zero, and a likelihood
 would consume those zeros without complaint. `.pandas` and `.xarray` still
-contain the column, being a faithful view of the file.
+contain the column, being a faithful view of the file. The check is
+`variables.check_variable_is_written(name, flags)`, public so a caller can
+refuse such a variable when a forward model is configured rather than on a
+worker after the run; it resolves aliases, passes `LEGACY_OUTPUT_COLUMNS`, and
+raises `KeyError` for a name that is no output variable.
 
 Columns present at other versions: `woodCreation`, `nppStorage`, the
 nitrogen group, `ch4` and `plantStorageN` are new at this pin; `bcdeltaC` and

@@ -64,6 +64,8 @@ on — ``litter_carbon`` without ``litter_pool``, the nitrogen group without
 name raises rather than handing back a column of zeros that a likelihood would
 consume without complaint.  The full views (:attr:`pandas`, :attr:`xarray`)
 still contain the column, because they are a faithful view of the file.
+:func:`~pysipnet.variables.check_variable_is_written` is the same check on its
+own, for refusing such a variable before any run exists.
 """
 
 from __future__ import annotations
@@ -75,11 +77,17 @@ from typing import TYPE_CHECKING, Any, Literal, TypeAlias, overload
 
 import numpy as np
 
-from pysipnet.dataset import TimeAxis, build_time_axis, dataset_from_dataframe
+from pysipnet.dataset import (
+    TimeAxis,
+    build_time_axis,
+    dataset_from_dataframe,
+    without_absent_bounds,
+)
 from pysipnet.variables import (
     OUTPUT_VARIABLES_BY_NAME,
     TIME_COORDINATE_NAMES,
     VariableSpec,
+    check_variable_is_written,
     resolve_output_variable_names,
 )
 
@@ -321,12 +329,16 @@ class SIPNETOutput:
         units, description and time reference in ``.attrs``.
         ``output[["nee", "gpp"]]`` is shorthand for :meth:`select` and returns
         both in one Dataset, read in one go.
+
+        A single array carries ``time_step_start`` and ``time_step_length``
+        but not the two-dimensional ``time_bounds``, so its ``time`` has no
+        ``bounds`` attribute; the Dataset from ``output[[...]]`` has both.
         """
         if isinstance(key, str):
             name = self._resolve([key])[0]
             if self._dataset is not None and name in self._dataset:
-                return self._dataset[name]
-            return self._build_dataset(self._select_frame([key]))[name]
+                return without_absent_bounds(self._dataset[name])
+            return without_absent_bounds(self._build_dataset(self._select_frame([key]))[name])
         return self.select(key)
 
     @property
@@ -384,21 +396,8 @@ class SIPNETOutput:
         names = resolve_output_variable_names(list(variables))
         if self.flags is not None:
             for name in names:
-                self._check_flag(name)
+                check_variable_is_written(name, self.flags)
         return names
-
-    def _check_flag(self, name: str) -> None:
-        spec = OUTPUT_VARIABLES_BY_NAME.get(name)
-        if spec is None or spec.requires_flag is None:
-            return
-        assert self.flags is not None
-        if not getattr(self.flags, spec.requires_flag):
-            raise ValueError(
-                f"{name!r} is constant zero in this run: SIPNET only fills it when the "
-                f"{spec.requires_flag!r} flag is on, and this run had it off. Re-run with "
-                f"ModelFlags(..., {spec.requires_flag}=True), or read the raw column from "
-                "output.pandas if the zeros are genuinely what you want."
-            )
 
     def _ensure_columns(self, names: Sequence[str]) -> None:
         """Read whichever of *names* is not in memory yet, in a single pass.

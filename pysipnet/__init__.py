@@ -79,14 +79,23 @@ from pysipnet.parameters.model import (
     SIPNETParameters,
     resolve_parameter_name,
 )
-from pysipnet.resample import check_resampling_method, resample
+from pysipnet.resample import (
+    check_frequency,
+    check_not_upsampling,
+    check_resampling_method,
+    drop_padding,
+    resample,
+    resampled_attributes,
+)
 from pysipnet.result import RunProvenance, SIPNETResult
 from pysipnet.runner import ClimateStaging, SIPNETRunError, SIPNETRunner
 from pysipnet.variables import (
     CLIMATE_VARIABLES,
     OUTPUT_VARIABLES,
+    check_variable_is_written,
     resolve_climate_variable,
     resolve_output_variable,
+    variable_kind,
 )
 
 # Version
@@ -112,8 +121,12 @@ __all__ = [
     "SIPNETResult",
     "SIPNETOutput",
     "RunProvenance",
+    "check_frequency",
+    "check_not_upsampling",
     "check_resampling_method",
+    "drop_padding",
     "resample",
+    "resampled_attributes",
     # Parameters
     "SIPNETParameters",
     "ModelFlags",
@@ -125,6 +138,8 @@ __all__ = [
     "CLIMATE_VARIABLES",
     "resolve_output_variable",
     "resolve_climate_variable",
+    "variable_kind",
+    "check_variable_is_written",
     # Climate
     "ClimateDrivers",
     # Events
