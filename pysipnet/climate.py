@@ -35,11 +35,11 @@ always the registry names.
 +----+-------------------------------------+---------+----------------------------------+
 |  8 | precipitation                       | mm      | Total over the step              |
 +----+-------------------------------------+---------+----------------------------------+
-|  9 | vapor_pressure_deficit             | Pa      | Mean over the step; must be > 0  |
+|  9 | vapor_pressure_deficit              | Pa      | Mean over the step; must be > 0  |
 +----+-------------------------------------+---------+----------------------------------+
-| 10 | soil_vapor_pressure_deficit        | Pa      | Mean over the step               |
+| 10 | soil_vapor_pressure_deficit         | Pa      | Mean over the step               |
 +----+-------------------------------------+---------+----------------------------------+
-| 11 | vapor_pressure                     | Pa      | Mean over the step               |
+| 11 | vapor_pressure                      | Pa      | Mean over the step               |
 +----+-------------------------------------+---------+----------------------------------+
 | 12 | wind_speed                          | m s⁻¹   | Mean over the step; must be > 0  |
 +----+-------------------------------------+---------+----------------------------------+

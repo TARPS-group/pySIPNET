@@ -135,7 +135,7 @@ clim_lines = [
     "",
     "**Time convention.** Rows are labeled with the *start* of the timestep, on",
     "whatever clock the drivers were written in. SIPNET has no time zone; the",
-    "drivers declare it, as `ClimateDrivers(time_zone=\"UTC-07:00\")` or similar, and",
+    'drivers declare it, as `ClimateDrivers(time_zone="UTC-07:00")` or similar, and',
     "the declaration travels on the `time` coordinate of every Dataset. Each row must",
     "start where the previous one ends (its start plus `timestep_length`):",
     "`ClimateDrivers.validate` refuses an overlap or a drift and warns about a gap.",
