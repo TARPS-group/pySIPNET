@@ -49,6 +49,8 @@ length.  :data:`RESAMPLING_METHODS_FOR_KIND` records the valid methods for each
 kind and :data:`RESAMPLED_KIND` what kind the result is.  There is deliberately
 no default: :func:`pysipnet.resample.resample` requires the caller to say which
 method they want and refuses one the kind does not support.
+:func:`variable_kind` is how it finds the kind: a ``kind`` attribute if there
+is one, otherwise the registries, aliases included.
 
 Arithmetic
 ----------
@@ -83,9 +85,12 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass
 from enum import StrEnum
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast, overload
 
 from pysipnet.units import UnitStyle, format_units, validate_units
+
+if TYPE_CHECKING:
+    from pysipnet.parameters.model import ModelFlags
 
 NAME_PATTERN = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
 """What a pySIPNET variable name must look like."""
@@ -1095,6 +1100,133 @@ def resolve_output_variable_names(names: list[str] | tuple[str, ...]) -> list[st
     return resolved
 
 
+def parse_variable_kind(value: VariableKind | str, *, name: str) -> VariableKind:
+    """*value* as a :class:`VariableKind`, refusing a string that names none.
+
+    *name* is the variable the message names.  For reading a declared
+    ``kind`` attribute; :func:`variable_kind` also falls back on the
+    registries.
+    """
+    try:
+        return VariableKind(value)
+    except ValueError:
+        raise ValueError(
+            f"{name!r} has kind {value!r}, which is not one of {[k.value for k in VariableKind]}."
+        ) from None
+
+
+def variable_label(array: Any) -> str:
+    """The name a DataArray goes by in pySIPNET's messages.
+
+    Its name, or for an unnamed arithmetic result its ``derivation``
+    (:mod:`pysipnet.arithmetic`), or ``"array"``.
+    """
+    if array.name is not None:
+        return str(array.name)
+    derivation = array.attrs.get("derivation")
+    return derivation if isinstance(derivation, str) and derivation else "array"
+
+
+_T = TypeVar("_T")
+_NO_DEFAULT: Any = object()
+
+
+@overload
+def variable_kind(data: Any) -> VariableKind: ...
+
+
+@overload
+def variable_kind(data: Any, *, default: _T) -> VariableKind | _T: ...
+
+
+def variable_kind(data: Any, *, default: Any = _NO_DEFAULT) -> Any:
+    """The :class:`VariableKind` of a DataArray, or of a variable given by name.
+
+    A DataArray's ``kind`` attribute wins.  Without one, its name is looked
+    up, as a string is: in the output registry and then the climate registry,
+    by registry name, alias or SIPNET name, so ``"nee"``, ``"NEE"`` and
+    ``"net_ecosystem_exchange"`` all give ``timestep_total``.  The two
+    registries share only the time columns, which have the same kind in both.
+    A datetime array is never looked up: the registries' time columns are
+    numbers, and ``"time"`` there is SIPNET's hour-of-day column, not
+    pySIPNET's step-end ``time`` coordinate.
+
+    Parameters
+    ----------
+    data:
+        A DataArray, or anything with ``attrs`` and ``name``; or a variable
+        name.
+    default:
+        Returned when neither the attributes nor the registries say what the
+        variable is.  Without it, that raises.  A ``kind`` attribute that
+        names no kind raises either way: it is a mistake, not an absence.
+
+    Raises
+    ------
+    ValueError
+        If the ``kind`` attribute is not a :class:`VariableKind` value, or,
+        when no *default* is given, if the kind cannot be determined.
+    """
+    if isinstance(data, str):
+        name: str | None = data
+    else:
+        name = None if data.name is None else str(data.name)
+        declared = data.attrs.get("kind")
+        if declared is not None:
+            return parse_variable_kind(declared, name=variable_label(data))
+    # The registries' time columns are numbers; a datetime array named "time" is
+    # pySIPNET's step-end coordinate, not SIPNET's hour-of-day column.
+    if name is not None and getattr(getattr(data, "dtype", None), "kind", None) != "M":
+        for resolve in (resolve_output_variable, resolve_climate_variable):
+            try:
+                return resolve(name).kind
+            except KeyError:
+                continue
+    if default is not _NO_DEFAULT:
+        return default
+    what = repr(data if isinstance(data, str) else variable_label(data))
+    raise ValueError(
+        f"Cannot tell what kind of quantity {what} is: it carries no 'kind' attribute and "
+        "is not a SIPNET output or climate variable or alias. Set attrs['kind'] to one of "
+        f"{[k.value for k in VariableKind]}."
+    )
+
+
+def check_variable_is_written(name: str, flags: ModelFlags) -> None:
+    """Raise if SIPNET leaves output variable *name* as constant zero under *flags*.
+
+    Some columns are filled only when a model option is on
+    (:attr:`VariableSpec.requires_flag`): ``litter_carbon`` needs
+    ``litter_pool``, the nitrogen group ``nitrogen_cycle``.  With the option
+    off SIPNET still writes the column, as zeros, and a likelihood would
+    consume them without complaint.  :class:`~pysipnet.output.SIPNETOutput`
+    applies this to every selection; call it directly to refuse such a
+    variable before any run exists.
+
+    *name* may be a registry name, an alias or a SIPNET header token.  Columns
+    only older SIPNET versions wrote (:data:`LEGACY_OUTPUT_COLUMNS`) pass,
+    since no flag of the pinned version governs them.
+
+    Raises
+    ------
+    KeyError
+        If *name* is not an output variable or alias.
+    ValueError
+        If the variable needs a flag that *flags* leave off.
+    """
+    if name in LEGACY_OUTPUT_COLUMNS or name in LEGACY_OUTPUT_COLUMNS.values():
+        return
+    spec = resolve_output_variable(name)
+    flag = spec.requires_flag
+    if flag is not None and not getattr(flags, flag):
+        raise ValueError(
+            f"{spec.name!r} is constant zero with these model flags: SIPNET only fills it "
+            f"when the {flag!r} flag is on, and it is off. Run with ModelFlags(..., "
+            f"{flag}=True), or, if the zeros are genuinely what you want, read the raw "
+            "column from the output's .pandas view."
+        )
+
+
 def output_variable_records() -> list[dict[str, Any]]:
     """The whole registry as JSON-serializable dicts, for documentation and export."""
     return [spec.to_record() for spec in OUTPUT_VARIABLES]
@@ -1121,7 +1253,11 @@ __all__ = [
     "TIME_REFERENCE_FOR_KIND",
     "VariableKind",
     "VariableSpec",
+    "check_variable_is_written",
     "output_variable_records",
+    "parse_variable_kind",
     "resolve_output_variable",
     "resolve_output_variable_names",
+    "variable_kind",
+    "variable_label",
 ]

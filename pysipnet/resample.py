@@ -40,15 +40,27 @@ What cannot vary along them is the time axis itself: the cells are one set for
 the whole Dataset, so ``time_step_start`` and ``time_step_length`` must be on
 ``time`` alone.
 
-:func:`check_resampling_method` is the check :func:`resample` applies to each
-variable, for code that reduces over time some other way and wants the same
-refusal.
+A record without the interval coordinates — an observation, which has
+``time`` labels and nothing saying where each step began — resamples too, on
+calendar cells alone.  With nothing to say where its steps end, each cell is
+labeled at its right edge, the result has no interval coordinates, and a mean
+weighs every step equally, so it is refused unless the labels are equally
+spaced.
+
+The rules :func:`resample` applies are public on their own, for code that
+reduces over time some other way (over arbitrary windows, say, or with ``min``
+and ``max``) and wants the same refusals in the same words:
+:func:`check_resampling_method` for a kind and a method, :func:`check_frequency`
+and :func:`check_not_upsampling` for *freq*, :func:`drop_padding` for the rows a
+stack of runs leaves behind, :func:`resampled_attributes` for what a combined
+value's attributes should say, and :func:`~pysipnet.variables.variable_kind`
+for the kind all of them start from.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, overload
+from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 import numpy as np
 import pandas as pd
@@ -58,26 +70,33 @@ from pysipnet.dataset import (
     BOUNDS_DIMENSION,
     NS_PER_DAY,
     STEP_TOLERANCE,
+    TIME_AXIS_ATTRIBUTES,
     TIME_DIMENSION,
     TIME_ZONE_UNDECLARED,
     assemble_time_coords,
     unfilled_coordinates,
+    without_absent_bounds,
 )
 from pysipnet.variables import (
     CELL_METHODS_FOR_KIND,
-    CLIMATE_VARIABLES_BY_NAME,
-    OUTPUT_VARIABLES_BY_NAME,
     RESAMPLED_KIND,
     RESAMPLING_METHODS_FOR_KIND,
     TIME_REFERENCE_FOR_KIND,
     ResamplingMethod,
     VariableKind,
+    parse_variable_kind,
+    variable_kind,
+    variable_label,
 )
 
 if TYPE_CHECKING:
     import xarray as xr
 
 STEP_LENGTH_RESAMPLED = "sum of the declared lengths of the steps combined into each cell"
+
+_INTERVAL_COORDINATES = ("time_step_start", "time_step_length")
+
+_Xarray = TypeVar("_Xarray", "xr.DataArray", "xr.Dataset")
 
 _METHODS = ("sum", "mean", "last")
 
@@ -163,7 +182,9 @@ def resample(
         such a Dataset.  Anything with the same coordinates works, including a
         stack of runs: a variable may have dimensions besides ``time``, in any
         order, provided ``time_step_start`` and ``time_step_length`` are on
-        ``time`` alone.
+        ``time`` alone.  A record with a datetime ``time`` and none of the
+        interval coordinates (``time_step_start``, ``time_step_length``,
+        ``time_bounds``) resamples on calendar cells alone; see Returns.
     freq:
         A pandas offset alias for the new step: ``"1D"``, ``"7D"``, ``"MS"``
         for calendar months, ``"YS"`` for calendar years.  It must name a
@@ -184,67 +205,65 @@ def resample(
     ``time`` are rebuilt for the coarser cells.  Rows whose
     ``time_step_start`` or ``time_step_length`` is ``NaT`` — the padding
     xarray leaves when runs on different time axes are aligned and one of
-    them is then selected — are not steps, and are dropped first.
+    them is then selected — are not steps, and are dropped first (see
+    :func:`drop_padding`).  A DataArray's ``time`` has no ``bounds``
+    attribute, since it cannot carry the ``time_bounds`` it would name.
+
+    A record without interval coordinates comes back without them too, and
+    without any other coordinate on ``time``.  Its
+    ``time`` is the right edge of each calendar cell, since nothing says where
+    the steps in it end, cells no step falls in are dropped, and ``"mean"``
+    weighs every step equally, which is why it needs equally spaced labels.
+    Each variable's ``resampling`` attribute says the cells are calendar
+    cells.  Such a record's first and last cells may be only partly covered,
+    and nothing in the result says so.
+
+    Either way a cell holding a ``NaN`` is ``NaN`` under ``"sum"`` and
+    ``"mean"``; ``"last"`` is the cell's last value, ``NaN`` only if that is.
 
     Raises
     ------
     ValueError
         If a method is not meaningful for a variable's kind, saying why and
         listing the methods that are (see :func:`check_resampling_method`); if
-        a variable's kind cannot be determined or it has no ``time``
-        dimension; if *data* lacks the pySIPNET time coordinates, or they vary
-        along a dimension other than ``time``; if *freq* is not a positive
-        period; or if its periods are all shorter than the shortest step.
+        a variable's kind cannot be determined (see
+        :func:`~pysipnet.variables.variable_kind`) or it has no ``time``
+        dimension; if *data* has only some of the pySIPNET time coordinates, or
+        they vary along a dimension other than ``time``; if *freq* is not a
+        positive period (:func:`check_frequency`) or its periods are all
+        shorter than the shortest step (:func:`check_not_upsampling`); if a row
+        with a value has a ``NaT`` interval (:func:`drop_padding`); or, for a
+        record without interval coordinates, if its labels are not datetimes
+        that strictly increase, or are unequally spaced and a mean is asked
+        for.
     """
     import xarray as xr
 
     if isinstance(data, xr.DataArray):
         if isinstance(how, Mapping):
             raise TypeError("Pass how as a single method for a DataArray, e.g. how='sum'.")
-        # An arithmetic result has no name; it resamples under its derivation, which
-        # is what a refusal should call it.
-        name = data.name if data.name is not None else data.attrs.get("derivation") or "array"
+        name = variable_label(data)
         resampled = resample(data.to_dataset(name=name), freq, how=how)[name]
-        return resampled.rename(data.name)
+        return without_absent_bounds(resampled.rename(data.name))
+
+    if _on_calendar_cells_only(data):
+        return _resample_on_calendar_cells(data, freq, how)
 
     _require_time_layout(data)
-    offset = _checked_frequency(freq)
+    offset = check_frequency(freq)
     methods = _methods_for(data, how)
-    if not methods:
-        raise ValueError("Nothing to resample: the Dataset has no data variables.")
-    data = _only_real_steps(data, list(methods))
-
-    def grouped(obj: xr.DataArray | xr.Dataset) -> Any:
-        # The step-end labeling makes a step ending on a boundary part of the
-        # cell that ends there, hence right-closed cells.
-        return obj.resample({TIME_DIMENSION: freq}, closed="right", label="right")
+    data = _drop_padding(data, _valued_among(list(methods)))
 
     length_ns = data["time_step_length"].values.astype("timedelta64[ns]").astype("int64")
     weight_days = _as_data_array(length_ns / NS_PER_DAY, data)
-    n_steps = grouped(xr.ones_like(weight_days)).sum()
-    cell_ends = n_steps[TIME_DIMENSION].values.astype("datetime64[ns]")
-    cell = _cell_of_each_step(data, cell_ends, n_steps.values)
-    keep = np.bincount(cell, minlength=cell_ends.size) > 0
-    _check_not_upsampling(freq, offset, cell_ends, length_ns)
+    cell_ends, n_steps = _steps_per_cell(data, freq)
+    cell = _cell_of_each_step(data, cell_ends, n_steps)
+    keep = n_steps > 0
+    _check_not_upsampling(freq, offset, cell_ends, int(length_ns.min()))
 
-    by_method: dict[str, list[str]] = {m: [] for m in _METHODS}
-    for name, method in methods.items():
-        by_method[method].append(name)
-
-    pieces: list[xr.Dataset] = []
-    if by_method["sum"]:
-        pieces.append(grouped(data[by_method["sum"]]).sum(skipna=False))
-    if by_method["last"]:
-        pieces.append(grouped(data[by_method["last"]]).last(skipna=False))
-    if by_method["mean"]:
-        weighted = grouped(data[by_method["mean"]] * weight_days).sum(skipna=False)
-        pieces.append(weighted / grouped(weight_days).sum())
-
-    start = grouped(_as_data_array(data["time_step_start"].values, data)).min()
-    end = grouped(_as_data_array(data[TIME_DIMENSION].values, data)).max()
-
-    merged = xr.merge(pieces, compat="no_conflicts", join="exact")
-    merged = merged[list(methods)].isel({TIME_DIMENSION: keep})
+    combined = _combined(data, freq, methods, weight_days, keep)
+    start = _grouped(_as_data_array(data["time_step_start"].values, data), freq).min()
+    end = _grouped(_as_data_array(data[TIME_DIMENSION].values, data), freq).max()
 
     def attributes_for(name: str) -> dict[str, Any]:
         return dict(data[name].attrs) if name in data.coords else {}
@@ -257,18 +276,11 @@ def resample(
         length_source=STEP_LENGTH_RESAMPLED,
         time_zone=data[TIME_DIMENSION].attrs.get("time_zone", TIME_ZONE_UNDECLARED),
     )
-    for name, coord in data.coords.items():
-        if TIME_DIMENSION not in coord.dims and BOUNDS_DIMENSION not in coord.dims:
-            coords[str(name)] = coord.variable
+    coords.update(_coordinates_off_time(data))
 
-    data_vars = {
-        name: (
-            data[name].dims,
-            merged[name].transpose(*data[name].dims).values,
-            _resampled_attrs(data[name].attrs, _kind_of(data, name), methods[name], freq),
-        )
-        for name in methods
-    }
+    data_vars = _resampled_variables(
+        data, combined, methods, over=f"over {freq}", weighting="weighted by time_step_length"
+    )
     attrs = dict(data.attrs)
     attrs["time_step_length_source"] = STEP_LENGTH_RESAMPLED
     attrs["resampling_frequency"] = freq
@@ -295,7 +307,7 @@ def check_resampling_method(kind: VariableKind | str, method: str, *, name: str)
         raise ValueError(
             f"Unknown resampling method {method!r} for {name!r}; choose from {list(_METHODS)}."
         )
-    kind = _as_kind(kind, name)
+    kind = parse_variable_kind(kind, name=name)
     valid = RESAMPLING_METHODS_FOR_KIND[kind]
     if method in valid:
         return
@@ -308,66 +320,20 @@ def check_resampling_method(kind: VariableKind | str, method: str, *, name: str)
     )
 
 
-def _as_kind(kind: VariableKind | str, name: str) -> VariableKind:
-    try:
-        return VariableKind(kind)
-    except ValueError:
-        raise ValueError(
-            f"{name!r} has kind {kind!r}, which is not one of {[k.value for k in VariableKind]}."
-        ) from None
+def check_frequency(freq: str) -> BaseOffset:
+    """*freq* as a pandas offset, refusing anything that does not name a positive period.
 
+    The first check :func:`resample` makes, for code that wants to refuse a
+    bad *freq* before there is any data to resample: when a forward model is
+    configured, say, rather than on a worker after a queue wait.  Whether the
+    period is long enough needs the data; that is :func:`check_not_upsampling`.
 
-def _as_data_array(values: np.ndarray, like: xr.Dataset) -> xr.DataArray:
-    import xarray as xr
-
-    return xr.DataArray(values, dims=TIME_DIMENSION, coords={TIME_DIMENSION: like[TIME_DIMENSION]})
-
-
-def _require_time_layout(ds: xr.Dataset) -> None:
-    needed = (TIME_DIMENSION, "time_step_start", "time_step_length")
-    missing = [c for c in needed if c not in ds.coords]
-    if missing or TIME_DIMENSION not in ds.dims:
-        raise ValueError(
-            f"Dataset lacks the pySIPNET time coordinates {missing}. resample() needs the "
-            "layout SIPNETOutput.xarray, SIPNETOutput.select or ClimateDrivers.xarray produce: "
-            "'time' at the step end with 'time_step_start' and 'time_step_length' alongside."
-        )
-    if BOUNDS_DIMENSION in ds.dims and "time_bounds" not in ds.coords:
-        raise ValueError("Dataset has a 'bounds' dimension but no 'time_bounds' coordinate.")
-    expected_dtype = {TIME_DIMENSION: "M", "time_step_start": "M", "time_step_length": "m"}
-    mistyped = {
-        name: str(ds[name].dtype)
-        for name, kind in expected_dtype.items()
-        if ds[name].dtype.kind != kind
-    }
-    if mistyped:
-        raise ValueError(
-            f"The time coordinates have dtypes {mistyped}: 'time' and 'time_step_start' must "
-            "be datetime64 and 'time_step_length' timedelta64, as pySIPNET builds them. A "
-            "length in days is converted with pysipnet.dataset.days_to_timedelta."
-        )
-    # Order is not checked: a transposed time_bounds is rebuilt, never read.
-    expected = {
-        "time_step_start": {TIME_DIMENSION},
-        "time_step_length": {TIME_DIMENSION},
-        "time_bounds": {TIME_DIMENSION, BOUNDS_DIMENSION},
-    }
-    offenders = {
-        name: tuple(map(str, ds[name].dims))
-        for name, dims in expected.items()
-        if name in ds.coords and set(ds[name].dims) != dims
-    }
-    if offenders:
-        raise ValueError(
-            f"The interval coordinates vary along more than time: {offenders}. xarray gives "
-            "them an extra dimension when runs on different time axes are concatenated, and "
-            "then the runs no longer share one set of cells. Resample each run, or each "
-            "site, separately; resample() drops the padding rows that selecting one leaves."
-        )
-
-
-def _checked_frequency(freq: str) -> BaseOffset:
-    """*freq* as a pandas offset, refusing anything that does not name a positive period."""
+    Raises
+    ------
+    ValueError
+        If pandas does not read *freq* as an offset, with pandas' own reason
+        (that ``'M'`` is now ``'ME'``, say), or if the period is not positive.
+    """
     try:
         offset = pd.tseries.frequencies.to_offset(freq)
         if offset is None:
@@ -385,21 +351,272 @@ def _checked_frequency(freq: str) -> BaseOffset:
     return offset
 
 
-def _only_real_steps(ds: xr.Dataset, names: list[str]) -> xr.Dataset:
-    """*ds* without the padding rows: no start or no length, and no value in *names*.
+def check_not_upsampling(data: xr.Dataset | xr.DataArray, freq: str) -> None:
+    """Raise if every cell of *freq* on *data*'s time axis is shorter than its shortest step.
+
+    Each step would land in a cell of its own, and a resampled record would be
+    the input under a label saying it was resampled to *freq*.  The check
+    :func:`resample` makes once the data is at hand, for code that combines
+    steps on the same cells itself.
+
+    The shortest step is the shortest ``time_step_length`` where *data* has
+    one, ignoring padding, and otherwise the shortest gap between ``time``
+    labels; a record of one label has no gap and always passes.  The longest
+    cell is measured on the record's own right-closed cells, so calendar
+    periods of varying length are compared as they fall.  Equal lengths pass,
+    to within :data:`~pysipnet.dataset.STEP_TOLERANCE`, so hourly data
+    declared as ``0.0416667`` days resamples to ``"1h"`` as itself.
+
+    Raises
+    ------
+    ValueError
+        If *freq* is not a positive period (see :func:`check_frequency`); if
+        *data* has no datetime ``time`` labels that strictly increase; or if
+        *freq* is finer than the steps.
+    """
+    offset = check_frequency(freq)
+    _require_increasing_labels(data)
+    if "time_step_length" in data.coords:
+        lengths = data["time_step_length"].values.astype("timedelta64[ns]")
+        steps = lengths[~np.isnat(lengths)].astype("int64")
+    else:
+        steps = np.diff(_labels_ns(data))
+    if steps.size:
+        cell_ends, _ = _steps_per_cell(data, freq)
+        _check_not_upsampling(freq, offset, cell_ends, int(steps.min()))
+
+
+def drop_padding(data: _Xarray) -> _Xarray:
+    """*data* without its padding rows: no interval, and no value in any variable.
 
     Selecting one run out of a stack of runs on different time axes leaves the
-    union of those axes, padded with ``NaT`` and ``NaN``.  Left in, a padding
-    row turns the cell it falls in to ``NaN`` and, because a ``NaT`` length
-    casts to the ``int64`` minimum, gives that cell a length of minus 292
-    years.  A row with a value but no interval is not padding: it is a step
-    whose extent is unknown, and dropping it would lose the value silently.
+    union of those axes, padded with ``NaT`` in ``time_step_start`` and
+    ``time_step_length`` and ``NaN`` in every value.  Those rows are not
+    steps.  Left in, a padding row turns whatever cell or window it falls in to
+    ``NaN`` and, because a ``NaT`` length casts to the ``int64`` minimum,
+    gives it a length of minus 292 years.  :func:`resample` drops them first;
+    this is the same rule, for code that combines steps some other way.
+
+    A row with a value but no interval is not padding: it is a step whose
+    extent is unknown, and dropping it would lose the value silently, so it
+    is refused.  Only variables on ``time`` are consulted; data with neither
+    interval coordinate has no padding and comes back unchanged.
+
+    Raises
+    ------
+    ValueError
+        If a row whose ``time_step_start`` or ``time_step_length`` is ``NaT``
+        holds a value, naming the variables that hold one; if every row is
+        padding; or if an interval coordinate varies along a dimension other
+        than ``time``, as it does in the stack itself before one run is
+        selected.
     """
-    no_interval = np.isnat(ds["time_step_start"].values) | np.isnat(ds["time_step_length"].values)
+    import xarray as xr
+
+    if isinstance(data, xr.DataArray):
+        name = variable_label(data)
+        return _drop_padding(data, lambda rows: [name] if bool(rows.notnull().any()) else [])
+    names = [str(name) for name, array in data.data_vars.items() if TIME_DIMENSION in array.dims]
+    return _drop_padding(data, _valued_among(names))
+
+
+def resampled_attributes(
+    attrs: Mapping[str, Any], kind: VariableKind | str, method: str, *, name: str
+) -> dict[str, Any]:
+    """*attrs* rewritten for values of *kind* combined over a coarser step by *method*.
+
+    ``kind`` becomes the kind of the result (a pool averaged is a
+    ``timestep_mean``; see :data:`~pysipnet.variables.RESAMPLED_KIND`), and
+    ``time_reference`` and ``cell_methods`` follow it; ``cell_methods`` is
+    removed where the new kind has none.  ``output_decimals`` is dropped,
+    since SIPNET's printf precision does not describe a combined value.
+    Everything else is kept.  :func:`resample` adds a ``resampling`` sentence
+    saying how the cells were formed; code combining steps over its own
+    windows says that itself.
+
+    *name* is the variable a refusal names.
+
+    Raises
+    ------
+    ValueError
+        As :func:`check_resampling_method` does, if *method* is not
+        meaningful for *kind*.
+    """
+    check_resampling_method(kind, method, name=name)
+    new_kind = RESAMPLED_KIND[(parse_variable_kind(kind, name=name), method)]
+    out = dict(attrs)
+    out["kind"] = new_kind.value
+    out["time_reference"] = TIME_REFERENCE_FOR_KIND[new_kind]
+    cell_methods = CELL_METHODS_FOR_KIND[new_kind]
+    if cell_methods is None:
+        out.pop("cell_methods", None)
+    else:
+        out["cell_methods"] = cell_methods
+    out.pop("output_decimals", None)
+    return out
+
+
+def _as_data_array(values: np.ndarray, like: xr.Dataset | xr.DataArray) -> xr.DataArray:
+    import xarray as xr
+
+    return xr.DataArray(values, dims=TIME_DIMENSION, coords={TIME_DIMENSION: like[TIME_DIMENSION]})
+
+
+def _grouped(obj: xr.DataArray | xr.Dataset, freq: str) -> Any:
+    """*obj* grouped into cells of *freq*, right-closed and labeled at the right edge.
+
+    ``time`` is a step's end, so a step ending on a boundary belongs to the
+    cell that ends there.
+    """
+    return obj.resample({TIME_DIMENSION: freq}, closed="right", label="right")
+
+
+def _steps_per_cell(data: xr.Dataset | xr.DataArray, freq: str) -> tuple[np.ndarray, np.ndarray]:
+    """The end of every cell of *freq* the record spans, and how many steps fall in each."""
+    ones = _as_data_array(np.ones(data.sizes[TIME_DIMENSION]), data)
+    n_steps = _grouped(ones, freq).sum()
+    # xarray reports an empty cell's count as NaN, not 0.
+    counts = np.nan_to_num(n_steps.values).astype("int64")
+    return n_steps[TIME_DIMENSION].values.astype("datetime64[ns]"), counts
+
+
+def _labels_ns(data: xr.Dataset | xr.DataArray) -> np.ndarray:
+    return np.asarray(data[TIME_DIMENSION].values.astype("datetime64[ns]").astype("int64"))
+
+
+def _combined(
+    data: xr.Dataset,
+    freq: str,
+    methods: Mapping[str, tuple[str, VariableKind]],
+    weights: xr.DataArray,
+    keep: np.ndarray,
+) -> xr.Dataset:
+    """Each variable in *methods* combined over the cells of *freq* that *keep* marks.
+
+    ``"mean"`` is weighted by *weights*, one per step.  ``skipna=False``
+    throughout, so a ``NaN`` in a cell reaches its sum and mean; ``"last"``
+    reads only the cell's last step.
+    """
+    import xarray as xr
+
+    by_method: dict[str, list[str]] = {m: [] for m in _METHODS}
+    for name, (method, _) in methods.items():
+        by_method[method].append(name)
+    pieces: list[xr.Dataset] = []
+    if by_method["sum"]:
+        pieces.append(_grouped(data[by_method["sum"]], freq).sum(skipna=False))
+    if by_method["last"]:
+        pieces.append(_grouped(data[by_method["last"]], freq).last(skipna=False))
+    if by_method["mean"]:
+        weighted = _grouped(data[by_method["mean"]] * weights, freq).sum(skipna=False)
+        pieces.append(weighted / _grouped(weights, freq).sum())
+    merged = xr.merge(pieces, compat="no_conflicts", join="exact")
+    return merged[list(methods)].isel({TIME_DIMENSION: keep})
+
+
+def _resampled_variables(
+    data: xr.Dataset,
+    combined: xr.Dataset,
+    methods: Mapping[str, tuple[str, VariableKind]],
+    *,
+    over: str,
+    weighting: str,
+) -> dict[str, Any]:
+    """The result's data variables: *combined*'s values in *data*'s order of dimensions.
+
+    Attributes are :func:`resampled_attributes` plus a ``resampling`` sentence:
+    *over* says what the cells were and *weighting* how a mean weighed the
+    steps.
+    """
+    variables: dict[str, Any] = {}
+    for name, (method, kind) in methods.items():
+        attrs = resampled_attributes(data[name].attrs, kind, method, name=name)
+        how = over + (f", {weighting}" if method == "mean" else "")
+        attrs["resampling"] = f"{method} of {kind.value} values {how}"
+        variables[name] = (
+            data[name].dims,
+            combined[name].transpose(*data[name].dims).values,
+            attrs,
+        )
+    return variables
+
+
+def _coordinates_off_time(data: xr.Dataset) -> dict[str, Any]:
+    """Every coordinate of *data* that does not depend on ``time``, to carry over as is."""
+    return {
+        str(name): coord.variable
+        for name, coord in data.coords.items()
+        if TIME_DIMENSION not in coord.dims and BOUNDS_DIMENSION not in coord.dims
+    }
+
+
+def _on_calendar_cells_only(ds: xr.Dataset) -> bool:
+    """Whether *ds* has none of the interval coordinates, and so only its labels to go on."""
+    return not any(name in ds.coords for name in (*_INTERVAL_COORDINATES, "time_bounds"))
+
+
+def _require_time_layout(ds: xr.Dataset) -> None:
+    needed = (TIME_DIMENSION, *_INTERVAL_COORDINATES)
+    missing = [c for c in needed if c not in ds.coords]
+    if missing or TIME_DIMENSION not in ds.dims:
+        raise ValueError(
+            f"Dataset lacks the pySIPNET time coordinates {missing}. resample() needs the "
+            "layout SIPNETOutput.xarray, SIPNETOutput.select or ClimateDrivers.xarray produce: "
+            "'time' at the step end with 'time_step_start' and 'time_step_length' alongside. "
+            "A record with none of the interval coordinates resamples on calendar cells."
+        )
+    if BOUNDS_DIMENSION in ds.dims and "time_bounds" not in ds.coords:
+        raise ValueError("Dataset has a 'bounds' dimension but no 'time_bounds' coordinate.")
+    expected_dtype = {TIME_DIMENSION: "M", "time_step_start": "M", "time_step_length": "m"}
+    mistyped = {
+        name: str(ds[name].dtype)
+        for name, kind in expected_dtype.items()
+        if ds[name].dtype.kind != kind
+    }
+    if mistyped:
+        raise ValueError(
+            f"The time coordinates have dtypes {mistyped}: 'time' and 'time_step_start' must "
+            "be datetime64 and 'time_step_length' timedelta64, as pySIPNET builds them. A "
+            "length in days is converted with pysipnet.dataset.days_to_timedelta."
+        )
+    # Order is not checked: a transposed time_bounds is rebuilt, never read.
+    _require_intervals_on_time_alone(ds, {"time_bounds": {TIME_DIMENSION, BOUNDS_DIMENSION}})
+
+
+def _require_intervals_on_time_alone(
+    data: xr.Dataset | xr.DataArray, also: Mapping[str, set[str]] | None = None
+) -> None:
+    expected = {name: {TIME_DIMENSION} for name in _INTERVAL_COORDINATES} | dict(also or {})
+    offenders = {
+        name: tuple(map(str, data[name].dims))
+        for name, dims in expected.items()
+        if name in data.coords and set(data[name].dims) != dims
+    }
+    if offenders:
+        raise ValueError(
+            f"The interval coordinates vary along more than time: {offenders}. xarray gives "
+            "them an extra dimension when runs on different time axes are concatenated, and "
+            "then the runs no longer share one set of cells. Resample each run, or each "
+            "site, separately; resample() drops the padding rows that selecting one leaves."
+        )
+
+
+def _drop_padding(data: _Xarray, valued: Callable[[Any], list[str]]) -> _Xarray:
+    """*data* without its padding rows; *valued* names what holds a value on given rows.
+
+    :func:`resample` consults only the variables it was asked for, so that one
+    it will not return cannot refuse the call.
+    """
+    present = [name for name in _INTERVAL_COORDINATES if name in data.coords]
+    if not present:
+        return data
+    _require_intervals_on_time_alone(data)
+    no_interval = np.zeros(data.sizes[TIME_DIMENSION], dtype=bool)
+    for name in present:
+        no_interval |= np.isnat(data[name].values)
     if not no_interval.any():
-        return ds
-    rows = ds.isel({TIME_DIMENSION: no_interval})
-    with_values = [name for name in names if bool(rows[name].notnull().any())]
+        return data
+    with_values = valued(data.isel({TIME_DIMENSION: no_interval}))
     if with_values:
         raise ValueError(
             f"{with_values} have values on {int(no_interval.sum())} rows whose "
@@ -412,31 +629,27 @@ def _only_real_steps(ds: xr.Dataset, names: list[str]) -> xr.Dataset:
             "Every row's time_step_start or time_step_length is NaT, so there is no step "
             "to resample; a selection from a stack of runs matched a run with no record."
         )
-    return ds.isel({TIME_DIMENSION: ~no_interval})
+    return data.isel({TIME_DIMENSION: ~no_interval})
+
+
+def _valued_among(names: list[str]) -> Callable[[xr.Dataset], list[str]]:
+    """Which of the variables *names* hold a value somewhere on the rows given."""
+    return lambda rows: [name for name in names if bool(rows[name].notnull().any())]
 
 
 def _check_not_upsampling(
-    freq: str, offset: BaseOffset, cell_ends: np.ndarray, length_ns: np.ndarray
+    freq: str, offset: BaseOffset, cell_ends: np.ndarray, shortest_step_ns: int
 ) -> None:
-    """Refuse a *freq* whose every cell is shorter than the shortest step.
-
-    Each step lands in a cell of its own then, so the result is the input under
-    a label that says it was resampled to *freq*.  The longest cell is measured
-    on the record's own cells, so calendar periods of varying length are
-    compared as they fall.  Equal lengths pass, to within the time axis's own
-    :data:`~pysipnet.dataset.STEP_TOLERANCE`: hourly data declared as
-    ``0.0416667`` days resamples to ``"1h"`` as itself.
-    """
+    """The rule of :func:`check_not_upsampling`, on cells and a step already measured."""
     first_edge = (pd.Timestamp(cell_ends[0]) - offset).to_datetime64().astype("datetime64[ns]")
     edges = np.concatenate([[first_edge], cell_ends]).astype("int64")
     longest_cell = int(np.diff(edges).max())
-    shortest_step = int(length_ns.min())
     tolerance = int(STEP_TOLERANCE.astype("timedelta64[ns]").astype("int64"))
-    if shortest_step > longest_cell + tolerance:
+    if shortest_step_ns > longest_cell + tolerance:
         raise ValueError(
             f"freq={freq!r} makes cells of at most {pd.Timedelta(longest_cell, 'ns')}, shorter "
-            f"than the shortest step in the data ({pd.Timedelta(shortest_step, 'ns')}). Every "
-            "step would land in a cell of its own and come back unchanged, labeled as "
+            f"than the shortest step in the data ({pd.Timedelta(shortest_step_ns, 'ns')}). "
+            "Every step would land in a cell of its own and come back unchanged, labeled as "
             f"resampled to {freq!r}. Pass a frequency at least as long as the steps."
         )
 
@@ -452,8 +665,7 @@ def _cell_of_each_step(ds: xr.Dataset, cell_ends: np.ndarray, counts: np.ndarray
     """
     ends = ds[TIME_DIMENSION].values.astype("datetime64[ns]")
     cell = np.searchsorted(cell_ends, ends, "left")
-    # xarray reports an empty cell's count as NaN, not 0.
-    if not np.array_equal(np.bincount(cell, minlength=cell_ends.size), np.nan_to_num(counts)):
+    if not np.array_equal(np.bincount(cell, minlength=cell_ends.size), counts):
         raise RuntimeError(
             "pySIPNET's cell assignment disagrees with xarray's resample grouping, so the "
             "combined lengths would not describe the combined values. Please report this."
@@ -472,8 +684,10 @@ def _summed_lengths(cell: np.ndarray, n_cells: int, length_ns: np.ndarray) -> np
     return totals
 
 
-def _methods_for(ds: xr.Dataset, how: str | Mapping[str, str]) -> dict[str, str]:
-    """Resolve *how* into one validated method per variable to keep."""
+def _methods_for(
+    ds: xr.Dataset, how: str | Mapping[str, str]
+) -> dict[str, tuple[str, VariableKind]]:
+    """Resolve *how* into one validated method per variable to keep, with its kind."""
     if isinstance(how, str):
         requested = {str(name): how for name in ds.data_vars}
     elif isinstance(how, Mapping):
@@ -482,8 +696,9 @@ def _methods_for(ds: xr.Dataset, how: str | Mapping[str, str]) -> dict[str, str]
         if unknown:
             raise KeyError(
                 f"{unknown} are not data variables of this Dataset; it has "
-                f"{list(map(str, ds.data_vars))}. Variable names are the registry names "
-                "('net_ecosystem_exchange', not 'nee'); select by alias before resampling."
+                f"{list(map(str, ds.data_vars))}. The keys of how are the Dataset's own "
+                "variable names, which for pySIPNET output are the registry names "
+                "('net_ecosystem_exchange', not 'nee')."
             )
     else:
         raise TypeError(
@@ -491,48 +706,125 @@ def _methods_for(ds: xr.Dataset, how: str | Mapping[str, str]) -> dict[str, str]
             f"not {type(how).__name__}."
         )
 
+    methods: dict[str, tuple[str, VariableKind]] = {}
     for name, method in requested.items():
-        check_resampling_method(_kind_of(ds, name), method, name=name)
+        kind = variable_kind(ds[name])
+        check_resampling_method(kind, method, name=name)
         if TIME_DIMENSION not in ds[name].dims:
             raise ValueError(
                 f"{name!r} has dims {tuple(map(str, ds[name].dims))} and no {TIME_DIMENSION!r}, "
                 "so there is nothing to resample; leave it out of how."
             )
-    return requested
+        methods[name] = (method, kind)
+    if not methods:
+        raise ValueError("Nothing to resample: the Dataset has no data variables.")
+    return methods
 
 
-def _kind_of(ds: xr.Dataset, name: str) -> VariableKind:
-    """The variable's kind, from its attributes or, failing that, the registries."""
-    value = ds[name].attrs.get("kind")
-    if value is not None:
-        return _as_kind(value, name)
-    spec = OUTPUT_VARIABLES_BY_NAME.get(name) or CLIMATE_VARIABLES_BY_NAME.get(name)
-    if spec is not None:
-        return spec.kind
-    raise ValueError(
-        f"Cannot resample {name!r}: neither its attributes nor the variable registry say "
-        "what kind of quantity it is. Set attrs['kind'] to one of "
-        f"{[k.value for k in VariableKind]} so the method can be checked against it."
+# ── Records without interval coordinates ─────────────────────────────────────
+
+
+def _resample_on_calendar_cells(
+    ds: xr.Dataset, freq: str, how: str | Mapping[str, str]
+) -> xr.Dataset:
+    """:func:`resample` for a record with ``time`` labels and no interval coordinates."""
+    import xarray as xr
+
+    _require_increasing_labels(ds)
+    offset = check_frequency(freq)
+    methods = _methods_for(ds, how)
+    spacing = np.diff(_labels_ns(ds))
+    averaged = [name for name, (method, _) in methods.items() if method == "mean"]
+    tolerance = int(STEP_TOLERANCE.astype("timedelta64[ns]").astype("int64"))
+    if averaged and spacing.size and int(spacing.max() - spacing.min()) > tolerance:
+        raise ValueError(
+            f"Cannot average {averaged} over calendar cells: the record has no "
+            "time_step_length to weight its steps by, and its time labels are not equally "
+            f"spaced (gaps from {pd.Timedelta(int(spacing.min()), 'ns')} to "
+            f"{pd.Timedelta(int(spacing.max()), 'ns')}), so an equally weighted mean would "
+            "weigh short steps as much as long ones. Attach time_step_start and "
+            "time_step_length, or resample a record that carries them."
+        )
+    cell_ends, n_steps = _steps_per_cell(ds, freq)
+    if spacing.size:
+        _check_not_upsampling(freq, offset, cell_ends, int(spacing.min()))
+    keep = n_steps > 0
+    equal_weights = _as_data_array(np.ones(ds.sizes[TIME_DIMENSION]), ds)
+    combined = _combined(ds, freq, methods, equal_weights, keep)
+
+    coords: dict[str, Any] = {
+        TIME_DIMENSION: (
+            TIME_DIMENSION,
+            cell_ends[keep],
+            {
+                **TIME_AXIS_ATTRIBUTES,
+                "long_name": "End of calendar cell",
+                "description": (
+                    f"The right edge of the calendar cell of {freq} the values were combined "
+                    "over, on the input's clock. The record says nothing about where its "
+                    "steps end, so the last one in a cell may end before its edge, and the "
+                    "first and last cells may be only partly covered."
+                ),
+                "time_zone": ds[TIME_DIMENSION].attrs.get("time_zone", TIME_ZONE_UNDECLARED),
+            },
+        ),
+        **_coordinates_off_time(ds),
+    }
+    data_vars = _resampled_variables(
+        ds,
+        combined,
+        methods,
+        over=f"over calendar cells of {freq}, labeled at each cell's right edge",
+        weighting="weighted equally",
     )
+    attrs = dict(ds.attrs)
+    # Whatever axis the record had, these no longer describe the calendar cells.
+    for stale in ("time_axis_source", "time_step_length_source"):
+        attrs.pop(stale, None)
+    attrs["time_convention"] = (
+        f"'time' is the right edge of each right-closed calendar cell of {freq}; the "
+        "record has no step intervals, so the cells' coverage is not recorded."
+    )
+    attrs["resampling_frequency"] = freq
+    return unfilled_coordinates(xr.Dataset(data_vars, coords=coords, attrs=attrs))
 
 
-def _resampled_attrs(
-    attrs: Mapping[str, Any], kind: VariableKind, method: str, freq: str
-) -> dict[str, Any]:
-    new_kind = RESAMPLED_KIND[(kind, method)]
-    out = dict(attrs)
-    out["kind"] = new_kind.value
-    out["time_reference"] = TIME_REFERENCE_FOR_KIND[new_kind]
-    cell_methods = CELL_METHODS_FOR_KIND[new_kind]
-    if cell_methods is None:
-        out.pop("cell_methods", None)
-    else:
-        out["cell_methods"] = cell_methods
-    weighting = ", weighted by time_step_length" if method == "mean" else ""
-    out["resampling"] = f"{method} of {kind.value} values over {freq}{weighting}"
-    # The file's printf precision no longer describes the combined value.
-    out.pop("output_decimals", None)
-    return out
+def _require_increasing_labels(ds: xr.Dataset | xr.DataArray) -> None:
+    """A record's ``time`` labels are datetimes that strictly increase, and there are some."""
+    if TIME_DIMENSION not in ds.dims or TIME_DIMENSION not in ds.coords:
+        raise ValueError(
+            f"The data has no {TIME_DIMENSION!r} coordinate along a {TIME_DIMENSION!r} "
+            "dimension, so there is no time axis to resample."
+        )
+    labels = ds[TIME_DIMENSION].values
+    if labels.dtype.kind != "M":
+        raise ValueError(
+            f"'time' has dtype {labels.dtype}; resample() needs datetime64 labels to place "
+            "each step in a calendar cell."
+        )
+    if labels.size == 0:
+        raise ValueError("The record has no timesteps to resample.")
+    if np.isnat(labels).any():
+        raise ValueError(
+            f"{int(np.isnat(labels).sum())} 'time' labels are NaT, so which cell those rows "
+            "belong to is unknown."
+        )
+    spacing = np.diff(_labels_ns(ds))
+    if (spacing <= 0).any():
+        row = int(np.flatnonzero(spacing <= 0)[0]) + 1
+        raise ValueError(
+            f"The 'time' labels do not strictly increase: row {row} ({labels[row]}) does not "
+            f"follow row {row - 1} ({labels[row - 1]}). Sort the record, and drop or combine "
+            "duplicates; two rows sharing a label would be combined as though they were "
+            "consecutive steps."
+        )
 
 
-__all__ = ["check_resampling_method", "resample"]
+__all__ = [
+    "check_frequency",
+    "check_not_upsampling",
+    "check_resampling_method",
+    "drop_padding",
+    "resample",
+    "resampled_attributes",
+]

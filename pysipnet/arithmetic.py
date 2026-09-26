@@ -108,6 +108,7 @@ from pysipnet.variables import (
     KIND_AFTER_TIME_POWER,
     TIME_REFERENCE_FOR_KIND,
     VariableKind,
+    parse_variable_kind,
 )
 
 Operand: TypeAlias = xr.DataArray | float | np.integer[Any] | np.floating[Any]
@@ -304,13 +305,9 @@ def _labeled(operand: Any, what: str) -> _Labeled:
             raise ValueError(f"{what}(): {exc}{hint}") from None
         raw_kind = operand.attrs.get("kind")
         try:
-            kind = VariableKind(raw_kind) if raw_kind is not None else None
-        except ValueError:
-            valid = ", ".join(repr(k.value) for k in VariableKind)
-            raise ValueError(
-                f"{what}(): {label} has a 'kind' attribute of {raw_kind!r}, which is not one "
-                f"of pySIPNET's kinds ({valid})."
-            ) from None
+            kind = parse_variable_kind(raw_kind, name=label) if raw_kind is not None else None
+        except ValueError as exc:
+            raise ValueError(f"{what}(): {exc}") from None
         if kind is VariableKind.TIMESTEP_START_COORDINATE:
             raise ValueError(
                 f"{what}(): {label} is a time coordinate, not a quantity; it does not enter "

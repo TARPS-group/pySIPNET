@@ -87,6 +87,7 @@ from pysipnet.variables import (
     OUTPUT_VARIABLES,
     resolve_climate_variable,
     resolve_output_variable,
+    variable_kind,
 )
 
 # Version
@@ -125,6 +126,7 @@ __all__ = [
     "CLIMATE_VARIABLES",
     "resolve_output_variable",
     "resolve_climate_variable",
+    "variable_kind",
     # Climate
     "ClimateDrivers",
     # Events

@@ -537,6 +537,10 @@ reaches a likelihood, **selecting such a variable by name raises** — `result.o
 on a run without `litter_pool` tells you which flag to turn on rather than
 handing back the zeros. `.pandas` and `.xarray` still contain the column, being
 a faithful view of the file.
+[`check_variable_is_written`][pysipnet.variables.check_variable_is_written]
+is the same check on its own, for refusing such a variable before any run
+exists: `check_variable_is_written("litter_carbon", ModelFlags.standard())`
+raises the same error.
 SIPNET checks its own carbon and nitrogen closure but reports the result as a
 log warning rather than an output column, so a failed check appears in
 `result.provenance.stderr`.
@@ -610,7 +614,10 @@ ds.to_netcdf("run.nc")  # self-describing on disk; needs a netCDF backend
 interval each value covers, which is what you need in order to decide how
 measurements over some other interval line up with model steps. It adds a second dimension,
 `bounds`, so `ds.sizes` reads `{'time': 365, 'bounds': 2}`; use `result.outputs.pandas`
-when you want a flat table. The Dataset declares `Conventions = "CF-1.11"`.
+when you want a flat table. A single variable, `result.outputs["nee"]`, carries
+`time_step_start` and `time_step_length` but cannot carry the two-dimensional
+`time_bounds`, so its `time` has no `bounds` attribute pointing at it. The
+Dataset declares `Conventions = "CF-1.11"`.
 Writing it needs a netCDF backend that stores 64-bit integers (`h5netcdf` or
 `netCDF4`); the netCDF3 backend built into scipy cannot hold nanosecond times.
 
@@ -664,6 +671,44 @@ daily record resamples to itself.
 `freq` must be at least as long as the steps: `"1h"` on Niwot's 7- and
 17-hour steps is refused rather than returning the input relabeled.
 
+A variable's kind comes from its `kind` attribute, or failing that from the
+registries by name or alias
+([`variable_kind`][pysipnet.variables.variable_kind]), so a variable you have
+named `"nee"` resamples as a total. One with neither must be given a `kind`
+before it can be resampled.
+
+#### Records without step intervals
+
+An observation record usually has `time` labels and nothing else: no
+`time_step_start` or `time_step_length` saying where each measurement's
+interval began. `resample` takes it anyway, on calendar cells alone:
+
+```python
+import pandas as pd
+import xarray as xr
+
+observed = xr.Dataset(
+    {"nee": ("time", tower_nee, {"kind": "timestep_total", "units": "g m-2"})},
+    coords={"time": pd.date_range("2020-01-01 00:30", periods=len(tower_nee), freq="30min")},
+)
+daily = resample(observed, "1D", how="sum")
+```
+
+With nothing to say where the steps end, each cell is labeled at its right
+edge, and the result has no interval coordinates either; each variable's
+`resampling` attribute says it was combined over calendar cells. Such a
+record's first and last cells may be only partly covered, and nothing in the
+result says so, so drop them yourself if a partial total would mislead.
+`"sum"` and `"last"` work on any strictly increasing labels. `"mean"` has no
+step lengths to weight by, so it weighs every step equally, and is refused
+unless the labels are equally spaced. The kind check and the refusal to
+upsample (measured on the gaps between labels) are the same as for model
+output.
+
+On both paths a cell holding a `NaN` is `NaN` under `"sum"` and `"mean"`.
+`"last"` is the cell's last value, so it is `NaN` only when that value is; to
+flag a cell with a gap anywhere in it, count the missing values yourself.
+
 #### Ensembles and stacks of sites
 
 `resample` reduces over `time` only, so an ensemble or a stack of sites
@@ -694,13 +739,32 @@ run separately. Selecting one run out of such a stack leaves rows of padding,
 whose start and length are `NaT` and whose values are all missing, and
 `resample` drops them. A row that has a value but no start or length is
 refused instead, since there is no telling which cell it belongs to.
+`result.outputs["nee"]` and `resample` of a DataArray drop the `bounds`
+attribute their `time_bounds`-less `time` would otherwise carry.
 
-[`check_resampling_method`][pysipnet.resample.check_resampling_method] is the
-check `resample` applies to each variable, for code that combines steps some
-other way and wants to refuse a meaningless method in the same words:
+#### The same rules, for your own reductions
+
+`resample` is built from checks that are public on their own, for code that
+combines steps some other way (over arbitrary windows, with `min` or `max`)
+and wants the same refusals in the same words:
+
+| Function | What it does |
+|:---------|:-------------|
+| [`check_resampling_method`][pysipnet.resample.check_resampling_method] | refuses a method the variable's kind does not admit |
+| [`check_frequency`][pysipnet.resample.check_frequency] | refuses a `freq` that is not a positive pandas offset, before any data exists |
+| [`check_not_upsampling`][pysipnet.resample.check_not_upsampling] | refuses a `freq` finer than the data's steps |
+| [`drop_padding`][pysipnet.resample.drop_padding] | drops the padding rows of a stack, refusing a valued row with no interval |
+| [`resampled_attributes`][pysipnet.resample.resampled_attributes] | rewrites `kind`, `time_reference` and `cell_methods` for a combined value |
+| [`variable_kind`][pysipnet.variables.variable_kind] | the kind all of these start from, by attribute or registry |
 
 ```python
 from pysipnet import check_resampling_method
+from pysipnet.resample import check_frequency
+
+check_frequency("M")
+# ValueError: freq must be a pandas offset alias such as '1D', 'MS' or 'YS',
+# not 'M': Invalid frequency: M. ... 'M' is no longer supported for offsets.
+# Please use 'ME' instead.
 
 check_resampling_method("timestep_end_state", "sum", name="wood_carbon")
 # ValueError: Cannot resample 'wood_carbon' with 'sum': it is a pool reported at ...

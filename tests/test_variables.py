@@ -24,6 +24,8 @@ import pytest
 
 from pysipnet.io.reference import niwot_reference_files
 from pysipnet.variables import (
+    _ALIAS_INDEX,
+    _CLIMATE_ALIAS_INDEX,
     LEGACY_OUTPUT_COLUMNS,
     NAME_PATTERN,
     OUTPUT_VARIABLES,
@@ -32,9 +34,13 @@ from pysipnet.variables import (
     TIME_COORDINATE_NAMES,
     VariableKind,
     VariableSpec,
+    check_variable_is_written,
     output_variable_records,
+    parse_variable_kind,
     resolve_output_variable,
     resolve_output_variable_names,
+    variable_kind,
+    variable_label,
 )
 
 GOLDEN = niwot_reference_files().output
@@ -703,3 +709,104 @@ def test_select_returns_the_format_it_was_asked_for():
     assert out.select(["nee"]).identical(out[["nee"]])
     with pytest.raises(ValueError, match="'xarray' or 'pandas'"):
         out.select(["nee"], format="dataframe")
+
+
+# ── Kind lookup and the flag check ───────────────────────────────────────────
+
+
+def test_the_registries_agree_on_the_kind_of_every_name_they_share():
+    shared = set(_ALIAS_INDEX) & set(_CLIMATE_ALIAS_INDEX)
+    assert shared, "the time columns are in both"
+    for key in shared:
+        assert _ALIAS_INDEX[key].kind == _CLIMATE_ALIAS_INDEX[key].kind, key
+
+
+@pytest.mark.parametrize(
+    ("name", "kind"),
+    [
+        ("net_ecosystem_exchange", VariableKind.TIMESTEP_TOTAL),
+        ("nee", VariableKind.TIMESTEP_TOTAL),
+        ("NEE", VariableKind.TIMESTEP_TOTAL),
+        ("plantWoodC", VariableKind.TIMESTEP_END_STATE),
+        ("cumNEE", VariableKind.CUMULATIVE),
+        ("air_temperature", VariableKind.TIMESTEP_MEAN),
+        ("tair", VariableKind.TIMESTEP_MEAN),
+        ("precipitation", VariableKind.TIMESTEP_TOTAL),
+    ],
+)
+def test_a_kind_is_found_by_name_or_alias_in_either_registry(name, kind):
+    assert variable_kind(name) is kind
+
+
+def test_a_kind_attribute_wins_over_the_registry():
+    import xarray as xr
+
+    named = xr.DataArray([1.0], dims="time", name="nee")
+    assert variable_kind(named) is VariableKind.TIMESTEP_TOTAL
+    declared = named.assign_attrs(kind="timestep_mean")
+    assert variable_kind(declared) is VariableKind.TIMESTEP_MEAN
+    unnamed = declared.rename(None)
+    assert variable_kind(unnamed) is VariableKind.TIMESTEP_MEAN
+
+
+def test_a_datetime_time_coordinate_is_not_taken_for_sipnets_hour_column():
+    from pysipnet.io.reference import niwot_reference_output
+
+    time = niwot_reference_output().xarray["time"]
+    assert variable_kind("time") is VariableKind.TIMESTEP_START_COORDINATE
+    assert variable_kind(time, default=None) is None
+
+
+def test_an_unknown_kind_raises_unless_a_default_is_given():
+    import xarray as xr
+
+    with pytest.raises(ValueError, match="'mystery'.*attrs\\['kind'\\]"):
+        variable_kind("mystery")
+    with pytest.raises(ValueError, match="quantity 'array' is"):
+        variable_kind(xr.DataArray([1.0], dims="time"))
+    derived = xr.DataArray([1.0], dims="time", attrs={"derivation": "nee / time_step_length"})
+    assert variable_label(derived) == "nee / time_step_length"
+    with pytest.raises(ValueError, match="quantity 'nee / time_step_length' is"):
+        variable_kind(derived)
+    assert variable_kind("mystery", default=None) is None
+    assert variable_kind(xr.DataArray([1.0]), default="?") == "?"
+
+
+def test_an_invalid_kind_attribute_raises_even_with_a_default():
+    import xarray as xr
+
+    flux = xr.DataArray([1.0], dims="time", name="nee", attrs={"kind": "flux"})
+    with pytest.raises(ValueError, match="'nee' has kind 'flux', which is not one of"):
+        variable_kind(flux, default=None)
+    with pytest.raises(ValueError, match="'x' has kind 'flux'"):
+        parse_variable_kind("flux", name="x")
+    assert parse_variable_kind("cumulative", name="x") is VariableKind.CUMULATIVE
+
+
+def test_a_variable_a_flag_leaves_at_zero_is_refused_by_name_or_alias():
+    from pysipnet.parameters.model import ModelFlags
+
+    standard = ModelFlags.standard()
+    for name in ("litter_carbon", "litter_c", "litter"):
+        with pytest.raises(ValueError, match="'litter_carbon' is constant zero.*'litter_pool'"):
+            check_variable_is_written(name, standard)
+    check_variable_is_written("litter_carbon", standard.model_copy(update={"litter_pool": True}))
+    check_variable_is_written("nee", standard)
+
+
+def test_the_flag_check_passes_legacy_columns_and_refuses_unknown_names():
+    from pysipnet.parameters.model import ModelFlags
+
+    for legacy, name in LEGACY_OUTPUT_COLUMNS.items():
+        check_variable_is_written(legacy, ModelFlags.standard())
+        check_variable_is_written(name, ModelFlags.standard())
+    with pytest.raises(KeyError, match="not a SIPNET output variable"):
+        check_variable_is_written("mystery", ModelFlags.standard())
+
+
+@pytest.mark.parametrize("spec", [s for s in OUTPUT_VARIABLES if s.requires_flag], ids=str)
+def test_every_flag_dependent_variable_is_refused_without_its_flag(spec: VariableSpec):
+    from pysipnet.parameters.model import ModelFlags
+
+    with pytest.raises(ValueError, match=spec.requires_flag):
+        check_variable_is_written(spec.name, ModelFlags.standard())

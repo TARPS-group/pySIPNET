@@ -97,7 +97,12 @@ the placement of the boundary is.
 variables gives a Dataset whose ``data_vars`` are exactly what was asked for.
 The cost is a second dimension, ``bounds``, which appears in ``ds.sizes`` and
 makes ``ds.to_dataframe()`` produce two rows per timestep; use the container's
-``.pandas`` view for a flat frame.
+``.pandas`` view for a flat frame.  A single variable cannot carry it either:
+``ds["nee"]`` keeps ``time``'s attributes, ``bounds`` included, but not the
+two-dimensional ``time_bounds`` they name.  The DataArrays pySIPNET hands back
+(``output["nee"]``, :func:`~pysipnet.resample.resample` of a DataArray) drop
+the attribute; :func:`without_absent_bounds` does the same for one taken with
+plain xarray indexing.
 
 Every data variable carries the attributes its registry spec provides,
 including ``kind`` and ``time_reference`` in words.  The Dataset declares
@@ -109,7 +114,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import numpy as np
 
@@ -121,8 +126,13 @@ if TYPE_CHECKING:
 
     from pysipnet.climate import ClimateDrivers
 
+_Xarray = TypeVar("_Xarray", "xr.DataArray", "xr.Dataset")
+
 TIME_DIMENSION = "time"
 BOUNDS_DIMENSION = "bounds"
+
+TIME_AXIS_ATTRIBUTES: dict[str, str] = {"standard_name": "time", "axis": "T"}
+"""What identifies ``time`` as the time axis to Climate and Forecast readers."""
 
 CF_CONVENTIONS = "CF-1.11"
 
@@ -431,8 +441,7 @@ def assemble_time_coords(
             TIME_DIMENSION,
             end,
             {
-                "standard_name": "time",
-                "axis": "T",
+                **TIME_AXIS_ATTRIBUTES,
                 "long_name": "End of timestep",
                 "description": (
                     "Calendar time at the end of the timestep, on the climate drivers' clock: "
@@ -646,6 +655,25 @@ def unfilled_coordinates(ds: xr.Dataset) -> xr.Dataset:
     for name in ds.coords:
         ds[name].encoding["_FillValue"] = None
     return ds
+
+
+def without_absent_bounds(data: _Xarray) -> _Xarray:
+    """*data* without a ``bounds`` attribute on ``time`` that names a variable it lacks.
+
+    CF readers look the name up, so a ``bounds`` naming nothing is an error in
+    the file, not a harmless leftover.  Returns *data* itself when there is
+    nothing to drop, and otherwise a shallow copy, so the Dataset an array was
+    taken from keeps its own attribute.
+    """
+    if TIME_DIMENSION not in data.coords:
+        return data
+    bounds = data[TIME_DIMENSION].attrs.get("bounds")
+    # A Dataset may hold the bounds as a data variable; a DataArray only as a coordinate.
+    if bounds is None or bounds in getattr(data, "variables", data.coords):
+        return data
+    data = data.copy(deep=False)
+    del data[TIME_DIMENSION].attrs["bounds"]
+    return data
 
 
 def dataset_from_dataframe(

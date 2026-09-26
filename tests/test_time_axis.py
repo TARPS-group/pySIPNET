@@ -33,6 +33,7 @@ from pysipnet.dataset import (
     check_step_continuity,
     days_to_timedelta,
     timestep_start,
+    without_absent_bounds,
 )
 from pysipnet.io.reference import (
     niwot_reference_climate,
@@ -501,3 +502,27 @@ class TestRuns:
         shorter = climate.head(23)
         with pytest.raises(ValueError, match="24 rows but its climate drivers have 23"):
             _ = SIPNETOutput.from_path(result.outputs.source_path, climate=shorter).xarray
+
+
+# ── One variable cannot carry time_bounds ────────────────────────────────────
+
+
+def test_one_output_variable_names_no_bounds_it_cannot_carry():
+    output = niwot_reference_output()
+    nee = output["nee"]
+    assert "time_bounds" not in nee.coords
+    assert "bounds" not in nee["time"].attrs
+    assert {"time_step_start", "time_step_length"} <= set(nee.coords)
+    # Dropping it from one array leaves the cached Dataset's own attribute alone.
+    assert output.xarray["time"].attrs["bounds"] == "time_bounds"
+    assert "bounds" not in output["nee"]["time"].attrs
+    assert output[["nee"]]["time"].attrs["bounds"] == "time_bounds"
+
+
+def test_absent_bounds_are_dropped_and_present_ones_kept():
+    ds = niwot_reference_output().xarray
+    assert without_absent_bounds(ds) is ds
+    plain = ds["net_ecosystem_exchange"]
+    assert plain["time"].attrs["bounds"] == "time_bounds"
+    assert "bounds" not in without_absent_bounds(plain)["time"].attrs
+    assert plain["time"].attrs["bounds"] == "time_bounds"
