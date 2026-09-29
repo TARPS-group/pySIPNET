@@ -90,6 +90,9 @@ def params_for(minimal_params):
             data["respiration"]["growth_respiration_fraction"] = 0.25
         if flags.leaf_water:
             data["water"]["leaf_water_pool_depth"] = 0.05
+        # Left out when its flag is off, so the run shows SIPNET does not need it.
+        if not flags.water_hresp:
+            data["respiration"]["soil_respiration_moisture_exponent"] = None
         return type(minimal_params).model_validate(data)
 
     return _build

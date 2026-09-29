@@ -740,11 +740,13 @@ class RespirationParams(ParameterGroup):
     SIPNET param file convention. SIPNET divides by 365 internally. Their
     :class:`~pysipnet.parameters.base.ParameterSpec` has ``per_year=True``.
 
-    Litter parameters
-    ~~~~~~~~~~~~~~~~~
+    Flag-dependent parameters
+    ~~~~~~~~~~~~~~~~~~~~~~~~~
     ``litter_breakdown_rate`` and ``litter_respired_fraction`` are only
-    meaningful when ``ModelFlags.litter_pool`` is on. They may be ``None``
-    otherwise; the validator on :class:`SIPNETParameters` enforces this.
+    meaningful when ``ModelFlags.litter_pool`` is on, and
+    ``soil_respiration_moisture_exponent`` only when ``ModelFlags.water_hresp``
+    is. They may be ``None`` otherwise;
+    :meth:`SIPNETParameters.validate_for_flags` enforces this.
     """
 
     base_wood_respiration_rate: float = param_field(
@@ -845,14 +847,15 @@ class RespirationParams(ParameterGroup):
         long_label="Soil respiration Q10",
         aliases=("soil_resp_q10",),
     )
-    soil_respiration_moisture_exponent: float = param_field(
+    soil_respiration_moisture_exponent: float | None = param_field(
         sipnet_name="soilRespMoistEffect",
         units="1",
         domain=_D.NON_NEGATIVE,
         description="Exponent of the soil-moisture dependence of heterotrophic respiration. "
-        "Only used when ModelFlags.water_hresp is on.",
+        "Required when ModelFlags.water_hresp is on.",
         long_label="Soil respiration moisture exponent",
         aliases=("soil_resp_moist_effect",),
+        default=None,
     )
     litter_breakdown_rate: float | None = param_field(
         sipnet_name="litterBreakdownRate",
@@ -1167,6 +1170,11 @@ class SIPNETParameters(BaseModel):
         if flags.leaf_water and self.water.leaf_water_pool_depth is None:
             errors.append(
                 "water.leaf_water_pool_depth is required when ModelFlags.leaf_water is True"
+            )
+        if flags.water_hresp and self.respiration.soil_respiration_moisture_exponent is None:
+            errors.append(
+                "respiration.soil_respiration_moisture_exponent is required when "
+                "ModelFlags.water_hresp is True"
             )
         if flags.litter_pool and self.respiration.litter_breakdown_rate is None:
             errors.append(

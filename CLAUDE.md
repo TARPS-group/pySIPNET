@@ -817,7 +817,11 @@ to SLA as `leafCSpWt = cFracLeaf / SLA`.
 ### Soil Respiration
 `baseSoilResp` (year⁻¹), `soilRespQ10`, `soilRespMoistEffect`, `litterBreakdownRate` (year⁻¹), `fracLitterRespired`
 
-`soilRespMoistEffect` is required when `water_hresp` is on (the default).
+`soilRespMoistEffect` is required when `water_hresp` is on (the default). It
+was required unconditionally in Python until PR #54; it is now optional and
+checked in `validate_for_flags`. `test_io.py` asserts that the reader's
+required set equals SIPNET's unconditional one exactly, so neither side can
+drift again.
 `litterBreakdownRate` and `fracLitterRespired` are required when `litter_pool`
 is on — off in `ModelFlags.standard()`, which is SIPNET's own default set.
 

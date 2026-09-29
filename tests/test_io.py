@@ -466,6 +466,17 @@ class TestReadParameters:
         path = _write_lines(tmp_path / "short.param", lines)
         assert read_parameters(path).respiration.growth_respiration_fraction == 0.0
 
+    def test_a_flag_dependent_parameter_may_be_absent(self, tmp_path, minimal_params):
+        """soilRespMoistEffect is needed only under water_hresp; without it the field is None."""
+        flags = ModelFlags(water_hresp=False)
+        data = minimal_params.model_dump()
+        data["respiration"]["soil_respiration_moisture_exponent"] = None
+        params = SIPNETParameters.model_validate(data)
+        path = tmp_path / "sipnet.param"
+        write_param_file(params, flags, path)
+        assert "soilRespMoistEffect" not in path.read_text()
+        assert read_parameters(path) == params
+
     def test_a_value_outside_its_domain_is_named_by_both_names(
         self, tmp_path, minimal_params, flags
     ):
@@ -567,6 +578,14 @@ class TestRequiredAgreesWithSipnet:
                 f"{python_path} ({spec.sipnet_name}) defaults to {info.default!r}; SIPNET "
                 f"{'requires' if required else 'does not require'} it unconditionally"
             )
+
+    def test_the_reader_requires_exactly_what_sipnet_requires_unconditionally(
+        self, unconditionally_required
+    ):
+        from pysipnet.io.param_io import _REQUIRED_FIELDS
+
+        required = {PYTHON_TO_SIPNET[f"{group}.{field}"] for group, field in _REQUIRED_FIELDS}
+        assert required == unconditionally_required
 
     def test_nothing_sipnet_requires_can_be_left_out(
         self, tmp_path, minimal_params, flags, unconditionally_required

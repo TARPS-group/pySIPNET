@@ -164,7 +164,8 @@ reads any other.
 #### Flag-dependent parameters
 
 `ModelFlags.standard()` turns on snow, degree-day leaf-out, and moisture-sensitive soil respiration.  This
-means `water.snow_melt_rate` and `phenology.leaf_on_growing_degree_days` are required.  Call
+means `water.snow_melt_rate`, `phenology.leaf_on_growing_degree_days` and
+`respiration.soil_respiration_moisture_exponent` are required.  Call
 `validate_for_flags` to catch mismatches before running:
 
 ```python

@@ -433,6 +433,11 @@ class TestValidateForFlags:
             (ModelFlags(leaf_water=True), "water", "leaf_water_pool_depth"),
             (ModelFlags(litter_pool=True), "respiration", "litter_breakdown_rate"),
             (ModelFlags(litter_pool=True), "respiration", "litter_respired_fraction"),
+            (
+                ModelFlags(water_hresp=True),
+                "respiration",
+                "soil_respiration_moisture_exponent",
+            ),
             (ModelFlags(gdd=True), "phenology", "leaf_on_growing_degree_days"),
             (ModelFlags(gdd=False, soil_phenol=True), "phenology", "leaf_on_soil_temperature"),
         ],
@@ -454,6 +459,13 @@ class TestValidateForFlags:
         """The complement: an off flag must not make its parameter required."""
         stripped = self._without(minimal_params, "water", "leaf_water_pool_depth")
         stripped.validate_for_flags(ModelFlags(leaf_water=False))
+
+    def test_moisture_exponent_is_not_demanded_without_water_hresp(self, minimal_params):
+        """SIPNET registers soilRespMoistEffect as required under ctx.waterHResp only."""
+        stripped = self._without(
+            minimal_params, "respiration", "soil_respiration_moisture_exponent"
+        )
+        stripped.validate_for_flags(ModelFlags(water_hresp=False))
 
     def test_all_missing_parameters_are_reported_together(self, minimal_params):
         """One round trip should surface every problem, not the first."""
