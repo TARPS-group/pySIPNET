@@ -296,12 +296,43 @@ class TestReaderAgreesWithSipnet:
             tmp_path, clim, self._replace(lines, "aMax", f"aMax {read_as}"), "as_read"
         )
         self._assert_same_output(misread, as_read)
-        with pytest.raises(ValueError, match="not a decimal number"):
+        with pytest.raises(ValueError, match="not a number"):
             read_parameters(path)
 
-    def test_sipnet_splits_a_long_line_and_the_reader_refuses(self, tmp_path, clim, lines):
-        comment = "! " + "word " * 60
+    @pytest.mark.parametrize(
+        "comment",
+        [
+            pytest.param("! " + "word " * 60, id="ascii"),
+            pytest.param("! " + "°C " * 70, id="multibyte-under-255-characters"),
+        ],
+    )
+    def test_sipnet_splits_a_long_line_and_the_reader_refuses(self, tmp_path, clim, lines, comment):
         run, path = self._both(tmp_path, clim, [*lines, comment], "long_line")
         assert "Unknown param" in run.log, "SIPNET read the comment's tail as a parameter"
-        with pytest.raises(ValueError, match="255-character"):
+        with pytest.raises(ValueError, match="255-byte"):
             read_parameters(path)
+
+    def test_a_hexadecimal_float_is_read_alike(self, tmp_path, clim, lines, minimal_params):
+        assert minimal_params.photosynthesis.max_photosynthesis_rate == 112.0
+        clean, _ = self._both(tmp_path, clim, lines, "clean")
+        hexed, path = self._both(
+            tmp_path, clim, self._replace(lines, "aMax", "aMax 0x1.cp6"), "hex"
+        )
+        assert hexed.returncode == 0, hexed.log
+        self._assert_same_output(clean, hexed)
+        assert read_parameters(path) == minimal_params
+
+    def test_sipnet_runs_on_an_overflowing_value_and_the_reader_refuses(
+        self, tmp_path, clim, lines
+    ):
+        run, path = self._both(tmp_path, clim, self._replace(lines, "aMax", "aMax 1e400"), "inf")
+        assert run.returncode == 0, run.log
+        with pytest.raises(ValueError, match="must be finite"):
+            read_parameters(path)
+
+    @pytest.mark.parametrize("name", ["leafOnDay", "leafOffDay"])
+    def test_a_leaf_day_of_zero_is_accepted_by_both(self, tmp_path, clim, lines, name):
+        kept = [line for line in lines if line.split()[0] != name]
+        run, path = self._both(tmp_path, clim, [*kept, f"{name} 0"], "zero")
+        assert run.returncode == 0, run.log
+        assert read_parameters(path).dataarray(name).item() == 0.0

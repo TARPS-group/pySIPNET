@@ -16,7 +16,6 @@ from pydantic import ValidationError
 
 from pysipnet.io.param_io import (
     PYTHON_TO_SIPNET,
-    SIPNET_REQUIRES_DESPITE_DEFAULT,
     SIPNET_TO_PYTHON,
     UnknownParameterWarning,
     _flatten,
@@ -269,15 +268,19 @@ class TestReadParamFileRefusals:
             pytest.param("waterDrainFrac 1\nwaterDrainFrac 2\n", "already set", id="dup-unmodeled"),
             pytest.param("aMax\n", "has no value", id="no-value"),
             pytest.param("aMax ! 112\n", "has no value", id="value-commented-out"),
-            pytest.param("aMax abc\n", "not a decimal number", id="word"),
-            pytest.param("aMax 8.3x\n", "not a decimal number", id="trailing-garbage"),
-            pytest.param("aMax 1_000\n", "not a decimal number", id="python-underscore"),
-            pytest.param("aMax 0x10\n", "not a decimal number", id="hex"),
+            pytest.param("aMax abc\n", "not a number", id="word"),
+            pytest.param("aMax 8.3x\n", "not a number", id="trailing-garbage"),
+            pytest.param("aMax 1_000\n", "not a number", id="python-underscore"),
+            pytest.param("aMax 0x\n", "not a number", id="hex-without-digits"),
             pytest.param("aMax nan\n", "must be finite", id="nan"),
             pytest.param("aMax -inf\n", "must be finite", id="inf"),
+            pytest.param("aMax 1e400\n", "must be finite", id="overflow"),
+            pytest.param("aMax -0x1p2000\n", "must be finite", id="hex-overflow"),
+            pytest.param("aMax 1p3\n", "not a number", id="hex-exponent-without-prefix"),
             pytest.param("aMax 1" + "0" * 40 + "\n", "overflows", id="long-value"),
             pytest.param("x" * 64 + " 1\n", "overflows", id="long-name"),
-            pytest.param("aMax 1 !" + "!" * 260 + "\n", "255-character", id="long-line"),
+            pytest.param("aMax 1 !" + "!" * 260 + "\n", "255-byte", id="long-line"),
+            pytest.param("aMax 1 ! " + "°" * 200 + "\n", "409 bytes", id="long-in-bytes"),
         ],
     )
     def test_refused(self, tmp_path, contents, message):
@@ -294,11 +297,26 @@ class TestReadParamFileRefusals:
         path.write_text(line + "!" * (255 - len(line)) + "\n")
         assert read_param_file(path) == {"aMax": 1.0}
 
-    @pytest.mark.parametrize("token", ["1", "-1", "+1.5", ".5", "5.", "1e3", "1.5E-2"])
+    @pytest.mark.parametrize("token", ["1", "-1", "+1.5", ".5", "5.", "1e3", "1.5E-2", "1e-400"])
     def test_decimal_forms_are_read(self, tmp_path, token):
         path = tmp_path / "test.param"
         path.write_text(f"aMax {token}\n")
         assert read_param_file(path) == {"aMax": float(token)}
+
+    @pytest.mark.parametrize(
+        ("token", "value"),
+        [("0x1p3", 8.0), ("0X1.cp6", 112.0), ("-0x.8", -0.5), ("0x10", 16.0)],
+    )
+    def test_hexadecimal_floats_are_read_as_strtod_reads_them(self, tmp_path, token, value):
+        path = tmp_path / "test.param"
+        path.write_text(f"aMax {token}\n")
+        assert read_param_file(path) == {"aMax": value}
+
+    def test_a_comment_in_any_encoding_is_read(self, tmp_path):
+        """SIPNET reads bytes; a Latin-1 degree sign in a comment is nothing to it."""
+        path = tmp_path / "test.param"
+        path.write_bytes(b"aMax 112 ! at 20 \xb0C\n")
+        assert read_param_file(path) == {"aMax": 112.0}
 
     def test_tab_and_space_delimited(self, tmp_path):
         path = tmp_path / "test.param"
@@ -442,7 +460,10 @@ class TestReadParameters:
         assert "aMax (photosynthesis.max_photosynthesis_rate)" in message
         assert "soilWHC (water.soil_water_holding_capacity)" in message
 
-    @pytest.mark.parametrize("python_path", SIPNET_REQUIRES_DESPITE_DEFAULT)
+    @pytest.mark.parametrize(
+        "python_path",
+        ["initial_conditions.litter_carbon", "initial_conditions.snow_water_equivalent"],
+    )
     def test_a_default_is_not_filled_in_where_sipnet_requires_the_name(
         self, tmp_path, minimal_params, flags, python_path
     ):
@@ -477,6 +498,19 @@ class TestReadParameters:
         assert "soilRespMoistEffect" not in path.read_text()
         assert read_parameters(path) == params
 
+    @pytest.mark.parametrize("name", ["leafOffDay", "leafOnDay"])
+    def test_a_leaf_day_of_zero_switches_the_trigger_off_and_is_read(
+        self, tmp_path, minimal_params, flags, name
+    ):
+        lines = [
+            line
+            for line in _written_lines(minimal_params, flags, tmp_path)
+            if line.split()[0] != name
+        ]
+        path = _write_lines(tmp_path / "zero.param", [*lines, f"{name} 0"])
+        params = read_parameters(path)
+        assert params.dataarray(name).item() == 0.0
+
     def test_a_value_outside_its_domain_is_named_by_both_names(
         self, tmp_path, minimal_params, flags
     ):
@@ -509,6 +543,16 @@ class TestReadParameters:
 
 
 class TestUnknownParameterWarning:
+    @pytest.mark.parametrize(
+        "read", [read_parameters, SIPNETParameters.from_param_file], ids=["function", "method"]
+    )
+    def test_the_warning_names_the_caller_s_line(self, tmp_path, minimal_params, flags, read):
+        lines = [*_written_lines(minimal_params, flags, tmp_path), "microbeInit 0.5"]
+        path = _write_lines(tmp_path / "extra.param", lines)
+        with pytest.warns(UnknownParameterWarning) as record:
+            read(path)
+        assert record[0].filename == __file__
+
     def _read_with_extra(self, tmp_path, params, flags, extra):
         lines = [*_written_lines(params, flags, tmp_path), *extra]
         path = _write_lines(tmp_path / "extra.param", lines)
@@ -550,54 +594,26 @@ class TestUnknownParameterWarning:
 
 
 class TestRequiredAgreesWithSipnet:
-    """The reader requires what SIPNET requires unconditionally, and no default hides it."""
+    """The reader requires exactly what SIPNET requires unconditionally, and no default hides it."""
 
-    @pytest.fixture(scope="class")
-    def unconditionally_required(self) -> set[str]:
-        source = Path(__file__).parent.parent / "sipnet" / "src" / "sipnet" / "sipnet.c"
-        if not source.exists():
-            pytest.skip("SIPNET submodule not populated")
-        pattern = re.compile(r'initializeOneModelParam\(\s*\w+\s*,\s*"(\w+)",[^;]*,\s*1\s*\);')
-        names = set(pattern.findall(source.read_text()))
-        assert names, "no unconditional registrations found; has the C API changed?"
-        return names
-
-    def test_every_field_with_a_default_is_listed_exactly_when_sipnet_requires_it(
-        self, unconditionally_required
-    ):
-        from pysipnet.parameters.model import PARAMETER_SPECS
-
-        for python_path, spec in PARAMETER_SPECS.items():
-            group, field = python_path.split(".")
-            info = SIPNETParameters.model_fields[group].annotation.model_fields[field]
-            if info.is_required() or info.default is None:
-                continue
-            listed = python_path in SIPNET_REQUIRES_DESPITE_DEFAULT
-            required = spec.sipnet_name in unconditionally_required
-            assert listed == required, (
-                f"{python_path} ({spec.sipnet_name}) defaults to {info.default!r}; SIPNET "
-                f"{'requires' if required else 'does not require'} it unconditionally"
-            )
+    @pytest.fixture
+    def unconditionally_required(self, sipnet_param_registrations) -> set[str]:
+        return {name for name, condition in sipnet_param_registrations.items() if condition == "1"}
 
     def test_the_reader_requires_exactly_what_sipnet_requires_unconditionally(
         self, unconditionally_required
     ):
-        from pysipnet.io.param_io import _REQUIRED_FIELDS
+        from pysipnet.io.param_io import _REQUIRED_PATHS
 
-        required = {PYTHON_TO_SIPNET[f"{group}.{field}"] for group, field in _REQUIRED_FIELDS}
-        assert required == unconditionally_required
+        assert {PYTHON_TO_SIPNET[path] for path in _REQUIRED_PATHS} == unconditionally_required
 
     def test_nothing_sipnet_requires_can_be_left_out(
         self, tmp_path, minimal_params, flags, unconditionally_required
     ):
-        written = {line.split()[0] for line in _written_lines(minimal_params, flags, tmp_path)}
+        written = _written_lines(minimal_params, flags, tmp_path)
+        assert unconditionally_required <= {line.split()[0] for line in written}
         for name in sorted(unconditionally_required):
-            assert name in written
-            lines = [
-                line
-                for line in _written_lines(minimal_params, flags, tmp_path)
-                if line.split()[0] != name
-            ]
+            lines = [line for line in written if line.split()[0] != name]
             path = _write_lines(tmp_path / f"without_{name}.param", lines)
             with pytest.raises(ValueError, match=f"{name} \\("):
                 read_parameters(path)

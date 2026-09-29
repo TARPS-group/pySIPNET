@@ -224,13 +224,18 @@ line in the message:
 
 - a value of `*`;
 - a parameter given twice;
-- a missing required parameter. Every one missing is listed, by SIPNET's name
-  and the field name.
+- a missing parameter that SIPNET always requires. Every one missing is listed,
+  by SIPNET's name and the field name. This includes `litterInit` and
+  `snowInit`, which default to 0 in Python but which SIPNET requires.
 
 Anything SIPNET would misread without saying so is refused too. SIPNET parses
 values with `strtod` and never checks where parsing stopped, so `aMax abc`
-runs with `aMax` = 0 and `aMax 8.3x` with 8.3. So are `nan`, `inf`, and lines
-too long for SIPNET's 255-character buffer, which SIPNET splits in two.
+runs with `aMax` = 0 and `aMax 8.3x` with 8.3. (Hexadecimal floats such as
+`0x1.cp6`, which `strtod` reads in full, are accepted.) Values that are not
+finite are refused too: `nan`, `inf`, and numbers too large for a double, such
+as `1e400`. So are lines longer than SIPNET's 255-byte buffer, which SIPNET
+splits in two. The limit is in bytes, so a `°` counts twice. The file is read
+as bytes, as SIPNET reads it, so a comment in any encoding is fine.
 
 A name the model has no field for is dropped, with one `UnknownParameterWarning`
 listing every such name. Dropping it does not change the run. Either SIPNET no

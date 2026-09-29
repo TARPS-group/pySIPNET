@@ -286,13 +286,20 @@ what SIPNET refuses or misreads without a word:
 - `*`, and a **registered** name given twice, case-insensitively. Unregistered
   names may repeat; SIPNET ignores them.
 - A name with no value. `strtok` returns NULL and `strcpy` crashes.
-- A value that is not a decimal number. SIPNET's `strtod` is unchecked, so
-  `abc` runs as 0 and `8.3x` as 8.3.
-- `nan` and `inf`.
-- A line over 255 characters, which `fgets(line, 256)` splits into two lines
+- A value `strtod` does not read in full. SIPNET never checks where it
+  stopped, so `abc` runs as 0 and `8.3x` as 8.3. C99 hex floats (`0x1.cp6`)
+  are read in full by `strtod`, so the reader accepts them too, via
+  `float.fromhex`, but only with the `0x` prefix: `fromhex("1p3")` is 8, while
+  `strtod` reads 1.
+- A value that is not finite: `nan`, `inf`, and a decimal that overflows a
+  double (`1e400`), which `strtod` turns into `HUGE_VAL`.
+- A line over 255 **bytes**, which `fgets(line, 256)` splits into two lines
   (a long comment's tail is then parsed as a parameter).
-- A name over 63 characters or a value over 31, which overflow SIPNET's
-  buffers.
+- A name over 63 bytes or a value over 31, which overflow SIPNET's buffers.
+
+The file is read as bytes and decoded as Latin-1, one character per byte, so
+every length is a byte count and a comment in any encoding reads. Decoding as
+UTF-8 would both miscount `°` and crash on a Latin-1 comment SIPNET reads fine.
 
 `read_parameters(path)`, or `SIPNETParameters.from_param_file(path)`, builds
 the model from that dict:
@@ -300,19 +307,22 @@ the model from that dict:
 - Names match case-insensitively.
 - Writing a parameter set and reading it back gives an equal one exactly,
   because values are written with `.17g`.
-- Every missing required parameter is listed in one `ValueError`, by SIPNET's
-  name and the field. **"Required" includes `litterInit` and `snowInit`**,
-  whose Python defaults (0.0) SIPNET does not share: it registers both with
-  `1`. `SIPNET_REQUIRES_DESPITE_DEFAULT` lists them, and `test_io.py` checks
-  every defaulted field against the C source. `growthRespFrac`'s default is
-  filled in, since SIPNET runs on 0 when the flag is off.
+- Every missing parameter SIPNET always requires is listed in one
+  `ValueError`, by SIPNET's name and the field. The list comes from
+  `ParameterSpec.required_when` (below), not from Python defaults:
+  **`litterInit` and `snowInit` default to 0.0 but SIPNET requires both**, so
+  the reader must not fill them in. `growthRespFrac`'s default is filled in,
+  since SIPNET requires it only under `growth_resp` and runs on 0 otherwise.
 - Domain and allocation errors from Pydantic are re-raised with both names.
+- `leafOnDay` / `leafOffDay` of 0 are read: at this pin 0 switches the
+  trigger off (gotcha 10), so their domain is non-negative.
 - Names with no field are dropped, with one `UnknownParameterWarning` split
   into "SIPNET ignores these too" and "read only under a flag we refuse
   (flag named)". The split is exact, because the registered set is the
   modeled names plus the `UNSUPPORTED_FLAGS` lists. The warning is issued
   before the missing-parameter error, since a misspelled required name
-  appears in both.
+  appears in both. It names the caller's line through either entry point
+  (both pass a `stacklevel` to the private `_read_parameters`).
 - Flags are not in the file, so they are not checked; the writer checks them.
 
 **Important unit gotcha:** several parameters are given as **per-year** rates in
@@ -769,7 +779,8 @@ variables (lower-case words, no acronyms): `aMax` is
 (`pysipnet/parameters/base.py`) records `sipnet_name`, UDUNITS `units`,
 `constituent`, labels, `aliases` (the pre-convention pySIPNET names) and, for
 initial conditions, `initializes` / `initializes_via` naming the output state
-it sets. `PARAMETER_SPECS` in `pysipnet/parameters/model.py` is the flat
+it sets, and `required_when`, SIPNET's condition for requiring it (see
+"Required-count summary"). `PARAMETER_SPECS` in `pysipnet/parameters/model.py` is the flat
 `{"group.field": spec}` view; `PYTHON_TO_SIPNET` in `param_io.py` is derived
 from it, and `tests/test_param_name_mapping.py` restates the mapping by hand.
 `resolve_parameter_name()` accepts a field name, an alias or a SIPNET name.
@@ -818,10 +829,8 @@ to SLA as `leafCSpWt = cFracLeaf / SLA`.
 `baseSoilResp` (year⁻¹), `soilRespQ10`, `soilRespMoistEffect`, `litterBreakdownRate` (year⁻¹), `fracLitterRespired`
 
 `soilRespMoistEffect` is required when `water_hresp` is on (the default). It
-was required unconditionally in Python until PR #54; it is now optional and
-checked in `validate_for_flags`. `test_io.py` asserts that the reader's
-required set equals SIPNET's unconditional one exactly, so neither side can
-drift again.
+was required unconditionally in Python until PR #54, which made it optional
+and introduced `required_when`, the check that caught it.
 `litterBreakdownRate` and `fracLitterRespired` are required when `litter_pool`
 is on — off in `ModelFlags.standard()`, which is SIPNET's own default set.
 
@@ -861,8 +870,10 @@ The refusal is checked *before* the SIPNET-mirroring restrictions, so
 caller to set `litter_pool` and `anaerobic` — advice that would not have
 helped.
 
-To enable one: model its parameters, mark them required under the flag in
-`validate_for_flags`, and delete its entry from `UNSUPPORTED_FLAGS`. A test
+To enable one: model its parameters, give each `required_when=` its flag
+(`validate_for_flags` and the reader follow from that), and delete its entry
+from `UNSUPPORTED_FLAGS`. `required_when` is a conjunction, so `fAnoxia`'s
+`ctx.anaerobic || ctx.nitrogenCycle` will need the grammar extended to `or`. A test
 asserts every name in that table is a parameter the pinned SIPNET actually
 registers **and** is still absent from our model, so the table cannot go stale
 in either direction.
@@ -880,8 +891,21 @@ parameters are gone entirely rather than merely unreachable.
 
 Required-ness is expressed at runtime now: `initializeOneModelParam` takes a
 `ctx.*` expression rather than a compile-time macro, so the same binary demands
-different parameters depending on `sipnet.in`. `ModelFlags` mirrors this in
-`SIPNETParameters.validate_for_flags`.
+different parameters depending on `sipnet.in`.
+
+pySIPNET states that condition **once per parameter**, as
+`ParameterSpec.required_when` (`pysipnet/parameters/base.py`): `"always"`, or
+`and`-joined flag names, each optionally `not`, e.g. `"snow"` or
+`"not gdd and not soil_phenol"`. Everything else is derived from it:
+`SIPNETParameters.validate_for_flags` (every field whose `required_under(flags)`
+holds and is `None`), the reader's always-required list, and the docs.
+`tests/test_parameters.py::TestRequiredWhen` evaluates SIPNET's own C
+condition for each registration (read by the `sipnet_param_registrations`
+fixture in `tests/conftest.py`) under all 128 combinations of the seven
+supported flags, and asserts the spec agrees. It also asserts that a field
+with no Python default is one SIPNET always requires, and that an
+always-required field cannot default to `None`. `model.py` checks at import
+that every flag a `required_when` names is a `ModelFlags` field.
 
 - **49 parameters are unconditionally required.**
 - Default flags (`gdd`, `snow`, `water_hresp`) add `gddLeafOn`, `snowMelt` and

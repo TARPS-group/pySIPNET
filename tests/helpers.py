@@ -111,8 +111,14 @@ def run_sipnet_directly(binary: Path, param_path: Path, clim_path: Path) -> Bare
         (workdir / "sipnet.param").write_bytes(param_path.read_bytes())
         (workdir / "sipnet.clim").write_bytes(clim_path.read_bytes())
         (workdir / "sipnet.in").write_text("fileName = sipnet\nEVENTS = 0\n")
+        # SIPNET echoes input bytes into its log, possibly half a UTF-8 character.
         proc = subprocess.run(
-            [str(binary)], cwd=workdir, capture_output=True, text=True, timeout=300
+            [str(binary)],
+            cwd=workdir,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=300,
         )
         output = read_output_file(workdir / "sipnet.out") if proc.returncode == 0 else None
         return BareRun(returncode=proc.returncode, log=proc.stdout + proc.stderr, output=output)

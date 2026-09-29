@@ -62,6 +62,18 @@ unconstrained optimization or MCMC:
 | ``OPEN_UNIT_INTERVAL`` | (0, 1)          | logit                        |
 +---------------------+--------------------+------------------------------+
 
+When SIPNET requires a parameter
+--------------------------------
+SIPNET registers each parameter with a condition: always, or only under some
+runtime flags (the third argument of ``initializeOneModelParam``).
+:attr:`ParameterSpec.required_when` records it: ``"always"``, or ``and``-joined
+flag names, each optionally preceded by ``not``, such as ``"snow"`` or
+``"not gdd and not soil_phenol"``. :meth:`ParameterSpec.required_under`
+evaluates it for a set of flags. This one statement is what
+:meth:`~pysipnet.parameters.model.SIPNETParameters.validate_for_flags` and the
+``.param`` reader both use, and ``tests/test_parameters.py`` checks it against
+SIPNET's source.
+
 Querying parameter specs
 ------------------------
 ::
@@ -76,6 +88,7 @@ Querying parameter specs
 from __future__ import annotations
 
 import dataclasses
+import re
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import Any, cast
@@ -88,6 +101,31 @@ from pysipnet.units import UnitStyle, format_units, validate_units
 from pysipnet.variables import NAME_PATTERN
 
 _MISSING: Any = dataclasses.MISSING
+
+#: :attr:`ParameterSpec.required_when` for a parameter SIPNET always requires.
+ALWAYS_REQUIRED = "always"
+
+_FLAG_LITERAL = re.compile(r"(not )?(?!not\b)([a-z][a-z_]*)")
+
+
+def parse_requirement(expression: str) -> tuple[tuple[str, bool], ...]:
+    """``(flag, must_be_on)`` pairs, all of which must hold; ``()`` for ``"always"``.
+
+    Raises ``ValueError`` for anything outside the grammar in the module
+    docstring. Whether each name is a real flag is checked where the flags
+    are defined, in :mod:`pysipnet.parameters.model`.
+    """
+    if expression == ALWAYS_REQUIRED:
+        return ()
+    literals = []
+    for part in expression.split(" and "):
+        match = _FLAG_LITERAL.fullmatch(part)
+        if match is None:
+            raise ValueError(
+                f"required_when={expression!r}: {part!r} is not a flag name or 'not <flag>'."
+            )
+        literals.append((match.group(2), match.group(1) is None))
+    return tuple(literals)
 
 
 class ParameterDomain(StrEnum):
@@ -203,6 +241,37 @@ class ParameterSpec:
     """How, when the relation is not the identity, e.g.
     ``"leaf_carbon = leaf_area_index × leaf_carbon_per_area"``."""
 
+    required_when: str = ALWAYS_REQUIRED
+    """When SIPNET requires the parameter: ``"always"``, or a condition on the
+    model flags such as ``"snow"`` or ``"not gdd and not soil_phenol"``."""
+
+    def __post_init__(self) -> None:
+        parse_requirement(self.required_when)
+
+    @property
+    def always_required(self) -> bool:
+        """Whether SIPNET requires this parameter under every set of flags."""
+        return self.required_when == ALWAYS_REQUIRED
+
+    def required_under(self, flags: Any) -> bool:
+        """Whether SIPNET requires this parameter under *flags*.
+
+        *flags* is a :class:`~pysipnet.parameters.model.ModelFlags`, or
+        anything with the same boolean attributes.
+        """
+        return all(
+            bool(getattr(flags, flag)) is on for flag, on in parse_requirement(self.required_when)
+        )
+
+    def requirement_description(self) -> str:
+        """``"ModelFlags.snow is on"``, or ``"always"``: :attr:`required_when` in words."""
+        if self.always_required:
+            return ALWAYS_REQUIRED
+        return " and ".join(
+            f"ModelFlags.{flag} is {'on' if on else 'off'}"
+            for flag, on in parse_requirement(self.required_when)
+        )
+
     @property
     def label(self) -> str:
         """*short_label* if set, else *long_label*."""
@@ -257,6 +326,7 @@ def param_field(
     per_year: bool = False,
     initializes: tuple[str, ...] = (),
     initializes_via: str = "",
+    required_when: str = ALWAYS_REQUIRED,
     default: Any = _MISSING,
 ) -> Any:
     """Factory for a Pydantic ``Field`` with embedded :class:`ParameterSpec`.
@@ -285,6 +355,8 @@ def param_field(
         Set to ``True`` for parameters SIPNET reads as annual rates.
     initializes, initializes_via:
         For initial conditions: the output state variable(s) set, and how.
+    required_when:
+        When SIPNET requires the parameter; see :attr:`ParameterSpec.required_when`.
     default:
         Field default value. Omit (or pass ``_MISSING``) to make the field
         required. Pass ``None`` to make it optional with a ``None`` default.
@@ -310,6 +382,7 @@ def param_field(
         per_year=per_year,
         initializes=initializes,
         initializes_via=initializes_via,
+        required_when=required_when,
     )
 
     return Field(

@@ -3,12 +3,22 @@
 These tests do not require a compiled SIPNET binary.
 """
 
+import itertools
+import re
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 import xarray as xr
 from pydantic import ValidationError
 
-from pysipnet.parameters.base import ParameterDomain, get_parameter_specs
+from pysipnet.parameters.base import (
+    ALWAYS_REQUIRED,
+    ParameterDomain,
+    ParameterSpec,
+    get_parameter_specs,
+    parse_requirement,
+)
 from pysipnet.parameters.model import (
     PARAMETER_SPECS,
     UNSUPPORTED_FLAGS,
@@ -481,6 +491,98 @@ class TestValidateForFlags:
 
     def test_a_complete_parameter_set_passes(self, minimal_params):
         minimal_params.validate_for_flags(ModelFlags.standard())
+
+
+class TestRequiredWhen:
+    """Each spec's required_when states SIPNET's registration condition, exactly.
+
+    validate_for_flags and the .param reader both derive from it, so this is
+    the one place requiredness can drift from SIPNET, and the one test for it.
+    """
+
+    SUPPORTED_FLAGS = (
+        "gdd",
+        "snow",
+        "water_hresp",
+        "growth_resp",
+        "leaf_water",
+        "litter_pool",
+        "soil_phenol",
+    )
+
+    @staticmethod
+    def _sipnet_requires(condition: str, flags: dict[str, bool]) -> bool:
+        """Evaluate a registration's C condition, ctx.waterHResp read as flags["water_hresp"]."""
+        by_ctx_name = {name.replace("_", ""): value for name, value in flags.items()}
+        python = re.sub(r"ctx\.(\w+)", lambda m: str(by_ctx_name[m.group(1).lower()]), condition)
+        python = python.replace("||", " or ").replace("&&", " and ").replace("!", " not ")
+        return bool(eval(python, {"__builtins__": {}}))  # noqa: S307 -- C source, not input
+
+    def test_every_condition_is_sipnet_s_under_every_flag_combination(
+        self, sipnet_param_registrations
+    ):
+        combinations = [
+            dict(zip(self.SUPPORTED_FLAGS, values, strict=True))
+            for values in itertools.product([False, True], repeat=len(self.SUPPORTED_FLAGS))
+        ]
+        for path, spec in PARAMETER_SPECS.items():
+            condition = sipnet_param_registrations[spec.sipnet_name]
+            for flags in combinations:
+                assert spec.required_under(SimpleNamespace(**flags)) == self._sipnet_requires(
+                    condition, flags
+                ), f"{path}: required_when={spec.required_when!r}, SIPNET says {condition!r}"
+
+    def test_the_model_never_demands_what_sipnet_may_do_without(self):
+        """A field with no Python default must be one SIPNET always requires."""
+        for path, spec in PARAMETER_SPECS.items():
+            group, field = path.split(".")
+            info = SIPNETParameters.model_fields[group].annotation.model_fields[field]
+            if info.is_required():
+                assert spec.always_required, f"{path} has no default but is {spec.required_when}"
+
+    def test_a_field_sipnet_always_requires_cannot_be_left_unset(self):
+        """None is never written, so a None default would drop a required parameter."""
+        for path, spec in PARAMETER_SPECS.items():
+            group, field = path.split(".")
+            info = SIPNETParameters.model_fields[group].annotation.model_fields[field]
+            if spec.always_required:
+                assert info.is_required() or info.default is not None, path
+
+    @pytest.mark.parametrize(
+        ("expression", "parsed"),
+        [
+            (ALWAYS_REQUIRED, ()),
+            ("snow", (("snow", True),)),
+            ("not gdd and not soil_phenol", (("gdd", False), ("soil_phenol", False))),
+        ],
+    )
+    def test_parse(self, expression, parsed):
+        assert parse_requirement(expression) == parsed
+
+    @pytest.mark.parametrize("expression", ["gdd or snow", "!gdd", "", "Snow", "not"])
+    def test_outside_the_grammar_is_refused(self, expression):
+        with pytest.raises(ValueError, match="required_when"):
+            parse_requirement(expression)
+
+    def test_a_spec_is_checked_when_built(self):
+        with pytest.raises(ValueError, match="required_when"):
+            ParameterSpec(
+                sipnet_name="x",
+                units="1",
+                domain=ParameterDomain.REAL,
+                description="",
+                long_label="",
+                required_when="gdd || snow",
+            )
+
+    def test_description(self):
+        assert (
+            PARAMETER_SPECS["phenology.leaf_on_day"].requirement_description()
+            == "ModelFlags.gdd is off and ModelFlags.soil_phenol is off"
+        )
+        assert PARAMETER_SPECS["water.snow_melt_rate"].requirement_description() == (
+            "ModelFlags.snow is on"
+        )
 
 
 # ---------------------------------------------------------------------------

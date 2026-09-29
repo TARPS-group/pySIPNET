@@ -100,6 +100,7 @@ from pysipnet.parameters.base import (
     ParameterSpec,
     get_parameter_specs,
     param_field,
+    parse_requirement,
 )
 
 _D = ParameterDomain  # local alias for brevity
@@ -648,22 +649,24 @@ class PhenologyParams(ParameterGroup):
 
     leaf_on_day: float | None = param_field(
         sipnet_name="leafOnDay",
+        required_when="not gdd and not soil_phenol",
         units="d",
-        domain=_D.POSITIVE,
+        domain=_D.NON_NEGATIVE,
         description="Day of year on which leaves appear. Used when both ModelFlags.gdd and "
-        "ModelFlags.soil_phenol are off.",
+        "ModelFlags.soil_phenol are off; 0 switches the trigger off.",
         long_label="Leaf-on day",
         default=None,
     )
     leaf_off_day: float = param_field(
         sipnet_name="leafOffDay",
         units="d",
-        domain=_D.POSITIVE,
-        description="Day of year on which leaves fall.",
+        domain=_D.NON_NEGATIVE,
+        description="Day of year on which leaves fall; 0 switches leaf fall off.",
         long_label="Leaf-off day",
     )
     leaf_on_growing_degree_days: float | None = param_field(
         sipnet_name="gddLeafOn",
+        required_when="gdd",
         units="K d",
         domain=_D.NON_NEGATIVE,
         description="Accumulated growing degree-days (air temperature × timestep length, "
@@ -674,6 +677,7 @@ class PhenologyParams(ParameterGroup):
     )
     leaf_on_soil_temperature: float | None = param_field(
         sipnet_name="soilTempLeafOn",
+        required_when="soil_phenol",
         units="degC",
         domain=_D.REAL,
         description="Soil temperature at which leaves appear. Used when ModelFlags.soil_phenol "
@@ -769,6 +773,7 @@ class RespirationParams(ParameterGroup):
     )
     growth_respiration_fraction: float = param_field(
         sipnet_name="growthRespFrac",
+        required_when="growth_resp",
         units="1",
         domain=_D.UNIT_INTERVAL,
         description="Growth respiration as a fraction of running-mean net primary production. "
@@ -849,6 +854,7 @@ class RespirationParams(ParameterGroup):
     )
     soil_respiration_moisture_exponent: float | None = param_field(
         sipnet_name="soilRespMoistEffect",
+        required_when="water_hresp",
         units="1",
         domain=_D.NON_NEGATIVE,
         description="Exponent of the soil-moisture dependence of heterotrophic respiration. "
@@ -859,6 +865,7 @@ class RespirationParams(ParameterGroup):
     )
     litter_breakdown_rate: float | None = param_field(
         sipnet_name="litterBreakdownRate",
+        required_when="litter_pool",
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
@@ -869,6 +876,7 @@ class RespirationParams(ParameterGroup):
     )
     litter_respired_fraction: float | None = param_field(
         sipnet_name="fracLitterRespired",
+        required_when="litter_pool",
         units="1",
         domain=_D.UNIT_INTERVAL,
         description="Fraction of broken-down litter that is respired rather than transferred "
@@ -1013,6 +1021,7 @@ class WaterParams(ParameterGroup):
     )
     snow_melt_rate: float | None = param_field(
         sipnet_name="snowMelt",
+        required_when="snow",
         units="cm K-1 d-1",
         constituent="H2O",
         domain=_D.POSITIVE,
@@ -1052,6 +1061,7 @@ class WaterParams(ParameterGroup):
     )
     leaf_water_pool_depth: float | None = param_field(
         sipnet_name="leafPoolDepth",
+        required_when="leaf_water",
         units="cm d-1",
         constituent="H2O",
         domain=_D.NON_NEGATIVE,
@@ -1140,9 +1150,9 @@ class SIPNETParameters(BaseModel):
         See :func:`~pysipnet.io.param_io.read_parameters` for what the file
         must hold and which names are dropped with a warning.
         """
-        from pysipnet.io.param_io import read_parameters
+        from pysipnet.io.param_io import _read_parameters
 
-        return read_parameters(Path(path))
+        return _read_parameters(Path(path), stacklevel=3)
 
     def dataarray(self, name: str) -> xr.DataArray:
         """This parameter set's value of *name* as a labeled, zero-dimensional ``DataArray``.
@@ -1159,44 +1169,19 @@ class SIPNETParameters(BaseModel):
         return parameter_dataarray(name, value)
 
     def validate_for_flags(self, flags: ModelFlags) -> None:
-        """Raise :class:`ValueError` if any flag-required parameter is ``None``.
+        """Raise :class:`ValueError` if any parameter SIPNET requires under *flags* is ``None``.
 
-        Call this before writing the param file to surface configuration
-        mismatches early.
+        Which parameters those are is each field's
+        :attr:`~pysipnet.parameters.base.ParameterSpec.required_when`. Call
+        this before writing the param file to surface configuration
+        mismatches early; every missing parameter is listed.
         """
-        errors: list[str] = []
-        if flags.snow and self.water.snow_melt_rate is None:
-            errors.append("water.snow_melt_rate is required when ModelFlags.snow is True")
-        if flags.leaf_water and self.water.leaf_water_pool_depth is None:
-            errors.append(
-                "water.leaf_water_pool_depth is required when ModelFlags.leaf_water is True"
-            )
-        if flags.water_hresp and self.respiration.soil_respiration_moisture_exponent is None:
-            errors.append(
-                "respiration.soil_respiration_moisture_exponent is required when "
-                "ModelFlags.water_hresp is True"
-            )
-        if flags.litter_pool and self.respiration.litter_breakdown_rate is None:
-            errors.append(
-                "respiration.litter_breakdown_rate is required when ModelFlags.litter_pool is True"
-            )
-        if flags.litter_pool and self.respiration.litter_respired_fraction is None:
-            errors.append(
-                "respiration.litter_respired_fraction is required when "
-                "ModelFlags.litter_pool is True"
-            )
-        if flags.gdd and self.phenology.leaf_on_growing_degree_days is None:
-            errors.append(
-                "phenology.leaf_on_growing_degree_days is required when ModelFlags.gdd is True"
-            )
-        if flags.soil_phenol and self.phenology.leaf_on_soil_temperature is None:
-            errors.append(
-                "phenology.leaf_on_soil_temperature is required when ModelFlags.soil_phenol is True"
-            )
-        if not flags.gdd and not flags.soil_phenol and self.phenology.leaf_on_day is None:
-            errors.append(
-                "phenology.leaf_on_day is required when both gdd and soil_phenol are False"
-            )
+        dump = self.model_dump()
+        errors = [
+            f"{path} is required when {spec.requirement_description()}"
+            for path, spec in PARAMETER_SPECS.items()
+            if spec.required_under(flags) and dump[path.split(".")[0]][path.split(".")[1]] is None
+        ]
         if errors:
             raise ValueError("Parameter–flag mismatch:\n" + "\n".join(f"  • {e}" for e in errors))
 
@@ -1259,6 +1244,17 @@ Check which group a parameter belongs to::
 
 PARAMETER_SPECS: dict[str, ParameterSpec] = get_parameter_specs(SIPNETParameters)
 """``{"group.field": ParameterSpec}`` for every parameter, in declaration order."""
+
+
+def _check_requirement_flags() -> None:
+    """Every flag a ``required_when`` names must be a :class:`ModelFlags` field."""
+    for path, spec in PARAMETER_SPECS.items():
+        for flag, _ in parse_requirement(spec.required_when):
+            if flag not in ModelFlags.model_fields:
+                raise ValueError(f"{path}: required_when names {flag!r}, which is not a flag.")
+
+
+_check_requirement_flags()
 
 
 def _build_parameter_alias_index() -> dict[str, str]:
