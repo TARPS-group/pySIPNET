@@ -24,6 +24,7 @@ import pytest
 import pysipnet
 from pysipnet.build import BinaryVersionError, BuildError, DownloadError
 from pysipnet.io.output_reader import UnknownOutputColumnWarning
+from pysipnet.io.param_io import UnknownParameterWarning
 from pysipnet.runner import SIPNETRunError
 from tests.helpers import WORKER_TIMEOUT_SECONDS, make_run_error, raise_run_error, return_value
 
@@ -35,6 +36,7 @@ EXAMPLE_EXCEPTIONS: dict[type[BaseException], Callable[[], BaseException]] = {
     DownloadError: lambda: DownloadError("checksum mismatch"),
     BuildError: lambda: BuildError("make failed"),
     UnknownOutputColumnWarning: lambda: UnknownOutputColumnWarning("column 'foo'"),
+    UnknownParameterWarning: lambda: UnknownParameterWarning("dropped 'microbeInit'"),
 }
 
 # Modules whose import needs a dependency pySIPNET does not require.

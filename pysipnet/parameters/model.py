@@ -86,6 +86,7 @@ provided given the active :class:`ModelFlags`.
 from __future__ import annotations
 
 from collections.abc import Hashable, Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -1098,6 +1099,7 @@ class SIPNETParameters(BaseModel):
 
         params_dict = params.model_dump()
         params      = SIPNETParameters.model_validate(params_dict)
+        params      = SIPNETParameters.from_param_file("sipnet.param")
 
     Calibration tooling::
 
@@ -1127,6 +1129,17 @@ class SIPNETParameters(BaseModel):
                 "Coarse-root allocation (the residual 1 − total) would be non-positive."
             )
         return self
+
+    @classmethod
+    def from_param_file(cls, path: str | Path) -> SIPNETParameters:
+        """Read a SIPNET ``.param`` file, the inverse of writing one.
+
+        See :func:`~pysipnet.io.param_io.read_parameters` for what the file
+        must hold and which names are dropped with a warning.
+        """
+        from pysipnet.io.param_io import read_parameters
+
+        return read_parameters(Path(path))
 
     def dataarray(self, name: str) -> xr.DataArray:
         """This parameter set's value of *name* as a labeled, zero-dimensional ``DataArray``.

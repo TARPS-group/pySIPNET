@@ -278,6 +278,43 @@ The nine obsolete placeholder parameters that older SIPNET required but ignored
 are gone at this pin, and so is the `_OBSOLETE_DEFAULTS` workaround that wrote
 them.
 
+**Reading one back.** `read_param_file(path)` (`pysipnet/io/param_io.py`) gives
+the flat `{name: value}` dict, names as the file spells them, and parses the way
+`readModelParams` in `src/common/modelParams.c` does. It refuses, by `path:line`,
+what SIPNET refuses or misreads without a word:
+
+- `*`, and a **registered** name given twice, case-insensitively. Unregistered
+  names may repeat; SIPNET ignores them.
+- A name with no value. `strtok` returns NULL and `strcpy` crashes.
+- A value that is not a decimal number. SIPNET's `strtod` is unchecked, so
+  `abc` runs as 0 and `8.3x` as 8.3.
+- `nan` and `inf`.
+- A line over 255 characters, which `fgets(line, 256)` splits into two lines
+  (a long comment's tail is then parsed as a parameter).
+- A name over 63 characters or a value over 31, which overflow SIPNET's
+  buffers.
+
+`read_parameters(path)`, or `SIPNETParameters.from_param_file(path)`, builds
+the model from that dict:
+
+- Names match case-insensitively.
+- Writing a parameter set and reading it back gives an equal one exactly,
+  because values are written with `.17g`.
+- Every missing required parameter is listed in one `ValueError`, by SIPNET's
+  name and the field. **"Required" includes `litterInit` and `snowInit`**,
+  whose Python defaults (0.0) SIPNET does not share: it registers both with
+  `1`. `SIPNET_REQUIRES_DESPITE_DEFAULT` lists them, and `test_io.py` checks
+  every defaulted field against the C source. `growthRespFrac`'s default is
+  filled in, since SIPNET runs on 0 when the flag is off.
+- Domain and allocation errors from Pydantic are re-raised with both names.
+- Names with no field are dropped, with one `UnknownParameterWarning` split
+  into "SIPNET ignores these too" and "read only under a flag we refuse
+  (flag named)". The split is exact, because the registered set is the
+  modeled names plus the `UNSUPPORTED_FLAGS` lists. The warning is issued
+  before the missing-parameter error, since a misspelled required name
+  appears in both.
+- Flags are not in the file, so they are not checked; the writer checks them.
+
 **Important unit gotcha:** several parameters are given as **per-year** rates in
 the file and converted to per-day internally: `baseVegResp`, `baseSoilResp`,
 `litterBreakdownRate`, `woodTurnoverRate`, `leafTurnoverRate`,
@@ -743,7 +780,9 @@ from it, and `tests/test_param_name_mapping.py` restates the mapping by hand.
 the domain by `ParameterDomain.contains`, the same bounds `param_field` gives
 Pydantic, so an array cannot carry a value a field would refuse.
 Parameter groups forbid unknown keys, so a parameter set saved under an old
-name fails loudly on load. The docs page `reference/parameters.md` is
+name fails loudly on load. A `.param` file is the exception: an unknown name
+there only warns (see "Reading one back" above), because SIPNET's own
+reference file has 22 names SIPNET no longer registers. The docs page `reference/parameters.md` is
 generated from the specs.
 
 The authoritative source is the `initializeOneModelParam` block in
@@ -914,7 +953,7 @@ pySIPNET/
 │   ├── resample.py               # explicit, kind-checked coarsening of the time axis, and its rules as public checks
 │   ├── events.py                 # management events (arity checked against SIPNET)
 │   ├── io/
-│   │   ├── param_io.py           # read/write .param
+│   │   ├── param_io.py           # read/write .param; read_parameters → SIPNETParameters
 │   │   ├── clim_io.py            # read/write .clim; layout detected as SIPNET detects it
 │   │   ├── output_reader.py      # read .out, header detected by content
 │   │   └── reference.py          # locate and load the bundled Niwot data (importlib.resources)
@@ -961,7 +1000,10 @@ under `tests/`, because a project that installs pySIPNET needs real SIPNET data
 to test against and a wheel does not carry `tests/`. `pysipnet/io/reference.py`
 locates them through `importlib.resources` and is the one place in the package
 that reads package data; `niwot_reference_output()` returns the golden as a
-`SIPNETOutput` paired with the climate's step lengths under standard flags.
+`SIPNETOutput` paired with the climate's step lengths under standard flags, and
+`niwot_reference_parameters()` the `SIPNETParameters` it was run with. It
+silences the `UnknownParameterWarning` for upstream's 23 extra names, and
+`test_reference.py` pins exactly which names they are.
 pySIPNET's own tests read the same files, so there is one copy and no drift.
 `sipnet.param` and `sipnet.clim` are SIPNET-authored and must stay byte-identical
 to the submodule's smoke fixtures; never re-save them. The golden is shipped
@@ -984,8 +1026,11 @@ Worth knowing which test to look at when something breaks:
 - `test_sipnet_in.py` — SIPNET understood every config key we wrote, proven by
   reading its own resolved-config dump. Catches a key silently ignored.
 - `test_param_file_contract.py` — SIPNET recognized every parameter name and
-  found everything it required, across six flag combinations. Catches a
-  renamed or dropped parameter.
+  found everything it required, across six flag combinations; and the reader
+  accepts, reads and refuses the edited files that the bare binary does (other
+  case, unknown names, duplicates, `*`, missing names). It also pins SIPNET's
+  silent misreading of non-numbers, which the reader refuses. Catches a renamed
+  or dropped parameter, and the reader drifting from SIPNET's parser.
 - `test_clim_layout_contract.py` — pySIPNET accepts exactly the `.clim`
   layouts SIPNET accepts (12 and 14; not 13, 11, or a 14 whose site changes),
   for the reasons SIPNET gives, and the two accepted layouts give identical

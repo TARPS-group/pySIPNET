@@ -37,8 +37,8 @@ from pysipnet.dataset import (
 )
 from pysipnet.io.reference import (
     niwot_reference_climate,
-    niwot_reference_files,
     niwot_reference_output,
+    niwot_reference_parameters,
 )
 from pysipnet.output import SIPNETOutput
 from pysipnet.parameters.model import ModelFlags
@@ -100,9 +100,7 @@ def _axis_parts(frame: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
 
 @pytest.fixture
 def niwot_params():
-    from tests.helpers import params_from_sipnet_file
-
-    return params_from_sipnet_file(niwot_reference_files().param)
+    return niwot_reference_parameters()
 
 
 # ---------------------------------------------------------------------------

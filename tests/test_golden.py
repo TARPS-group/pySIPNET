@@ -27,10 +27,13 @@ import pandas as pd
 import pytest
 
 from pysipnet.climate import ClimateDrivers
-from pysipnet.io.reference import niwot_reference_climate, niwot_reference_files
+from pysipnet.io.reference import (
+    niwot_reference_climate,
+    niwot_reference_files,
+    niwot_reference_parameters,
+)
 from pysipnet.parameters.model import ModelFlags
 from pysipnet.runner import SIPNETRunner
-from tests.helpers import params_from_sipnet_file
 
 _REFERENCE = niwot_reference_files()
 REFERENCE_PARAM = _REFERENCE.param
@@ -53,7 +56,7 @@ def _run_baseline() -> pd.DataFrame:
     """Run the frozen baseline input through the wrapper and return its output."""
     full = niwot_reference_climate()
     climate = ClimateDrivers.from_dataframe(full.pandas.head(_N_TIMESTEPS).copy(), n_columns=14)
-    params = params_from_sipnet_file(REFERENCE_PARAM)
+    params = niwot_reference_parameters()
     result = SIPNETRunner(flags=ModelFlags.standard()).run(params, climate, run_id="golden")
     assert result.provenance.success, result.provenance.stderr
     return result.outputs.pandas

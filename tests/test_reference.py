@@ -31,6 +31,12 @@ import pandas as pd
 import pytest
 
 from pysipnet.climate import ClimateDrivers
+from pysipnet.io.param_io import (
+    UnknownParameterWarning,
+    _flatten,
+    read_param_file,
+    read_parameters,
+)
 from pysipnet.io.reference import (
     NIWOT_CLIM_FILE,
     NIWOT_OUTPUT_FILE,
@@ -41,9 +47,10 @@ from pysipnet.io.reference import (
     niwot_reference_climate,
     niwot_reference_files,
     niwot_reference_output,
+    niwot_reference_parameters,
 )
 from pysipnet.output import SIPNETOutput
-from pysipnet.parameters.model import ModelFlags
+from pysipnet.parameters.model import ModelFlags, SIPNETParameters
 from pysipnet.variables import OUTPUT_VARIABLES
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -123,6 +130,58 @@ def test_climate_loads_without_warnings(recwarn: pytest.WarningsRecorder):
     assert climate.n_columns == 14
     assert len(climate.pandas) == N_CLIM_ROWS
     assert not recwarn.list, [str(w.message) for w in recwarn.list]
+
+
+#: What upstream's sipnet.param names that SIPNETParameters has no field for.
+#: All but waterDrainFrac are names SIPNET no longer registers.
+NIWOT_DROPPED_PARAMETERS = {
+    "E0",
+    "T0",
+    "baseMicrobeResp",
+    "baseSoilRespCold",
+    "coarseRootExudation",
+    "coldSoilThreshold",
+    "efficiency",
+    "fineRootExudation",
+    "halfSatIngestion",
+    "litWaterDrainRate",
+    "litterWFracInit",
+    "litterWHC",
+    "m_ballBerry",
+    "maxIngestionRate",
+    "microbeInit",
+    "microbeNC",
+    "microbePulseEff",
+    "microbeQ10",
+    "qualityLeaf",
+    "qualityWood",
+    "soilRespQ10Cold",
+    "totNitrogen",
+    "waterDrainFrac",
+}
+
+
+def test_parameters_load_without_warnings(recwarn: pytest.WarningsRecorder):
+    params = niwot_reference_parameters()
+    assert isinstance(params, SIPNETParameters)
+    assert params.photosynthesis.max_photosynthesis_rate == 8.3
+    assert not recwarn.list, [str(w.message) for w in recwarn.list]
+
+
+def test_parameters_silence_only_the_names_known_to_be_dropped():
+    """Silencing the warning is safe only while it lists exactly these."""
+    with pytest.warns(UnknownParameterWarning) as record:
+        read_parameters(niwot_reference_files().param)
+    message = str(record[0].message)
+    listed = message.split("ignores them: ")[1].split(".")[0].split(", ")
+    assert set(listed) == NIWOT_DROPPED_PARAMETERS - {"waterDrainFrac"}
+    assert "waterDrainFrac (flooding)" in message
+
+
+def test_parameters_carry_every_other_value_in_the_file():
+    raw = read_param_file(niwot_reference_files().param)
+    carried = {name: value for name, value in raw.items() if name not in NIWOT_DROPPED_PARAMETERS}
+    assert _flatten(niwot_reference_parameters()) == carried
 
 
 def test_climate_step_lengths_are_not_uniform():
