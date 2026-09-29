@@ -203,6 +203,52 @@ they are always serialized through the I/O layer regardless of this setting.
 | In-memory (`from_dataframe`, `from_file`) | Write from DataFrame | Write from DataFrame |
 | File-backed (`from_path`) | `shutil.copy2` | Symlink (fallback to copy) |
 
+### Parameter files
+
+The runner writes `sipnet.param` from a `SIPNETParameters` with
+`write_param_file`. `SIPNETParameters.from_param_file` goes the other way, so a
+parameter file saved from a run, or one written by hand or by other SIPNET
+tooling, becomes the same typed, validated model:
+
+```python
+from pysipnet import SIPNETParameters
+
+params = SIPNETParameters.from_param_file("archive/sipnet.param")
+```
+
+Writing a parameter set and reading it back gives an equal one, exactly: values
+are written with 17 significant digits. The file is read the way SIPNET reads
+it. Names match case-insensitively, `!` starts a comment, and columns after the
+second are ignored. Anything SIPNET would refuse is refused, with the file and
+line in the message:
+
+- a value of `*`;
+- a parameter given twice;
+- a missing parameter that SIPNET always requires. Every one missing is listed,
+  by SIPNET's name and the field name. This includes `litterInit` and
+  `snowInit`, which default to 0 in Python but which SIPNET requires.
+
+Anything SIPNET would misread without saying so is refused too. SIPNET parses
+values with `strtod` and never checks where parsing stopped, so `aMax abc`
+runs with `aMax` = 0 and `aMax 8.3x` with 8.3. (Hexadecimal floats such as
+`0x1.cp6`, which `strtod` reads in full, are accepted.) Values that are not
+finite are refused too: `nan`, `inf`, and numbers too large for a double, such
+as `1e400`. So are lines longer than SIPNET's 255-byte buffer, which SIPNET
+splits in two. The limit is in bytes, so a `°` counts twice. The file is read
+as bytes, as SIPNET reads it, so a comment in any encoding is fine.
+
+A name the model has no field for is dropped, with one `UnknownParameterWarning`
+listing every such name. Dropping it does not change the run. Either SIPNET no
+longer registers the name and ignores it too (older files have many of these),
+or it belongs to a process pySIPNET refuses to switch on, such as flooding, and
+nothing else reads it. The warning says which applies. Check it for misspellings:
+a misspelled optional parameter is dropped, just as SIPNET would drop it.
+
+The flags are not stored in the file, so reading does not check that the
+parameters suit them; `write_param_file` does, before the next run.
+`read_param_file` gives the flat `{name: value}` dictionary instead, with the
+same refusals.
+
 ---
 
 ## Output I/O
@@ -418,16 +464,22 @@ use; there is exactly one copy.
 | `sipnet.clim` | The first 800 rows of the matching climate record (about one year from November 1998, sub-daily, 14-column layout) |
 | `niwot_standard.out.csv` | pySIPNET's golden baseline: standard-flag output on the first 60 climate rows |
 
-Three functions in `pysipnet.io.reference`, also exported from `pysipnet`,
+Four functions in `pysipnet.io.reference`, also exported from `pysipnet`,
 give access to them:
 
 ```python
-from pysipnet import niwot_reference_climate, niwot_reference_files, niwot_reference_output
+from pysipnet import (
+    niwot_reference_climate,
+    niwot_reference_files,
+    niwot_reference_output,
+    niwot_reference_parameters,
+)
 
 output = niwot_reference_output()     # SIPNETOutput, 60 steps, no binary needed
 nee = output["nee"]                   # DataArray on a time axis built from the
                                       # climate's own step lengths
 climate = niwot_reference_climate()   # ClimateDrivers, 800 steps, in memory
+params = niwot_reference_parameters() # SIPNETParameters the golden was run with
 paths = niwot_reference_files()       # paths.param, paths.clim, paths.output, paths.readme
 ```
 
@@ -443,6 +495,10 @@ baseline is deliberately regenerated, for a SIPNET pin bump or an intended
 wrapper change, so it is a fixed sample of the model's output, not a reference
 solution. The `README.md` beside the files records the provenance in full.
 
-There is not yet a reader that turns `sipnet.param` into a `SIPNETParameters`
-(issue #19); `read_param_file(paths.param)` gives the flat
-`{sipnet_name: value}` dictionary.
+Upstream's `sipnet.param` also contains 23 names that `SIPNETParameters` has no
+field for. Twenty-two are parameters SIPNET no longer registers, and one is
+`waterDrainFrac`, which only the flooding process reads (see
+[Parameter files](#parameter-files)). `niwot_reference_parameters()` silences
+the warning about those names, because the list is fixed and a test pins it.
+`SIPNETParameters.from_param_file(paths.param)` reads the same file with the
+warning.

@@ -85,50 +85,6 @@ def fake_sipnet_binary(path: Path, version_line: str = PINNED_VERSION_LINE) -> P
     return path
 
 
-def params_from_sipnet_file(path: Path):
-    """Reconstruct a ``SIPNETParameters`` from a SIPNET ``.param`` file.
-
-    Inverse of :func:`pysipnet.io.param_io.write_param_file` across the
-    :data:`~pysipnet.io.param_io.PYTHON_TO_SIPNET` mapping.  Names not in the
-    mapping (obsolete placeholders, out-of-scope submodel params) are ignored,
-    exactly as the writer omits them.
-
-    This is a temporary test-side stand-in for the production reader tracked in
-    https://github.com/TARPS-group/pySIPNET/issues/19; fold callers over to the
-    library API once it lands.
-    """
-    from pysipnet.io.param_io import PYTHON_TO_SIPNET, read_param_file
-    from pysipnet.parameters.model import (
-        AllocationParams,
-        InitialConditions,
-        LeafPhysiologyParams,
-        PhenologyParams,
-        PhotosynthesisParams,
-        RespirationParams,
-        SIPNETParameters,
-        WaterParams,
-    )
-
-    group_classes: dict[str, type] = {
-        "initial_conditions": InitialConditions,
-        "photosynthesis": PhotosynthesisParams,
-        "phenology": PhenologyParams,
-        "respiration": RespirationParams,
-        "allocation": AllocationParams,
-        "water": WaterParams,
-        "leaf": LeafPhysiologyParams,
-    }
-
-    flat = read_param_file(path)
-    groups: dict[str, dict[str, float]] = {group: {} for group in group_classes}
-    for python_path, sipnet_name in PYTHON_TO_SIPNET.items():
-        if sipnet_name in flat:
-            group, field = python_path.split(".", 1)
-            groups[group][field] = flat[sipnet_name]
-    kwargs = {group: cls(**groups[group]) for group, cls in group_classes.items()}
-    return SIPNETParameters(**kwargs)
-
-
 @dataclass(frozen=True)
 class BareRun:
     """What running the SIPNET binary by hand produced."""
@@ -155,8 +111,14 @@ def run_sipnet_directly(binary: Path, param_path: Path, clim_path: Path) -> Bare
         (workdir / "sipnet.param").write_bytes(param_path.read_bytes())
         (workdir / "sipnet.clim").write_bytes(clim_path.read_bytes())
         (workdir / "sipnet.in").write_text("fileName = sipnet\nEVENTS = 0\n")
+        # SIPNET echoes input bytes into its log, possibly half a UTF-8 character.
         proc = subprocess.run(
-            [str(binary)], cwd=workdir, capture_output=True, text=True, timeout=300
+            [str(binary)],
+            cwd=workdir,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=300,
         )
         output = read_output_file(workdir / "sipnet.out") if proc.returncode == 0 else None
         return BareRun(returncode=proc.returncode, log=proc.stdout + proc.stderr, output=output)

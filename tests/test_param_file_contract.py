@@ -13,19 +13,30 @@ directions of that contract can break quietly:
 
 These tests read SIPNET's own log output to catch the first case, and run
 several flag combinations to catch the second.
+
+The reading direction has the same shape as the ``.clim`` layout contract
+(``test_clim_layout_contract.py``): :func:`~pysipnet.io.param_io.read_parameters`
+must accept what SIPNET accepts, read it as SIPNET reads it, and refuse what
+SIPNET refuses. The one deliberate difference is a value SIPNET misreads
+without a word, which pySIPNET refuses; those tests pin the misreading, so a
+fix upstream shows up here.
 """
 
 from __future__ import annotations
 
 import shutil
 import subprocess
+import warnings
+from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from pysipnet.build import binary_path
-from pysipnet.io.param_io import write_param_file
+from pysipnet.io.param_io import UnknownParameterWarning, read_parameters, write_param_file
 from pysipnet.parameters.model import ModelFlags
 from pysipnet.runner import _render_sipnet_in
+from tests.helpers import BareRun, run_sipnet_directly
 
 requires_binary = pytest.mark.skipif(
     not binary_path().exists(),
@@ -79,6 +90,9 @@ def params_for(minimal_params):
             data["respiration"]["growth_respiration_fraction"] = 0.25
         if flags.leaf_water:
             data["water"]["leaf_water_pool_depth"] = 0.05
+        # Left out when its flag is off, so the run shows SIPNET does not need it.
+        if not flags.water_hresp:
+            data["respiration"]["soil_respiration_moisture_exponent"] = None
         return type(minimal_params).model_validate(data)
 
     return _build
@@ -161,3 +175,164 @@ class TestObsoleteParametersAreGone:
         """The clean-run baseline: zero unknown-parameter lines, not merely few."""
         proc = _run_sipnet(tmp_path, minimal_params, ModelFlags.standard(), reference_clim_path)
         assert "Unknown param" not in proc.stdout + proc.stderr
+
+
+@requires_binary
+class TestReaderAgreesWithSipnet:
+    """Each file is given to the bare binary and to the reader, and the verdicts compared."""
+
+    @pytest.fixture
+    def lines(self, tmp_path, minimal_params) -> list[str]:
+        path = tmp_path / "clean.param"
+        write_param_file(minimal_params, ModelFlags.standard(), path)
+        return [line for line in path.read_text().splitlines() if not line.startswith("!")]
+
+    @pytest.fixture
+    def clim(self, tmp_path, reference_clim_path) -> Path:
+        path = tmp_path / "short.clim"
+        path.write_text("".join(reference_clim_path.read_text().splitlines(True)[:60]))
+        return path
+
+    def _both(self, tmp_path, clim, lines, name) -> tuple[BareRun, Path]:
+        path = tmp_path / f"{name}.param"
+        path.write_text("".join(f"{line}\n" for line in lines))
+        return run_sipnet_directly(binary_path(), path, clim), path
+
+    @staticmethod
+    def _replace(lines, name, replacement):
+        return [replacement if line.split()[0] == name else line for line in lines]
+
+    @staticmethod
+    def _assert_same_output(a: BareRun, b: BareRun) -> None:
+        assert a.output is not None and b.output is not None
+        pd.testing.assert_frame_equal(a.output, b.output, check_exact=True)
+
+    def test_a_clean_file_is_accepted_by_both(self, tmp_path, clim, lines, minimal_params):
+        run, path = self._both(tmp_path, clim, lines, "clean")
+        assert run.returncode == 0, run.log
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert read_parameters(path) == minimal_params
+
+    def test_names_in_another_case_are_the_same_parameters(
+        self, tmp_path, clim, lines, minimal_params
+    ):
+        clean, _ = self._both(tmp_path, clim, lines, "clean")
+        upper, path = self._both(tmp_path, clim, [line.upper() for line in lines], "upper")
+        assert upper.returncode == 0, upper.log
+        assert "Unknown param" not in upper.log
+        self._assert_same_output(clean, upper)
+        assert read_parameters(path) == minimal_params
+
+    def test_an_unknown_name_is_ignored_by_both(self, tmp_path, clim, lines, minimal_params):
+        clean, _ = self._both(tmp_path, clim, lines, "clean")
+        extra, path = self._both(tmp_path, clim, [*lines, "microbeInit 0.5"], "extra")
+        assert extra.returncode == 0, extra.log
+        assert "microbeInit" in extra.log
+        self._assert_same_output(clean, extra)
+        with pytest.warns(UnknownParameterWarning, match="microbeInit"):
+            assert read_parameters(path) == minimal_params
+
+    def test_an_unknown_name_may_repeat_in_both(self, tmp_path, clim, lines):
+        run, path = self._both(tmp_path, clim, [*lines, "E0 1", "E0 2"], "repeat")
+        assert run.returncode == 0, run.log
+        with pytest.warns(UnknownParameterWarning, match="E0"):
+            read_parameters(path)
+
+    @pytest.mark.parametrize(
+        ("edit", "sipnet_says", "reader_says"),
+        [
+            pytest.param(
+                lambda ls: [*ls, "AMAX 1"],
+                "already been set",
+                "given twice",
+                id="duplicate",
+            ),
+            pytest.param(
+                lambda ls: TestReaderAgreesWithSipnet._replace(ls, "aMax", "aMax *"),
+                "no longer supported",
+                "spatially-varying marker",
+                id="star",
+            ),
+            pytest.param(
+                lambda ls: [ln for ln in ls if ln.split()[0] != "litterInit"],
+                "Did not find required parameter litterInit",
+                "litterInit",
+                id="missing-despite-default",
+            ),
+            pytest.param(
+                lambda ls: [ln for ln in ls if ln.split()[0] != "aMax"],
+                "Did not find required parameter aMax",
+                "aMax",
+                id="missing",
+            ),
+        ],
+    )
+    def test_refused_by_both(self, tmp_path, clim, lines, edit, sipnet_says, reader_says):
+        run, path = self._both(tmp_path, clim, edit(lines), "refused")
+        assert run.returncode != 0
+        assert sipnet_says in run.log
+        with pytest.raises(ValueError, match=reader_says):
+            read_parameters(path)
+
+    def test_a_name_without_a_value_crashes_sipnet(self, tmp_path, clim, lines):
+        run, path = self._both(tmp_path, clim, [*lines, "microbeInit"], "no_value")
+        assert run.returncode != 0
+        with pytest.raises(ValueError, match="has no value"):
+            read_parameters(path)
+
+    @pytest.mark.parametrize(
+        ("token", "read_as"),
+        [("abc", "0"), ("112x", "112"), ("1_12", "1")],
+    )
+    def test_sipnet_misreads_a_non_number_silently_and_the_reader_refuses(
+        self, tmp_path, clim, lines, token, read_as
+    ):
+        misread, path = self._both(
+            tmp_path, clim, self._replace(lines, "aMax", f"aMax {token}"), "misread"
+        )
+        assert misread.returncode == 0, misread.log
+        as_read, _ = self._both(
+            tmp_path, clim, self._replace(lines, "aMax", f"aMax {read_as}"), "as_read"
+        )
+        self._assert_same_output(misread, as_read)
+        with pytest.raises(ValueError, match="not a number"):
+            read_parameters(path)
+
+    @pytest.mark.parametrize(
+        "comment",
+        [
+            pytest.param("! " + "word " * 60, id="ascii"),
+            pytest.param("! " + "°C " * 70, id="multibyte-under-255-characters"),
+        ],
+    )
+    def test_sipnet_splits_a_long_line_and_the_reader_refuses(self, tmp_path, clim, lines, comment):
+        run, path = self._both(tmp_path, clim, [*lines, comment], "long_line")
+        assert "Unknown param" in run.log, "SIPNET read the comment's tail as a parameter"
+        with pytest.raises(ValueError, match="255-byte"):
+            read_parameters(path)
+
+    def test_a_hexadecimal_float_is_read_alike(self, tmp_path, clim, lines, minimal_params):
+        assert minimal_params.photosynthesis.max_photosynthesis_rate == 112.0
+        clean, _ = self._both(tmp_path, clim, lines, "clean")
+        hexed, path = self._both(
+            tmp_path, clim, self._replace(lines, "aMax", "aMax 0x1.cp6"), "hex"
+        )
+        assert hexed.returncode == 0, hexed.log
+        self._assert_same_output(clean, hexed)
+        assert read_parameters(path) == minimal_params
+
+    def test_sipnet_runs_on_an_overflowing_value_and_the_reader_refuses(
+        self, tmp_path, clim, lines
+    ):
+        run, path = self._both(tmp_path, clim, self._replace(lines, "aMax", "aMax 1e400"), "inf")
+        assert run.returncode == 0, run.log
+        with pytest.raises(ValueError, match="must be finite"):
+            read_parameters(path)
+
+    @pytest.mark.parametrize("name", ["leafOnDay", "leafOffDay"])
+    def test_a_leaf_day_of_zero_is_accepted_by_both(self, tmp_path, clim, lines, name):
+        kept = [line for line in lines if line.split()[0] != name]
+        run, path = self._both(tmp_path, clim, [*kept, f"{name} 0"], "zero")
+        assert run.returncode == 0, run.log
+        assert read_parameters(path).dataarray(name).item() == 0.0

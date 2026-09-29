@@ -30,9 +30,10 @@ the package's own types::
 
     output = niwot_reference_output()      # a SIPNETOutput, 60 steps, no binary needed
     nee = output["nee"]                    # with the climate's own step lengths
+    params = niwot_reference_parameters()  # the SIPNETParameters the golden was run with
 
 :func:`niwot_reference_files` gives the paths themselves, for anything the typed
-loaders do not cover — reading ``sipnet.param`` with
+loaders do not cover — reading ``sipnet.param`` as a flat dictionary with
 :func:`~pysipnet.io.param_io.read_param_file`, or running the binary on the
 original files by hand.
 """
@@ -48,10 +49,12 @@ from typing import TYPE_CHECKING
 import pandas as pd
 
 from pysipnet.io.clim_io import read_clim_file
+from pysipnet.io.param_io import UnknownParameterWarning, read_parameters
 
 if TYPE_CHECKING:
     from pysipnet.climate import ClimateDrivers
     from pysipnet.output import SIPNETOutput
+    from pysipnet.parameters.model import SIPNETParameters
 
 _DATA_DIR_PARTS = ("data", "niwot")
 
@@ -146,6 +149,20 @@ def niwot_reference_climate() -> ClimateDrivers:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message=_KNOWN_UPSTREAM_DATA_WARNING)
         return read_clim_file(niwot_reference_files().clim)
+
+
+def niwot_reference_parameters() -> SIPNETParameters:
+    """The bundled Niwot Ridge ``sipnet.param``, as a :class:`~pysipnet.SIPNETParameters`.
+
+    The parameters the golden baseline was run with. Upstream's file also
+    names parameters SIPNET no longer registers and one for flooding, which
+    pySIPNET does not model; they cannot affect a run, and the
+    :class:`~pysipnet.io.param_io.UnknownParameterWarning` listing them is
+    silenced here, where the file is fixed and known.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UnknownParameterWarning)
+        return read_parameters(niwot_reference_files().param)
 
 
 def niwot_reference_output() -> SIPNETOutput:

@@ -6,8 +6,8 @@ import pytest
 
 
 @pytest.fixture(scope="session")
-def sipnet_source_params() -> set[str]:
-    """Every parameter name the pinned SIPNET source registers.
+def sipnet_param_registrations() -> dict[str, str]:
+    """``{name: condition}`` for every parameter the pinned SIPNET source registers.
 
     Read straight out of the C source rather than hard-coded, so a test that
     checks our assumptions about SIPNET is checking the SIPNET we actually
@@ -16,6 +16,9 @@ def sipnet_source_params() -> set[str]:
     SIPNET registers each parameter with a call of the form::
 
         initializeOneModelParam(modelParams, "aMax", &(params.aMax), 1);
+
+    and the condition is the last argument as written: ``1``, ``0``, or a C
+    expression over ``ctx`` flags such as ``!((ctx.gdd) || (ctx.soilPhenol))``.
     """
     import re
 
@@ -23,14 +26,23 @@ def sipnet_source_params() -> set[str]:
     if not source_dir.exists():
         pytest.skip("SIPNET submodule not populated; run 'git submodule update --init sipnet'")
 
-    pattern = re.compile(r'initializeOneModelParam\(\s*\w+\s*,\s*"([A-Za-z_0-9]+)"')
-    names: set[str] = set()
+    pattern = re.compile(
+        r'initializeOneModelParam\(\s*\w+\s*,\s*"([A-Za-z_0-9]+)"\s*,\s*&\([^)]*\)\s*,\s*(.*?)\);'
+    )
+    registrations: dict[str, str] = {}
     for path in source_dir.rglob("*.c"):
-        names.update(pattern.findall(path.read_text()))
+        for name, condition in pattern.findall(path.read_text()):
+            registrations[name] = condition.strip()
 
-    if not names:
+    if not registrations:
         pytest.fail(f"No parameter registrations found under {source_dir}; has the C API changed?")
-    return names
+    return registrations
+
+
+@pytest.fixture(scope="session")
+def sipnet_source_params(sipnet_param_registrations: dict[str, str]) -> set[str]:
+    """Every parameter name the pinned SIPNET source registers."""
+    return set(sipnet_param_registrations)
 
 
 @pytest.fixture

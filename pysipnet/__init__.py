@@ -63,6 +63,7 @@ from pysipnet.io.reference import (
     niwot_reference_climate,
     niwot_reference_files,
     niwot_reference_output,
+    niwot_reference_parameters,
 )
 
 # Model (high-level interface)
@@ -142,6 +143,7 @@ __all__ = [
     "niwot_reference_files",
     "niwot_reference_climate",
     "niwot_reference_output",
+    "niwot_reference_parameters",
     # Build
     "install_sipnet",
     "build_sipnet",

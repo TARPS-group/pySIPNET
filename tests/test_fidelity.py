@@ -41,10 +41,11 @@ import pandas as pd
 import pytest
 
 from pysipnet.io.clim_io import read_clim_file
-from pysipnet.io.reference import niwot_reference_files
-from pysipnet.parameters.model import ModelFlags
+from pysipnet.io.param_io import UnknownParameterWarning
+from pysipnet.io.reference import niwot_reference_files, niwot_reference_parameters
+from pysipnet.parameters.model import ModelFlags, SIPNETParameters
 from pysipnet.runner import SIPNETRunner
-from tests.helpers import params_from_sipnet_file, run_sipnet_directly
+from tests.helpers import run_sipnet_directly
 
 _REFERENCE = niwot_reference_files()
 REFERENCE_PARAM = _REFERENCE.param
@@ -94,7 +95,7 @@ class TestWrapperFidelity:
         -byte identical inputs on both sides, every output column must match
         exactly.
         """
-        params = params_from_sipnet_file(REFERENCE_PARAM)
+        params = niwot_reference_parameters()
         climate = _load_reference_climate()
 
         runner = SIPNETRunner(flags=ModelFlags.standard(), keep_workdir=True)
@@ -132,7 +133,9 @@ class TestWrapperFidelity:
         """
         native = _run_binary_directly(_SIPNET_BINARY, REFERENCE_PARAM, REFERENCE_CLIM)
 
-        params = params_from_sipnet_file(REFERENCE_PARAM)
+        # Upstream's file names parameters SIPNET no longer registers.
+        with pytest.warns(UnknownParameterWarning):
+            params = SIPNETParameters.from_param_file(REFERENCE_PARAM)
         climate = _load_reference_climate()
         runner = SIPNETRunner(flags=ModelFlags.standard())
         result = runner.run(params, climate, run_id="fidelity_reference")
