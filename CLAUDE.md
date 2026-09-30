@@ -800,13 +800,15 @@ generated from the specs.
 below) are not SIPNET's grouping by process and cannot change without breaking
 saved parameter sets: `respiration` holds two processes, and the turnover rates
 are stored in `allocation`. Each spec's `sipnet_docs_section` is a
-`SIPNETDocsSection`, a heading of the pinned SIPNET's `docs/parameters.md`
-verbatim, in that document's order. SIPNET's code offers no partition to use
+`SIPNETDocsSection` (`pysipnet/parameters/base.py`, beside `ParameterDomain`),
+a heading of the pinned SIPNET's `docs/parameters.md` verbatim, in that
+document's order. `ParameterSpec.__post_init__` refuses a plain string, since a
+dataclass does not check its annotations. SIPNET's code offers no partition to use
 instead: `calcRootFluxes` reads allocation, turnover and respiration
 parameters, and `frozenSoilThreshold`, `psnTOpt` and `rdConst` are each read
 by two processes. `tests/test_parameter_metadata.py` parses the upstream
-document (HTML comments stripped, since it keeps commented-out tables) and
-asserts every section. The one parameter upstream does not list,
+document (HTML comments and `{#anchor}` suffixes stripped, since it keeps
+commented-out tables and anchors its title) and asserts every section. The one parameter upstream does not list,
 `leafOnReallocFrac`, is in `NOT_IN_SIPNET_DOCS` there, and the test fails once
 upstream documents it.
 
@@ -821,10 +823,18 @@ since gotcha 12 shows "not required" does not mean "not read", and no derived
 rows (`psnTMax`, coarse-root allocation), since no Python code computes them.
 Rendering is left to the caller: no great_tables or `Styler` dependency, only
 `units_style`. The docs page and `viz.dashboard`'s parameter table are both
-built on it. Facts stated on a spec are not restated in docstrings: the
+built on it.
+
+Requiredness (`required_when`) and per-year rates (`per_year`) are stated only
+on the spec: no docstring or field description repeats them. The
 hand-written "required when" table that used to sit in `model.py`'s module
 docstring had drifted (it listed `snowInit` as flag-dependent and omitted
-three flag-dependent parameters).
+three flag-dependent parameters), and descriptions no longer say "SIPNET
+divides by 365"; the table's `per_year` column carries that. A description may
+still say when SIPNET *uses* a parameter ("Used when ModelFlags.gdd is on"),
+which is a different fact from requiredness (gotcha 12) and has no field of
+its own. Not every parameter SIPNET only sometimes requires may be `None`:
+`growth_respiration_fraction` is a plain `float` defaulting to 0.0.
 
 The authoritative source is the `initializeOneModelParam` block in
 `src/sipnet/sipnet.c` (`readParamData`). Its third argument is the required flag:
@@ -1001,8 +1011,8 @@ pySIPNET/
 │   ├── build.py                  # find (search order), download, compile, verify the binary
 │   ├── cli.py                    # `pysipnet install-sipnet | info | stage-bundle`
 │   ├── parameters/
-│   │   ├── base.py               # ParameterSpec, param_field, domains (version-agnostic)
-│   │   ├── model.py              # ModelFlags, SIPNETParameters, SIPNETDocsSection
+│   │   ├── base.py               # ParameterSpec, param_field, domains, SIPNETDocsSection
+│   │   ├── model.py              # ModelFlags and SIPNETParameters
 │   │   └── metadata.py           # parameter_metadata_table: the display view of the specs
 │   ├── variables.py              # the output-variable registry (names, units, kinds, labels)
 │   ├── units.py                  # UDUNITS unit strings: Pint registry, validation, formatting, conversion, combination

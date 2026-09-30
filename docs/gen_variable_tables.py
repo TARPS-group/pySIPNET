@@ -93,8 +93,10 @@ param_lines = [
     "`SIPNETModel`, but only the current name is a field.",
     "",
     "**Required when.** The model flags under which SIPNET requires the parameter.",
-    "One that is not required may be left as `None`, and is then not written. Not",
-    "required is not the same as not used: SIPNET reads any parameter it is given.",
+    "A field typed `float | None` may be left as `None`, and is then not written;",
+    "not every parameter SIPNET only sometimes requires is one (`growth_respiration_fraction`",
+    "defaults to 0.0, which SIPNET runs on). Not required is not the same as not used:",
+    "SIPNET reads any parameter it is given.",
     "",
     "**Per-year rates.** Parameters marked *per year* are read by SIPNET as annual rates",
     "and divided by 365 internally; specify them per year.",
@@ -114,7 +116,7 @@ for section, rows in parameter_metadata_table().groupby("section", observed=True
     ]
     for path, row in rows.iterrows():
         spec = PARAMETER_SPECS[path]
-        units = row["units"] + (" (per year)" if spec.per_year else "")
+        units = row["units"] + (" (per year)" if row["per_year"] else "")
         aliases = ", ".join(f"`{a}`" for a in spec.aliases)
         initializes = ", ".join(f"`{v}`" for v in spec.initializes)
         if spec.initializes_via:

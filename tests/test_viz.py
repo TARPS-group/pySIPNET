@@ -91,15 +91,19 @@ class TestDashboard:
         y_axes = {t.yaxis for t in scatter}
         assert len(y_axes) > 1
 
-    def test_parameter_table_is_grouped_by_sipnet_docs_section(self):
+    def test_parameter_table_is_grouped_by_sipnet_docs_section(self) -> None:
         import plotly.graph_objects as go
 
         from pysipnet.parameters.metadata import parameter_metadata_table
         from pysipnet.viz import dashboard
 
         result = _make_result()
-        tables = [t for t in dashboard(result).data if isinstance(t, go.Table)]
-        section_col, label_col, value_col, _ = tables[-1].cells.values
+        (table,) = [
+            t
+            for t in dashboard(result).data
+            if isinstance(t, go.Table) and "<b>Section</b>" in t.header.values
+        ]
+        section_col, label_col, value_col, _ = table.cells.values
         expected = parameter_metadata_table(result.parameters)
         assert list(label_col) == expected["label"].tolist()
         assert [s for s in section_col if s] == [

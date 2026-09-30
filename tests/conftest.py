@@ -60,7 +60,8 @@ def sipnet_docs_sections() -> tuple[list[str], dict[str, set[str]]]:
     listed: dict[str, set[str]] = {}
     for line in text.splitlines():
         if line.startswith("#"):
-            headings.append(line.lstrip("#").strip())
+            # Drop a Pandoc anchor ("{#sec-parameters}"), which is not part of the name.
+            headings.append(re.sub(r"\s*\{#[^}]*\}\s*$", "", line.lstrip("#").strip()))
         elif line.startswith("|") and headings:
             for cell in line.strip().strip("|").split("|"):
                 listed.setdefault(cell.strip().strip("`"), set()).add(headings[-1])

@@ -35,13 +35,14 @@ Three facts about each parameter are stated once, on its
 :class:`~pysipnet.parameters.base.ParameterSpec`, and not listed here:
 
 - ``required_when``: under which :class:`ModelFlags` SIPNET requires it. A
-  field SIPNET does not always require may be ``None``, and
-  :meth:`SIPNETParameters.validate_for_flags` refuses a ``None`` that the
-  flags require.
+  field typed ``float | None`` may be left as ``None``, and is then not
+  written; :meth:`SIPNETParameters.validate_for_flags` refuses a ``None`` that
+  the flags require. Not every field SIPNET only sometimes requires is one:
+  ``growth_respiration_fraction`` defaults to 0.0, which SIPNET runs on.
 - ``per_year``: SIPNET reads the value as an annual rate and divides by 365.
   Specify these per year; the writer passes them through unchanged.
 - ``sipnet_docs_section``: the section of SIPNET's parameter documentation it
-  is listed under (:class:`SIPNETDocsSection`).
+  is listed under (:class:`~pysipnet.parameters.base.SIPNETDocsSection`).
 
 :func:`~pysipnet.parameters.metadata.parameter_metadata_table` and the
 generated "Parameters" documentation page read them from there.
@@ -54,7 +55,6 @@ Coarse-root allocation is not a parameter: SIPNET takes it as the residual
 from __future__ import annotations
 
 from collections.abc import Hashable, Mapping, Sequence
-from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -67,43 +67,13 @@ from pysipnet.parameters.base import (
     ParameterDomain,
     ParameterGroup,
     ParameterSpec,
+    SIPNETDocsSection,
     get_parameter_specs,
     param_field,
     parse_requirement,
 )
 
 _D = ParameterDomain  # local alias for brevity
-
-
-class SIPNETDocsSection(StrEnum):
-    """The sections of SIPNET's parameter documentation (``docs/parameters.md``).
-
-    Each value is a heading exactly as the pinned SIPNET writes it, and the
-    members are in the order that document gives them. Every parameter's
-    :attr:`~pysipnet.parameters.base.ParameterSpec.sipnet_docs_section` is one
-    of these: SIPNET's own grouping by process, which is what a report on a
-    parameter set is organized by.
-
-    The storage groups of :class:`SIPNETParameters` follow this grouping only
-    loosely (``respiration`` holds two of its sections, and the turnover rates
-    are stored in ``allocation`` but documented under tree physiology), and
-    they cannot change without breaking every saved parameter set.
-
-    SIPNET's code has no grouping of its own to follow instead: one function
-    reads parameters of several processes (``calcRootFluxes`` reads allocation,
-    turnover and root respiration), and one parameter is read by several
-    processes (``frozenSoilThreshold`` by transpiration and by foliar
-    respiration). The documentation is the one partition SIPNET states.
-    """
-
-    INITIAL_STATE = "Initial State Values"
-    PHOTOSYNTHESIS = "Photosynthesis Parameters"
-    PHENOLOGY = "Phenology-Related Parameters"
-    ALLOCATION = "Allocation Parameters"
-    AUTOTROPHIC_RESPIRATION = "Autotrophic Respiration Parameters"
-    SOIL_RESPIRATION = "Soil Respiration Parameters"
-    MOISTURE = "Moisture-Related Parameters"
-    TREE_PHYSIOLOGY = "Tree Physiological Parameters"
 
 
 _S = SIPNETDocsSection
@@ -745,8 +715,7 @@ class PhenologyParams(ParameterGroup):
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
-        description="Fraction of leaf carbon lost to litter per year; SIPNET divides by 365 "
-        "for daily use.",
+        description="Fraction of leaf carbon lost to litter per year.",
         long_label="Leaf turnover rate",
     )
     leaf_on_reallocation_fraction: float = param_field(
@@ -823,8 +792,7 @@ class RespirationParams(ParameterGroup):
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
-        description="Fine-root respiration at 0 °C as a fraction of fine-root carbon per "
-        "year; SIPNET divides by 365.",
+        description="Fine-root respiration at 0 °C as a fraction of fine-root carbon per year.",
         long_label="Base fine root respiration rate",
         aliases=("base_fine_root_resp",),
     )
@@ -834,8 +802,7 @@ class RespirationParams(ParameterGroup):
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
-        description="Coarse-root respiration at 0 °C as a fraction of coarse-root carbon per "
-        "year; SIPNET divides by 365.",
+        description="Coarse-root respiration at 0 °C as a fraction of coarse-root carbon per year.",
         long_label="Base coarse root respiration rate",
         aliases=("base_coarse_root_resp",),
     )
@@ -864,7 +831,7 @@ class RespirationParams(ParameterGroup):
         domain=_D.POSITIVE,
         per_year=True,
         description="Heterotrophic soil respiration at 0 °C and saturated moisture as a "
-        "fraction of soil carbon per year; SIPNET divides by 365.",
+        "fraction of soil carbon per year.",
         long_label="Base soil respiration rate",
         aliases=("base_soil_resp",),
     )
@@ -895,8 +862,7 @@ class RespirationParams(ParameterGroup):
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
-        description="Litter carbon broken down per year at 0 °C, as a fraction of the litter "
-        "pool; SIPNET divides by 365.",
+        description="Litter carbon broken down per year at 0 °C, as a fraction of the litter pool.",
         long_label="Litter breakdown rate",
         default=None,
     )
@@ -943,7 +909,7 @@ class AllocationParams(ParameterGroup):
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
-        description="Fraction of fine-root carbon lost per year; SIPNET divides by 365.",
+        description="Fraction of fine-root carbon lost per year.",
         long_label="Fine root turnover rate",
     )
     coarse_root_turnover_rate: float = param_field(
@@ -952,7 +918,7 @@ class AllocationParams(ParameterGroup):
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
-        description="Fraction of coarse-root carbon lost per year; SIPNET divides by 365.",
+        description="Fraction of coarse-root carbon lost per year.",
         long_label="Coarse root turnover rate",
     )
     wood_turnover_rate: float = param_field(
@@ -961,7 +927,7 @@ class AllocationParams(ParameterGroup):
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
-        description="Fraction of wood carbon lost to litter per year; SIPNET divides by 365.",
+        description="Fraction of wood carbon lost to litter per year.",
         long_label="Wood turnover rate",
     )
 
@@ -1193,7 +1159,8 @@ class SIPNETParameters(BaseModel):
         parameter is optional and not set here.
         """
         path = _PARAMETER_PATHS[resolve_parameter_name(name)]
-        value = self.flat_values().get(path)
+        group, field = path.split(".")
+        value = getattr(getattr(self, group), field)
         if value is None:
             raise ValueError(f"{path} is not set in this parameter set, so it has no value.")
         return parameter_dataarray(name, value)
@@ -1300,19 +1267,6 @@ def _check_requirement_flags() -> None:
 
 
 _check_requirement_flags()
-
-
-def _check_docs_sections() -> None:
-    """Every ``sipnet_docs_section`` must be a :class:`SIPNETDocsSection`."""
-    for path, spec in PARAMETER_SPECS.items():
-        if spec.sipnet_docs_section not in set(SIPNETDocsSection):
-            raise ValueError(
-                f"{path}: sipnet_docs_section {spec.sipnet_docs_section!r} is not a section "
-                "of SIPNET's parameter documentation."
-            )
-
-
-_check_docs_sections()
 
 
 def _build_parameter_alias_index() -> dict[str, str]:

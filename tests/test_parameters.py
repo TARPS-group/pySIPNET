@@ -16,6 +16,7 @@ from pysipnet.parameters.base import (
     ALWAYS_REQUIRED,
     ParameterDomain,
     ParameterSpec,
+    SIPNETDocsSection,
     get_parameter_specs,
     parse_requirement,
 )
@@ -572,8 +573,19 @@ class TestRequiredWhen:
                 domain=ParameterDomain.REAL,
                 description="",
                 long_label="",
-                sipnet_docs_section="",
+                sipnet_docs_section=SIPNETDocsSection.PHOTOSYNTHESIS,
                 required_when="gdd || snow",
+            )
+
+    def test_a_section_must_be_one_of_sipnets(self):
+        with pytest.raises(ValueError, match="SIPNETDocsSection"):
+            ParameterSpec(
+                sipnet_name="x",
+                units="1",
+                domain=ParameterDomain.REAL,
+                description="",
+                long_label="",
+                sipnet_docs_section="Photosynthesis Parameters",  # type: ignore[arg-type]
             )
 
     def test_description(self):

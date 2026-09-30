@@ -19,17 +19,15 @@ from typing import Any
 
 import pandas as pd
 
+from pysipnet.parameters.base import SIPNETDocsSection
 from pysipnet.parameters.model import (
     _PARAMETER_PATHS,
     PARAMETER_SPECS,
     ModelFlags,
-    SIPNETDocsSection,
     SIPNETParameters,
     resolve_parameter_name,
 )
 from pysipnet.units import UnitStyle
-
-_SECTION_ORDER = {section.value: position for position, section in enumerate(SIPNETDocsSection)}
 
 
 def parameter_metadata_table(
@@ -74,11 +72,12 @@ def parameter_metadata_table(
         Indexed by the dotted field path (``"photosynthesis.max_photosynthesis_rate"``),
         rows ordered by section and then as the model declares them, with
         columns ``section`` (an ordered categorical of
-        :class:`~pysipnet.parameters.model.SIPNETDocsSection` values, in the
+        :class:`~pysipnet.parameters.base.SIPNETDocsSection` values, in the
         order SIPNET's documentation gives them), ``name``, ``sipnet_name``,
-        ``value`` (with *parameters*), ``units``, ``label``, ``description``,
-        ``domain``, ``required_when``, ``required`` (with *flags*) and ``tag``
-        (with *tags*).
+        ``value`` (with *parameters*), ``units``, ``per_year`` (SIPNET reads
+        the value as an annual rate and divides by 365), ``label``,
+        ``description``, ``domain``, ``required_when``, ``required`` (with
+        *flags*) and ``tag`` (with *tags*).
     """
     if parameters is None:
         values: dict[str, float] | None = None
@@ -88,7 +87,6 @@ def parameter_metadata_table(
             parameters.validate_for_flags(flags)
         values = parameters.flat_values()
         paths = list(values)
-    paths.sort(key=lambda path: _SECTION_ORDER[PARAMETER_SPECS[path].sipnet_docs_section])
 
     tag_by_path = _resolve_tags(tags, paths) if tags is not None else None
 
@@ -104,6 +102,7 @@ def parameter_metadata_table(
             row["value"] = values[path]
         row |= {
             "units": spec.formatted_units(units_style),
+            "per_year": spec.per_year,
             "label": spec.long_label,
             "description": spec.description,
             "domain": spec.domain.value,
@@ -121,7 +120,7 @@ def parameter_metadata_table(
     )
     if values is not None:
         table["value"] = table["value"].astype(float)
-    return table
+    return table.sort_values("section", kind="stable")
 
 
 def _resolve_tags(tags: Mapping[str, str], paths: list[str]) -> dict[str, str]:
