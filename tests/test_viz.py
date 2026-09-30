@@ -12,6 +12,7 @@ plotly = pytest.importorskip("plotly")
 
 def _make_result(include_litter: bool = False):
     """Return a minimal SIPNETResult with synthetic outputs and climate."""
+    from pysipnet.io.reference import niwot_reference_parameters
     from pysipnet.output import SIPNETOutput
     from pysipnet.result import RunProvenance, SIPNETResult
 
@@ -66,6 +67,7 @@ def _make_result(include_litter: bool = False):
     result.outputs = SIPNETOutput.from_dataframe(ts)
     result.climate = climate
     result.provenance = provenance
+    result.parameters = niwot_reference_parameters()
     return result
 
 
@@ -88,6 +90,22 @@ class TestDashboard:
         scatter = [t for t in fig.data if isinstance(t, go.Scatter)]
         y_axes = {t.yaxis for t in scatter}
         assert len(y_axes) > 1
+
+    def test_parameter_table_is_grouped_by_sipnet_docs_section(self):
+        import plotly.graph_objects as go
+
+        from pysipnet.parameters.metadata import parameter_metadata_table
+        from pysipnet.viz import dashboard
+
+        result = _make_result()
+        tables = [t for t in dashboard(result).data if isinstance(t, go.Table)]
+        section_col, label_col, value_col, _ = tables[-1].cells.values
+        expected = parameter_metadata_table(result.parameters)
+        assert list(label_col) == expected["label"].tolist()
+        assert [s for s in section_col if s] == [
+            f"<b>{section}</b>" for section in expected["section"].unique()
+        ]
+        assert len(value_col) == len(expected)
 
     def test_flux_traces_present(self):
         from pysipnet.viz import dashboard

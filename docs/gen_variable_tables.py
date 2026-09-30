@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import mkdocs_gen_files
 
+from pysipnet.parameters.metadata import parameter_metadata_table
 from pysipnet.parameters.model import PARAMETER_SPECS
 from pysipnet.variables import (
     CLIMATE_VARIABLES,
     OUTPUT_VARIABLES,
     RESAMPLING_METHODS_FOR_KIND,
 )
+from pysipnet.version import SIPNET_PINNED_COMMIT
 
 lines = [
     "# Output variables",
@@ -71,16 +73,28 @@ with mkdocs_gen_files.open("reference/output-variables.md", "w") as f:
 param_lines = [
     "# Parameters",
     "",
-    "Every field of `SIPNETParameters`, grouped as in the model, as described by",
-    "each field's [`ParameterSpec`][pysipnet.parameters.base.ParameterSpec]",
-    "(`pysipnet.parameters.model.PARAMETER_SPECS`). This page is generated from",
-    "those specs.",
+    "Every field of `SIPNETParameters`, grouped by the section of SIPNET's own",
+    "[parameter documentation](https://github.com/PecanProject/sipnet/blob/"
+    f"{SIPNET_PINNED_COMMIT}/docs/parameters.md)",
+    "it is listed under, as described by each field's",
+    "[`ParameterSpec`][pysipnet.parameters.base.ParameterSpec]. This page is generated",
+    "by [`parameter_metadata_table()`][pysipnet.parameters.metadata.parameter_metadata_table],",
+    "which gives the same table for a parameter set, with its values, for a report.",
+    "",
+    "**Sections and storage groups.** The `Field` column is the path in",
+    "`SIPNETParameters`. Its first part is a storage group, which follows SIPNET's",
+    "sections only loosely: `respiration` holds both respiration sections, and the",
+    "turnover rates are stored in `allocation` but documented under tree physiology.",
     "",
     "**Names.** Field names follow the same convention as output variables: lower-case",
     "words, no acronyms. The `SIPNET name` column is what the `.param` file uses; the",
     "`Aliases` column lists the names pySIPNET used before this convention. Both are",
     "accepted by `resolve_parameter_name()` and reported in the error when passed to",
     "`SIPNETModel`, but only the current name is a field.",
+    "",
+    "**Required when.** The model flags under which SIPNET requires the parameter.",
+    "One that is not required may be left as `None`, and is then not written. Not",
+    "required is not the same as not used: SIPNET reads any parameter it is given.",
     "",
     "**Per-year rates.** Parameters marked *per year* are read by SIPNET as annual rates",
     "and divided by 365 internally; specify them per year.",
@@ -89,31 +103,27 @@ param_lines = [
     "`Initializes` column names it and, where the relation is not the identity, how.",
     "",
 ]
-current_group = None
-for path, spec in PARAMETER_SPECS.items():
-    group, field = path.split(".", 1)
-    if group != current_group:
-        current_group = group
-        param_lines += [
-            f"## `{group}`",
-            "",
-            "| Field | SIPNET name | Units | Domain | Description | Aliases | Initializes |",
-            "|:------|:------------|:------|:-------|:------------|:--------|:------------|",
-        ]
-    units = spec.formatted_units() + (" (per year)" if spec.per_year else "")
-    aliases = ", ".join(f"`{a}`" for a in spec.aliases)
-    initializes = ", ".join(f"`{v}`" for v in spec.initializes)
-    if spec.initializes_via:
-        initializes += f" via {spec.initializes_via}"
-    param_lines.append(
-        f"| `{field}` | `{spec.sipnet_name}` | {units} | {spec.domain.value} | "
-        f"{spec.description} | {aliases} | {initializes} |"
-    )
-    if (
-        path == list(PARAMETER_SPECS)[-1]
-        or list(PARAMETER_SPECS)[list(PARAMETER_SPECS).index(path) + 1].split(".", 1)[0] != group
-    ):
-        param_lines.append("")
+for section, rows in parameter_metadata_table().groupby("section", observed=True):
+    param_lines += [
+        f"## {section}",
+        "",
+        "| Field | SIPNET name | Units | Domain | Required when | Description | Aliases "
+        "| Initializes |",
+        "|:------|:------------|:------|:-------|:--------------|:------------|:--------"
+        "|:------------|",
+    ]
+    for path, row in rows.iterrows():
+        spec = PARAMETER_SPECS[path]
+        units = row["units"] + (" (per year)" if spec.per_year else "")
+        aliases = ", ".join(f"`{a}`" for a in spec.aliases)
+        initializes = ", ".join(f"`{v}`" for v in spec.initializes)
+        if spec.initializes_via:
+            initializes += f" via {spec.initializes_via}"
+        param_lines.append(
+            f"| `{path}` | `{row['sipnet_name']}` | {units} | {row['domain']} | "
+            f"{row['required_when']} | {row['description']} | {aliases} | {initializes} |"
+        )
+    param_lines.append("")
 
 with mkdocs_gen_files.open("reference/parameters.md", "w") as f:
     f.write("\n".join(param_lines) + "\n")

@@ -175,6 +175,56 @@ params.validate_for_flags(ModelFlags.standard())
 # raises ValueError listing any missing flag-required parameters
 ```
 
+`parameter_metadata_table(flags=ModelFlags.standard())` lists every parameter
+with whether those flags require it, and the generated
+[Parameters](../reference/parameters.md) page gives the condition for each.
+
+#### Presenting a parameter set
+
+`parameter_metadata_table(params)` gives one row per parameter the set
+supplies, grouped by the section of SIPNET's own parameter documentation it is
+listed under (photosynthesis, phenology, allocation, autotrophic and soil
+respiration, moisture, tree physiology), with the pySIPNET and SIPNET names,
+the value and the units. It is a plain `DataFrame`: every column comes from the
+parameter specs, and how it is rendered is left to you.
+
+`tags` marks parameters in your own terms, under any name pySIPNET accepts for
+them. A misspelled name raises instead of tagging nothing:
+
+```python
+from pysipnet import parameter_metadata_table
+
+table = parameter_metadata_table(
+    params,
+    flags=ModelFlags.standard(),  # adds a "required" column
+    tags=dict.fromkeys(["aMax", "baseSoilResp", "soilWHC"], "calibrated"),
+    units_style="unicode",  # or "html", "latex", "plain"
+)
+table["tag"] = table["tag"].fillna("fixed")
+```
+
+With [great_tables](https://posit-dev.github.io/great-tables/), which pySIPNET
+does not depend on, the sections become row groups:
+
+```python
+from great_tables import GT, loc, style
+
+calibrated_rows = (table["tag"] == "calibrated").to_numpy().nonzero()[0].tolist()
+report = (
+    GT(table.reset_index(), groupname_col="section")
+    .cols_hide(["path", "description", "domain", "required_when", "required", "tag"])
+    .cols_label(name="pySIPNET name", sipnet_name="SIPNET name", value="Value",
+                units="Units", label="Parameter")
+    .fmt_number(columns="value", n_sigfig=4)
+    .tab_style(style=[style.fill(color="#e8f0fe"), style.text(weight="bold")],
+               locations=loc.body(rows=calibrated_rows))
+)
+```
+
+great_tables escapes HTML in cells, so use `units_style="unicode"` there. The
+`"html"` style is for renderers that do not escape, such as `table.style`
+(pandas' `Styler`), and `"latex"` is for `to_latex()`.
+
 ---
 
 ## Running with SIPNETRunner

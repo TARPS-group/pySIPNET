@@ -796,6 +796,36 @@ there only warns (see "Reading one back" above), because SIPNET's own
 reference file has 22 names SIPNET no longer registers. The docs page `reference/parameters.md` is
 generated from the specs.
 
+**Sections, and where each fact lives.** The storage groups (the headings
+below) are not SIPNET's grouping by process and cannot change without breaking
+saved parameter sets: `respiration` holds two processes, and the turnover rates
+are stored in `allocation`. Each spec's `sipnet_docs_section` is a
+`SIPNETDocsSection`, a heading of the pinned SIPNET's `docs/parameters.md`
+verbatim, in that document's order. SIPNET's code offers no partition to use
+instead: `calcRootFluxes` reads allocation, turnover and respiration
+parameters, and `frozenSoilThreshold`, `psnTOpt` and `rdConst` are each read
+by two processes. `tests/test_parameter_metadata.py` parses the upstream
+document (HTML comments stripped, since it keeps commented-out tables) and
+asserts every section. The one parameter upstream does not list,
+`leafOnReallocFrac`, is in `NOT_IN_SIPNET_DOCS` there, and the test fails once
+upstream documents it.
+
+`parameter_metadata_table(parameters=None, *, flags=, tags=, units_style=)`
+(`pysipnet/parameters/metadata.py`) is the display view: a `DataFrame`, one
+row per parameter, ordered by section. It works nothing out for itself, and
+must stay that way. Values come from `SIPNETParameters.flat_values()`, which is
+also what the `.param` writer writes, so the rows are what SIPNET receives.
+Requiredness comes from `required_under` and `requirement_description`, and
+names from `resolve_parameter_name`. There is deliberately no "used" column,
+since gotcha 12 shows "not required" does not mean "not read", and no derived
+rows (`psnTMax`, coarse-root allocation), since no Python code computes them.
+Rendering is left to the caller: no great_tables or `Styler` dependency, only
+`units_style`. The docs page and `viz.dashboard`'s parameter table are both
+built on it. Facts stated on a spec are not restated in docstrings: the
+hand-written "required when" table that used to sit in `model.py`'s module
+docstring had drifted (it listed `snowInit` as flag-dependent and omitted
+three flag-dependent parameters).
+
 The authoritative source is the `initializeOneModelParam` block in
 `src/sipnet/sipnet.c` (`readParamData`). Its third argument is the required flag:
 `1` = always required, `0` = optional, and a `ctx.*` expression = **required
@@ -972,7 +1002,8 @@ pySIPNET/
 │   ├── cli.py                    # `pysipnet install-sipnet | info | stage-bundle`
 │   ├── parameters/
 │   │   ├── base.py               # ParameterSpec, param_field, domains (version-agnostic)
-│   │   └── model.py              # ModelFlags and SIPNETParameters
+│   │   ├── model.py              # ModelFlags, SIPNETParameters, SIPNETDocsSection
+│   │   └── metadata.py           # parameter_metadata_table: the display view of the specs
 │   ├── variables.py              # the output-variable registry (names, units, kinds, labels)
 │   ├── units.py                  # UDUNITS unit strings: Pint registry, validation, formatting, conversion, combination
 │   ├── arithmetic.py             # products, quotients, sums of labeled DataArrays, with kind; step_length()
@@ -999,6 +1030,7 @@ pySIPNET/
 │   ├── test_events_contract.py   # the events.in contract, incl. arities
 │   ├── test_clim_layout_contract.py  # pySIPNET reads exactly the .clim layouts SIPNET reads
 │   ├── test_param_name_mapping.py   # the Python→SIPNET parameter map, stated by hand
+│   ├── test_parameter_metadata.py   # sections match SIPNET's docs; the display table reads the specs
 │   ├── test_integration.py       # end-to-end behavior, flags, mass balance, snow flag
 │   ├── test_variables.py         # the .out header contract and the registry's own rules
 │   ├── test_units.py             # conversion factors, refusals, and every registry constituent convertible
@@ -1090,6 +1122,10 @@ Worth knowing which test to look at when something breaks:
   public checks refuse what `resample` refuses, in the same words. Catches a
   method silently accepted for a kind that does not admit it, and the two
   paths drifting apart.
+- `test_parameter_metadata.py` — every parameter's `sipnet_docs_section` is
+  the heading SIPNET's `docs/parameters.md` lists it under, and the metadata
+  table's columns, rows and tags come from the specs and `flat_values()`.
+  Catches upstream moving or newly documenting a parameter.
 - `test_units.py` — every conversion factor, stated as arithmetic on the
   molar masses by hand, every refusal by message, round trips, relabeling of
   `attrs`, and that every constituent a registry declares is one the

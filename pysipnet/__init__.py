@@ -73,6 +73,7 @@ from pysipnet.model import SIPNETModel
 from pysipnet.output import SIPNETOutput
 
 # Parameters (top-level groups available via pysipnet.parameters)
+from pysipnet.parameters.metadata import parameter_metadata_table
 from pysipnet.parameters.model import (
     PARAMETER_SPECS,
     SIPNET_PARAMS_BY_GROUP,
@@ -121,6 +122,7 @@ __all__ = [
     "ModelFlags",
     "SIPNET_PARAMS_BY_GROUP",
     "PARAMETER_SPECS",
+    "parameter_metadata_table",
     "resolve_parameter_name",
     # Variable registries
     "OUTPUT_VARIABLES",

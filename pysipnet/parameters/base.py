@@ -220,6 +220,11 @@ class ParameterSpec:
     long_label: str
     """Plot-ready name without units, e.g. ``"Maximum photosynthesis rate"``."""
 
+    sipnet_docs_section: str
+    """The heading SIPNET's own parameter documentation lists this parameter
+    under, e.g. ``"Photosynthesis Parameters"``: a grouping by process, which
+    the storage groups of the parameter model only approximate."""
+
     constituent: str = ""
     """Substance the unit refers to: ``"C"``, ``"N"``, ``"CO2"``, ``"H2O"`` or empty."""
 
@@ -320,6 +325,7 @@ def param_field(
     domain: ParameterDomain,
     description: str,
     long_label: str,
+    sipnet_docs_section: str,
     constituent: str = "",
     short_label: str = "",
     aliases: tuple[str, ...] = (),
@@ -347,6 +353,8 @@ def param_field(
         Human-readable description included in the JSON schema.
     long_label, short_label:
         Plot labels without units.
+    sipnet_docs_section:
+        The heading of SIPNET's parameter documentation the parameter is listed under.
     constituent:
         Substance qualifier not captured by the physical unit.
     aliases:
@@ -376,6 +384,7 @@ def param_field(
         domain=domain,
         description=description,
         long_label=long_label,
+        sipnet_docs_section=sipnet_docs_section,
         constituent=constituent,
         short_label=short_label,
         aliases=aliases,

@@ -29,63 +29,32 @@ in each field's ``ParameterSpec.sipnet_name``; the names pySIPNET used before
 this convention are in ``aliases``, and :func:`resolve_parameter_name` maps
 either to the current name.
 
-Per-year rate parameters
-------------------------
-The following parameters are specified in the ``.param`` file as **per-year**
-rates and are converted to per-day internally by SIPNET (÷ 365). The Python
-interface works in per-year units throughout, matching SIPNET's convention.
-Each of these fields has ``per_year=True`` in its
-:class:`~pysipnet.parameters.base.ParameterSpec`.
+Where each fact about a parameter lives
+---------------------------------------
+Three facts about each parameter are stated once, on its
+:class:`~pysipnet.parameters.base.ParameterSpec`, and not listed here:
 
-- ``respiration.base_wood_respiration_rate``
-- ``respiration.base_fine_root_respiration_rate``
-- ``respiration.base_coarse_root_respiration_rate``
-- ``respiration.base_soil_respiration_rate``
-- ``respiration.litter_breakdown_rate``
-- ``allocation.fine_root_turnover_rate``
-- ``allocation.coarse_root_turnover_rate``
-- ``allocation.wood_turnover_rate``
-- ``phenology.leaf_turnover_rate``
+- ``required_when``: under which :class:`ModelFlags` SIPNET requires it. A
+  field SIPNET does not always require may be ``None``, and
+  :meth:`SIPNETParameters.validate_for_flags` refuses a ``None`` that the
+  flags require.
+- ``per_year``: SIPNET reads the value as an annual rate and divides by 365.
+  Specify these per year; the writer passes them through unchanged.
+- ``sipnet_docs_section``: the section of SIPNET's parameter documentation it
+  is listed under (:class:`SIPNETDocsSection`).
 
-Allocation constraint
----------------------
-SIPNET derives coarse-root allocation as::
+:func:`~pysipnet.parameters.metadata.parameter_metadata_table` and the
+generated "Parameters" documentation page read them from there.
 
-    coarse_root_allocation = 1 − leaf_allocation − fine_root_allocation − wood_allocation
-
-A model validator on :class:`AllocationParams` enforces that the three
-explicit fractions sum to strictly less than 1.
-
-Flag-dependent parameters
--------------------------
-Some parameters are only meaningful when the corresponding model flag is on.
-These fields are ``Optional[float]`` with a default of ``None``.
-:class:`SIPNETParameters` validates that required-by-flag parameters are
-provided given the active :class:`ModelFlags`.
-
-+-------------------------------------------------+----------------------------+
-| Parameter                                       | Required when flag is on   |
-+=================================================+============================+
-| ``phenology.leaf_on_growing_degree_days``       | ``ModelFlags.gdd``         |
-+-------------------------------------------------+----------------------------+
-| ``phenology.leaf_on_soil_temperature``          | ``ModelFlags.soil_phenol`` |
-+-------------------------------------------------+----------------------------+
-| ``initial_conditions.snow_water_equivalent``    | ``ModelFlags.snow``        |
-| (optional, default 0)                           |                            |
-+-------------------------------------------------+----------------------------+
-| ``water.snow_melt_rate``                        | ``ModelFlags.snow``        |
-+-------------------------------------------------+----------------------------+
-| ``water.leaf_water_pool_depth``                 | ``ModelFlags.leaf_water``  |
-+-------------------------------------------------+----------------------------+
-| ``respiration.litter_breakdown_rate``           | ``ModelFlags.litter_pool`` |
-+-------------------------------------------------+----------------------------+
-| ``respiration.litter_respired_fraction``        | ``ModelFlags.litter_pool`` |
-+-------------------------------------------------+----------------------------+
+Coarse-root allocation is not a parameter: SIPNET takes it as the residual
+``1 − leaf_allocation − fine_root_allocation − wood_allocation``, and
+:class:`SIPNETParameters` refuses a set whose residual is not positive.
 """
 
 from __future__ import annotations
 
 from collections.abc import Hashable, Mapping, Sequence
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -104,6 +73,40 @@ from pysipnet.parameters.base import (
 )
 
 _D = ParameterDomain  # local alias for brevity
+
+
+class SIPNETDocsSection(StrEnum):
+    """The sections of SIPNET's parameter documentation (``docs/parameters.md``).
+
+    Each value is a heading exactly as the pinned SIPNET writes it, and the
+    members are in the order that document gives them. Every parameter's
+    :attr:`~pysipnet.parameters.base.ParameterSpec.sipnet_docs_section` is one
+    of these: SIPNET's own grouping by process, which is what a report on a
+    parameter set is organized by.
+
+    The storage groups of :class:`SIPNETParameters` follow this grouping only
+    loosely (``respiration`` holds two of its sections, and the turnover rates
+    are stored in ``allocation`` but documented under tree physiology), and
+    they cannot change without breaking every saved parameter set.
+
+    SIPNET's code has no grouping of its own to follow instead: one function
+    reads parameters of several processes (``calcRootFluxes`` reads allocation,
+    turnover and root respiration), and one parameter is read by several
+    processes (``frozenSoilThreshold`` by transpiration and by foliar
+    respiration). The documentation is the one partition SIPNET states.
+    """
+
+    INITIAL_STATE = "Initial State Values"
+    PHOTOSYNTHESIS = "Photosynthesis Parameters"
+    PHENOLOGY = "Phenology-Related Parameters"
+    ALLOCATION = "Allocation Parameters"
+    AUTOTROPHIC_RESPIRATION = "Autotrophic Respiration Parameters"
+    SOIL_RESPIRATION = "Soil Respiration Parameters"
+    MOISTURE = "Moisture-Related Parameters"
+    TREE_PHYSIOLOGY = "Tree Physiological Parameters"
+
+
+_S = SIPNETDocsSection
 
 
 # Processes SIPNET supports at the pinned version that pySIPNET cannot yet drive.
@@ -452,6 +455,7 @@ class InitialConditions(ParameterGroup):
 
     total_wood_carbon: float = param_field(
         sipnet_name="plantWoodInit",
+        sipnet_docs_section=_S.INITIAL_STATE,
         units="g m-2",
         constituent="C",
         domain=_D.NON_NEGATIVE,
@@ -467,6 +471,7 @@ class InitialConditions(ParameterGroup):
     )
     leaf_area_index: float = param_field(
         sipnet_name="laiInit",
+        sipnet_docs_section=_S.INITIAL_STATE,
         units="m2 m-2",
         domain=_D.NON_NEGATIVE,
         description="Leaf area index at the start of the run. SIPNET uses it only to set the "
@@ -479,6 +484,7 @@ class InitialConditions(ParameterGroup):
     )
     litter_carbon: float = param_field(
         sipnet_name="litterInit",
+        sipnet_docs_section=_S.INITIAL_STATE,
         units="g m-2",
         constituent="C",
         domain=_D.NON_NEGATIVE,
@@ -491,6 +497,7 @@ class InitialConditions(ParameterGroup):
     )
     soil_carbon: float = param_field(
         sipnet_name="soilInit",
+        sipnet_docs_section=_S.INITIAL_STATE,
         units="g m-2",
         constituent="C",
         domain=_D.NON_NEGATIVE,
@@ -501,6 +508,7 @@ class InitialConditions(ParameterGroup):
     )
     soil_wetness_fraction: float = param_field(
         sipnet_name="soilWFracInit",
+        sipnet_docs_section=_S.INITIAL_STATE,
         units="1",
         domain=_D.NON_NEGATIVE,
         description="Soil water at the start of the run as a fraction of water holding "
@@ -512,6 +520,7 @@ class InitialConditions(ParameterGroup):
     )
     snow_water_equivalent: float = param_field(
         sipnet_name="snowInit",
+        sipnet_docs_section=_S.INITIAL_STATE,
         units="cm",
         constituent="H2O",
         domain=_D.NON_NEGATIVE,
@@ -525,6 +534,7 @@ class InitialConditions(ParameterGroup):
     )
     fine_root_fraction: float = param_field(
         sipnet_name="fineRootFrac",
+        sipnet_docs_section=_S.INITIAL_STATE,
         units="1",
         domain=_D.UNIT_INTERVAL,
         description="Fraction of total_wood_carbon that is fine roots at the start of the run.",
@@ -535,6 +545,7 @@ class InitialConditions(ParameterGroup):
     )
     coarse_root_fraction: float = param_field(
         sipnet_name="coarseRootFrac",
+        sipnet_docs_section=_S.INITIAL_STATE,
         units="1",
         domain=_D.UNIT_INTERVAL,
         description="Fraction of total_wood_carbon that is coarse roots at the start of the run.",
@@ -557,6 +568,7 @@ class PhotosynthesisParams(ParameterGroup):
 
     max_photosynthesis_rate: float = param_field(
         sipnet_name="aMax",
+        sipnet_docs_section=_S.PHOTOSYNTHESIS,
         units="nmol g-1 s-1",
         constituent="CO2",
         domain=_D.POSITIVE,
@@ -567,6 +579,7 @@ class PhotosynthesisParams(ParameterGroup):
     )
     daily_mean_photosynthesis_fraction: float = param_field(
         sipnet_name="aMaxFrac",
+        sipnet_docs_section=_S.PHOTOSYNTHESIS,
         units="1",
         domain=_D.OPEN_UNIT_INTERVAL,
         description="Daily mean photosynthesis as a fraction of the instantaneous maximum, "
@@ -576,6 +589,7 @@ class PhotosynthesisParams(ParameterGroup):
     )
     foliar_respiration_fraction: float = param_field(
         sipnet_name="baseFolRespFrac",
+        sipnet_docs_section=_S.PHOTOSYNTHESIS,
         units="1",
         domain=_D.POSITIVE,
         description="Basal foliar maintenance respiration as a fraction of the maximum "
@@ -585,6 +599,7 @@ class PhotosynthesisParams(ParameterGroup):
     )
     min_photosynthesis_temperature: float = param_field(
         sipnet_name="psnTMin",
+        sipnet_docs_section=_S.PHOTOSYNTHESIS,
         units="degC",
         domain=_D.REAL,
         description="Air temperature at or below which net photosynthesis is zero.",
@@ -593,6 +608,7 @@ class PhotosynthesisParams(ParameterGroup):
     )
     optimum_photosynthesis_temperature: float = param_field(
         sipnet_name="psnTOpt",
+        sipnet_docs_section=_S.PHOTOSYNTHESIS,
         units="degC",
         domain=_D.REAL,
         description="Air temperature at which photosynthesis is maximal. The maximum "
@@ -602,6 +618,7 @@ class PhotosynthesisParams(ParameterGroup):
     )
     vapor_pressure_deficit_slope: float = param_field(
         sipnet_name="dVpdSlope",
+        sipnet_docs_section=_S.PHOTOSYNTHESIS,
         units="kPa-1",
         domain=_D.POSITIVE,
         description="Slope of the vapor pressure deficit reduction of photosynthesis: "
@@ -611,6 +628,7 @@ class PhotosynthesisParams(ParameterGroup):
     )
     vapor_pressure_deficit_exponent: float = param_field(
         sipnet_name="dVpdExp",
+        sipnet_docs_section=_S.PHOTOSYNTHESIS,
         units="1",
         domain=_D.POSITIVE,
         description="Exponent of the vapor pressure deficit reduction of photosynthesis.",
@@ -619,6 +637,7 @@ class PhotosynthesisParams(ParameterGroup):
     )
     half_saturation_light: float = param_field(
         sipnet_name="halfSatPar",
+        sipnet_docs_section=_S.PHOTOSYNTHESIS,
         units="mol m-2 d-1",
         constituent="photons",
         domain=_D.POSITIVE,
@@ -630,6 +649,7 @@ class PhotosynthesisParams(ParameterGroup):
     )
     light_extinction_coefficient: float = param_field(
         sipnet_name="attenuation",
+        sipnet_docs_section=_S.PHOTOSYNTHESIS,
         units="1",
         domain=_D.POSITIVE,
         description="Canopy light extinction coefficient in Beer's law.",
@@ -649,6 +669,7 @@ class PhenologyParams(ParameterGroup):
 
     leaf_on_day: float | None = param_field(
         sipnet_name="leafOnDay",
+        sipnet_docs_section=_S.PHENOLOGY,
         required_when="not gdd and not soil_phenol",
         units="d",
         domain=_D.NON_NEGATIVE,
@@ -659,6 +680,7 @@ class PhenologyParams(ParameterGroup):
     )
     leaf_off_day: float = param_field(
         sipnet_name="leafOffDay",
+        sipnet_docs_section=_S.PHENOLOGY,
         units="d",
         domain=_D.NON_NEGATIVE,
         description="Day of year on which leaves fall; 0 switches leaf fall off.",
@@ -666,6 +688,7 @@ class PhenologyParams(ParameterGroup):
     )
     leaf_on_growing_degree_days: float | None = param_field(
         sipnet_name="gddLeafOn",
+        sipnet_docs_section=_S.PHENOLOGY,
         required_when="gdd",
         units="K d",
         domain=_D.NON_NEGATIVE,
@@ -677,6 +700,7 @@ class PhenologyParams(ParameterGroup):
     )
     leaf_on_soil_temperature: float | None = param_field(
         sipnet_name="soilTempLeafOn",
+        sipnet_docs_section=_S.PHENOLOGY,
         required_when="soil_phenol",
         units="degC",
         domain=_D.REAL,
@@ -688,6 +712,7 @@ class PhenologyParams(ParameterGroup):
     )
     leaf_on_growth: float = param_field(
         sipnet_name="leafGrowth",
+        sipnet_docs_section=_S.PHENOLOGY,
         units="g m-2",
         constituent="C",
         domain=_D.NON_NEGATIVE,
@@ -698,6 +723,7 @@ class PhenologyParams(ParameterGroup):
     )
     leaf_off_fall_fraction: float = param_field(
         sipnet_name="fracLeafFall",
+        sipnet_docs_section=_S.PHENOLOGY,
         units="1",
         domain=_D.UNIT_INTERVAL,
         description="Fraction of the standing leaf carbon that falls at leaf-off.",
@@ -706,6 +732,7 @@ class PhenologyParams(ParameterGroup):
     )
     leaf_allocation: float = param_field(
         sipnet_name="leafAllocation",
+        sipnet_docs_section=_S.PHENOLOGY,
         units="1",
         domain=_D.OPEN_UNIT_INTERVAL,
         description="Fraction of net primary production allocated to leaves. Enters the "
@@ -714,6 +741,7 @@ class PhenologyParams(ParameterGroup):
     )
     leaf_turnover_rate: float = param_field(
         sipnet_name="leafTurnoverRate",
+        sipnet_docs_section=_S.PHENOLOGY,
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
@@ -723,6 +751,9 @@ class PhenologyParams(ParameterGroup):
     )
     leaf_on_reallocation_fraction: float = param_field(
         sipnet_name="leafOnReallocFrac",
+        # SIPNET's documentation does not list this parameter yet. It limits
+        # leaf-on (checkLeafOnLimitation), so it is put with phenology.
+        sipnet_docs_section=_S.PHENOLOGY,
         units="1",
         domain=_D.UNIT_INTERVAL,
         description="Largest fraction of wood plus coarse-root carbon that leaf-on may draw "
@@ -734,27 +765,11 @@ class PhenologyParams(ParameterGroup):
 
 
 class RespirationParams(ParameterGroup):
-    """Autotrophic and heterotrophic respiration parameters.
-
-    Per-year rate parameters
-    ~~~~~~~~~~~~~~~~~~~~~~~~
-    ``base_wood_respiration_rate``, ``base_fine_root_respiration_rate``,
-    ``base_coarse_root_respiration_rate``, ``base_soil_respiration_rate`` and
-    ``litter_breakdown_rate`` are specified as per-year rates, matching the
-    SIPNET param file convention. SIPNET divides by 365 internally. Their
-    :class:`~pysipnet.parameters.base.ParameterSpec` has ``per_year=True``.
-
-    Flag-dependent parameters
-    ~~~~~~~~~~~~~~~~~~~~~~~~~
-    ``litter_breakdown_rate`` and ``litter_respired_fraction`` are only
-    meaningful when ``ModelFlags.litter_pool`` is on, and
-    ``soil_respiration_moisture_exponent`` only when ``ModelFlags.water_hresp``
-    is. They may be ``None`` otherwise;
-    :meth:`SIPNETParameters.validate_for_flags` enforces this.
-    """
+    """Autotrophic and heterotrophic respiration parameters."""
 
     base_wood_respiration_rate: float = param_field(
         sipnet_name="baseVegResp",
+        sipnet_docs_section=_S.AUTOTROPHIC_RESPIRATION,
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
@@ -765,6 +780,7 @@ class RespirationParams(ParameterGroup):
     )
     wood_respiration_q10: float = param_field(
         sipnet_name="vegRespQ10",
+        sipnet_docs_section=_S.AUTOTROPHIC_RESPIRATION,
         units="1",
         domain=_D.POSITIVE,
         description="Q10 temperature sensitivity of wood maintenance respiration.",
@@ -773,6 +789,7 @@ class RespirationParams(ParameterGroup):
     )
     growth_respiration_fraction: float = param_field(
         sipnet_name="growthRespFrac",
+        sipnet_docs_section=_S.AUTOTROPHIC_RESPIRATION,
         required_when="growth_resp",
         units="1",
         domain=_D.UNIT_INTERVAL,
@@ -784,6 +801,7 @@ class RespirationParams(ParameterGroup):
     )
     frozen_soil_foliar_respiration_factor: float = param_field(
         sipnet_name="frozenSoilFolREff",
+        sipnet_docs_section=_S.AUTOTROPHIC_RESPIRATION,
         units="1",
         domain=_D.UNIT_INTERVAL,
         description="Multiplier on foliar respiration when the soil is frozen: 0 shuts it "
@@ -793,6 +811,7 @@ class RespirationParams(ParameterGroup):
     )
     frozen_soil_threshold: float = param_field(
         sipnet_name="frozenSoilThreshold",
+        sipnet_docs_section=_S.AUTOTROPHIC_RESPIRATION,
         units="degC",
         domain=_D.REAL,
         description="Soil temperature below which the soil counts as frozen.",
@@ -800,6 +819,7 @@ class RespirationParams(ParameterGroup):
     )
     base_fine_root_respiration_rate: float = param_field(
         sipnet_name="baseFineRootResp",
+        sipnet_docs_section=_S.AUTOTROPHIC_RESPIRATION,
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
@@ -810,6 +830,7 @@ class RespirationParams(ParameterGroup):
     )
     base_coarse_root_respiration_rate: float = param_field(
         sipnet_name="baseCoarseRootResp",
+        sipnet_docs_section=_S.AUTOTROPHIC_RESPIRATION,
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
@@ -820,6 +841,7 @@ class RespirationParams(ParameterGroup):
     )
     fine_root_respiration_q10: float = param_field(
         sipnet_name="fineRootQ10",
+        sipnet_docs_section=_S.AUTOTROPHIC_RESPIRATION,
         units="1",
         domain=_D.POSITIVE,
         description="Q10 temperature sensitivity of fine-root respiration.",
@@ -828,6 +850,7 @@ class RespirationParams(ParameterGroup):
     )
     coarse_root_respiration_q10: float = param_field(
         sipnet_name="coarseRootQ10",
+        sipnet_docs_section=_S.AUTOTROPHIC_RESPIRATION,
         units="1",
         domain=_D.POSITIVE,
         description="Q10 temperature sensitivity of coarse-root respiration.",
@@ -836,6 +859,7 @@ class RespirationParams(ParameterGroup):
     )
     base_soil_respiration_rate: float = param_field(
         sipnet_name="baseSoilResp",
+        sipnet_docs_section=_S.SOIL_RESPIRATION,
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
@@ -846,6 +870,7 @@ class RespirationParams(ParameterGroup):
     )
     soil_respiration_q10: float = param_field(
         sipnet_name="soilRespQ10",
+        sipnet_docs_section=_S.SOIL_RESPIRATION,
         units="1",
         domain=_D.POSITIVE,
         description="Q10 temperature sensitivity of heterotrophic soil respiration.",
@@ -854,33 +879,35 @@ class RespirationParams(ParameterGroup):
     )
     soil_respiration_moisture_exponent: float | None = param_field(
         sipnet_name="soilRespMoistEffect",
+        sipnet_docs_section=_S.SOIL_RESPIRATION,
         required_when="water_hresp",
         units="1",
         domain=_D.NON_NEGATIVE,
-        description="Exponent of the soil-moisture dependence of heterotrophic respiration. "
-        "Required when ModelFlags.water_hresp is on.",
+        description="Exponent of the soil-moisture dependence of heterotrophic respiration.",
         long_label="Soil respiration moisture exponent",
         aliases=("soil_resp_moist_effect",),
         default=None,
     )
     litter_breakdown_rate: float | None = param_field(
         sipnet_name="litterBreakdownRate",
+        sipnet_docs_section=_S.SOIL_RESPIRATION,
         required_when="litter_pool",
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
         description="Litter carbon broken down per year at 0 °C, as a fraction of the litter "
-        "pool; SIPNET divides by 365. Required when ModelFlags.litter_pool is on.",
+        "pool; SIPNET divides by 365.",
         long_label="Litter breakdown rate",
         default=None,
     )
     litter_respired_fraction: float | None = param_field(
         sipnet_name="fracLitterRespired",
+        sipnet_docs_section=_S.SOIL_RESPIRATION,
         required_when="litter_pool",
         units="1",
         domain=_D.UNIT_INTERVAL,
         description="Fraction of broken-down litter that is respired rather than transferred "
-        "to the soil carbon pool. Required when ModelFlags.litter_pool is on.",
+        "to the soil carbon pool.",
         long_label="Litter respired fraction",
         aliases=("frac_litter_respired",),
         default=None,
@@ -890,18 +917,13 @@ class RespirationParams(ParameterGroup):
 class AllocationParams(ParameterGroup):
     """Carbon allocation fractions and pool turnover rates.
 
-    Constraint
-    ----------
-    ``leaf_allocation + fine_root_allocation + wood_allocation < 1``.
-    Coarse-root allocation is the residual and is derived by SIPNET, not read
-    from the param file.
-
-    All turnover rates are per-year and have ``per_year=True`` in their
-    :class:`~pysipnet.parameters.base.ParameterSpec`.
+    ``leaf_allocation`` is in :class:`PhenologyParams`, so the constraint on
+    all three fractions is checked by :class:`SIPNETParameters`.
     """
 
     fine_root_allocation: float = param_field(
         sipnet_name="fineRootAllocation",
+        sipnet_docs_section=_S.ALLOCATION,
         units="1",
         domain=_D.OPEN_UNIT_INTERVAL,
         description="Fraction of net primary production allocated to fine roots.",
@@ -909,6 +931,7 @@ class AllocationParams(ParameterGroup):
     )
     wood_allocation: float = param_field(
         sipnet_name="woodAllocation",
+        sipnet_docs_section=_S.ALLOCATION,
         units="1",
         domain=_D.OPEN_UNIT_INTERVAL,
         description="Fraction of net primary production allocated to wood.",
@@ -916,6 +939,7 @@ class AllocationParams(ParameterGroup):
     )
     fine_root_turnover_rate: float = param_field(
         sipnet_name="fineRootTurnoverRate",
+        sipnet_docs_section=_S.TREE_PHYSIOLOGY,
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
@@ -924,6 +948,7 @@ class AllocationParams(ParameterGroup):
     )
     coarse_root_turnover_rate: float = param_field(
         sipnet_name="coarseRootTurnoverRate",
+        sipnet_docs_section=_S.TREE_PHYSIOLOGY,
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
@@ -932,6 +957,7 @@ class AllocationParams(ParameterGroup):
     )
     wood_turnover_rate: float = param_field(
         sipnet_name="woodTurnoverRate",
+        sipnet_docs_section=_S.TREE_PHYSIOLOGY,
         units="yr-1",
         domain=_D.POSITIVE,
         per_year=True,
@@ -953,17 +979,11 @@ class AllocationParams(ParameterGroup):
 
 
 class WaterParams(ParameterGroup):
-    """Soil water, evapotranspiration, and snow parameters.
-
-    Flag-dependent fields
-    ~~~~~~~~~~~~~~~~~~~~~
-    ``snow_melt_rate`` is only used when ``ModelFlags.snow`` is on.
-    ``leaf_water_pool_depth`` is only used when ``ModelFlags.leaf_water`` is on.
-    Both are ``Optional[float]`` and validated by :class:`SIPNETParameters`.
-    """
+    """Soil water, evapotranspiration, and snow parameters."""
 
     water_removal_fraction: float = param_field(
         sipnet_name="waterRemoveFrac",
+        sipnet_docs_section=_S.MOISTURE,
         units="d-1",
         domain=_D.POSITIVE,
         description="Fraction of plant-available soil water that can be removed per day "
@@ -973,6 +993,7 @@ class WaterParams(ParameterGroup):
     )
     frozen_soil_water_fraction: float = param_field(
         sipnet_name="frozenSoilEff",
+        sipnet_docs_section=_S.MOISTURE,
         units="1",
         domain=_D.UNIT_INTERVAL,
         description="Fraction of soil water available to plants when the soil is frozen; "
@@ -982,6 +1003,7 @@ class WaterParams(ParameterGroup):
     )
     water_use_efficiency: float = param_field(
         sipnet_name="wueConst",
+        sipnet_docs_section=_S.MOISTURE,
         units="mg g-1 kPa",
         constituent="CO2",
         domain=_D.POSITIVE,
@@ -994,6 +1016,7 @@ class WaterParams(ParameterGroup):
     )
     soil_water_holding_capacity: float = param_field(
         sipnet_name="soilWHC",
+        sipnet_docs_section=_S.MOISTURE,
         units="cm",
         constituent="H2O",
         domain=_D.POSITIVE,
@@ -1003,6 +1026,7 @@ class WaterParams(ParameterGroup):
     )
     interception_evaporation_fraction: float = param_field(
         sipnet_name="immedEvapFrac",
+        sipnet_docs_section=_S.MOISTURE,
         units="1",
         domain=_D.UNIT_INTERVAL,
         description="Fraction of precipitation intercepted by the canopy and evaporated "
@@ -1012,6 +1036,7 @@ class WaterParams(ParameterGroup):
     )
     fast_flow_fraction: float = param_field(
         sipnet_name="fastFlowFrac",
+        sipnet_docs_section=_S.MOISTURE,
         units="1",
         domain=_D.UNIT_INTERVAL,
         description="Fraction of water reaching the soil that drains immediately without "
@@ -1021,12 +1046,13 @@ class WaterParams(ParameterGroup):
     )
     snow_melt_rate: float | None = param_field(
         sipnet_name="snowMelt",
+        sipnet_docs_section=_S.MOISTURE,
         required_when="snow",
         units="cm K-1 d-1",
         constituent="H2O",
         domain=_D.POSITIVE,
         description="Snow melted per degree of air temperature above freezing per day. "
-        "Required when ModelFlags.snow is on. With the flag off it is optional but still "
+        "With ModelFlags.snow off it is not required but is still "
         "used if supplied; if omitted SIPNET uses zero and snow never melts.",
         long_label="Snow melt rate",
         aliases=("snow_melt",),
@@ -1034,6 +1060,7 @@ class WaterParams(ParameterGroup):
     )
     aerodynamic_resistance_constant: float = param_field(
         sipnet_name="rdConst",
+        sipnet_docs_section=_S.MOISTURE,
         units="1",
         domain=_D.POSITIVE,
         description="Scalar in the aerodynamic resistance used for soil evaporation.",
@@ -1042,6 +1069,7 @@ class WaterParams(ParameterGroup):
     )
     soil_resistance_intercept: float = param_field(
         sipnet_name="rSoilConst1",
+        sipnet_docs_section=_S.MOISTURE,
         units="1",
         domain=_D.REAL,
         description="Intercept of the soil evaporation resistance model "
@@ -1051,6 +1079,7 @@ class WaterParams(ParameterGroup):
     )
     soil_resistance_slope: float = param_field(
         sipnet_name="rSoilConst2",
+        sipnet_docs_section=_S.MOISTURE,
         units="1",
         domain=_D.POSITIVE,
         description="Slope of the soil evaporation resistance model "
@@ -1061,13 +1090,13 @@ class WaterParams(ParameterGroup):
     )
     leaf_water_pool_depth: float | None = param_field(
         sipnet_name="leafPoolDepth",
+        sipnet_docs_section=_S.MOISTURE,
         required_when="leaf_water",
         units="cm d-1",
         constituent="H2O",
         domain=_D.NON_NEGATIVE,
         description="Cap on interception evaporation per unit leaf area index: the canopy "
-        "can evaporate at most this rate times the leaf area index. Required when "
-        "ModelFlags.leaf_water is on.",
+        "can evaporate at most this rate times the leaf area index.",
         long_label="Leaf water pool depth",
         aliases=("leaf_pool_depth",),
         default=None,
@@ -1079,6 +1108,7 @@ class LeafPhysiologyParams(ParameterGroup):
 
     leaf_carbon_per_area: float = param_field(
         sipnet_name="leafCSpWt",
+        sipnet_docs_section=_S.TREE_PHYSIOLOGY,
         units="g m-2",
         constituent="C",
         domain=_D.POSITIVE,
@@ -1090,6 +1120,7 @@ class LeafPhysiologyParams(ParameterGroup):
     )
     leaf_carbon_fraction: float = param_field(
         sipnet_name="cFracLeaf",
+        sipnet_docs_section=_S.TREE_PHYSIOLOGY,
         units="1",
         domain=_D.OPEN_UNIT_INTERVAL,
         description="Carbon as a fraction of leaf dry mass.",
@@ -1162,11 +1193,25 @@ class SIPNETParameters(BaseModel):
         parameter is optional and not set here.
         """
         path = _PARAMETER_PATHS[resolve_parameter_name(name)]
-        group, field = path.split(".")
-        value = getattr(getattr(self, group), field)
+        value = self.flat_values().get(path)
         if value is None:
             raise ValueError(f"{path} is not set in this parameter set, so it has no value.")
         return parameter_dataarray(name, value)
+
+    def flat_values(self) -> dict[str, float]:
+        """``{"group.field": value}`` for every parameter that is set, in spec order.
+
+        A parameter left as ``None`` is absent. This is exactly what the
+        ``.param`` writer writes, and so what SIPNET receives.
+        """
+        dump = self.model_dump()
+        values: dict[str, float] = {}
+        for path in PARAMETER_SPECS:
+            group, field = path.split(".")
+            value = dump[group][field]
+            if value is not None:
+                values[path] = value
+        return values
 
     def validate_for_flags(self, flags: ModelFlags) -> None:
         """Raise :class:`ValueError` if any parameter SIPNET requires under *flags* is ``None``.
@@ -1176,11 +1221,11 @@ class SIPNETParameters(BaseModel):
         this before writing the param file to surface configuration
         mismatches early; every missing parameter is listed.
         """
-        dump = self.model_dump()
+        values = self.flat_values()
         errors = [
             f"{path} is required when {spec.requirement_description()}"
             for path, spec in PARAMETER_SPECS.items()
-            if spec.required_under(flags) and dump[path.split(".")[0]][path.split(".")[1]] is None
+            if spec.required_under(flags) and path not in values
         ]
         if errors:
             raise ValueError("Parameter–flag mismatch:\n" + "\n".join(f"  • {e}" for e in errors))
@@ -1255,6 +1300,19 @@ def _check_requirement_flags() -> None:
 
 
 _check_requirement_flags()
+
+
+def _check_docs_sections() -> None:
+    """Every ``sipnet_docs_section`` must be a :class:`SIPNETDocsSection`."""
+    for path, spec in PARAMETER_SPECS.items():
+        if spec.sipnet_docs_section not in set(SIPNETDocsSection):
+            raise ValueError(
+                f"{path}: sipnet_docs_section {spec.sipnet_docs_section!r} is not a section "
+                "of SIPNET's parameter documentation."
+            )
+
+
+_check_docs_sections()
 
 
 def _build_parameter_alias_index() -> dict[str, str]:

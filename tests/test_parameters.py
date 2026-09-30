@@ -572,6 +572,7 @@ class TestRequiredWhen:
                 domain=ParameterDomain.REAL,
                 description="",
                 long_label="",
+                sipnet_docs_section="",
                 required_when="gdd || snow",
             )
 

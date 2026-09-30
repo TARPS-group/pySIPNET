@@ -40,6 +40,36 @@ def sipnet_param_registrations() -> dict[str, str]:
 
 
 @pytest.fixture(scope="session")
+def sipnet_docs_sections() -> tuple[list[str], dict[str, set[str]]]:
+    """The headings of the pinned SIPNET's ``docs/parameters.md``, and where each name is listed.
+
+    Returns the headings in document order and ``{name: {heading, ...}}`` for
+    every table cell under them, so a parameter's section is read from
+    SIPNET's own documentation rather than restated. HTML comments are
+    dropped first: the document keeps commented-out tables that list
+    parameters (``snowInit``) a second time.
+    """
+    import re
+
+    path = Path(__file__).parent.parent / "sipnet" / "docs" / "parameters.md"
+    if not path.exists():
+        pytest.skip("SIPNET submodule not populated; run 'git submodule update --init sipnet'")
+
+    text = re.sub(r"<!--.*?-->", "", path.read_text(), flags=re.DOTALL)
+    headings: list[str] = []
+    listed: dict[str, set[str]] = {}
+    for line in text.splitlines():
+        if line.startswith("#"):
+            headings.append(line.lstrip("#").strip())
+        elif line.startswith("|") and headings:
+            for cell in line.strip().strip("|").split("|"):
+                listed.setdefault(cell.strip().strip("`"), set()).add(headings[-1])
+    if not listed:
+        pytest.fail(f"No parameter tables found in {path}; has the document changed layout?")
+    return headings, listed
+
+
+@pytest.fixture(scope="session")
 def sipnet_source_params(sipnet_param_registrations: dict[str, str]) -> set[str]:
     """Every parameter name the pinned SIPNET source registers."""
     return set(sipnet_param_registrations)
