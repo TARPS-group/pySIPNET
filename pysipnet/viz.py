@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from pysipnet.parameters.model import PARAMETER_SPECS
+from pysipnet.parameters.metadata import parameter_metadata_table
 from pysipnet.variables import CLIMATE_VARIABLES_BY_NAME, OUTPUT_VARIABLES_BY_NAME
 
 if TYPE_CHECKING:
@@ -139,58 +139,38 @@ def _provenance_table(result: SIPNETResult) -> go.Table:
 
 
 def _param_table(result: SIPNETResult) -> go.Table:
-    """Parameter summary table grouped by domain; only non-None fields shown."""
+    """The parameters the run set, grouped by the section of SIPNET's documentation."""
     import plotly.graph_objects as go
 
-    group_col: list[str] = []
-    param_col: list[str] = []
-    value_col: list[str] = []
-    row_colors: list[str] = []
-
-    try:
-        params_dict = result.parameters.model_dump()
-        fill = _ROW_A
-        for group_name, group_dict in params_dict.items():
-            if not isinstance(group_dict, dict):
-                continue
-            label = group_name.replace("_", " ").title()
-            first = True
-            for pname, pval in group_dict.items():
-                spec = PARAMETER_SPECS.get(f"{group_name}.{pname}")
-                if pval is None:
-                    continue
-                group_col.append(f"<b>{label}</b>" if first else "")
-                param_col.append(spec.long_label if spec is not None else pname.replace("_", " "))
-                value_col.append(f"{pval:.4g}" if isinstance(pval, float) else str(pval))
-                row_colors.append(fill)
-                first = False
-            if not first:
-                fill = _ROW_B if fill == _ROW_A else _ROW_A
-    except Exception:
-        pass
-
-    if not group_col:
-        group_col = ["(no parameters)"]
-        param_col = [""]
-        value_col = [""]
-        row_colors = [_ROW_B]
+    table = parameter_metadata_table(result.parameters)
+    starts_section = ~table["section"].duplicated()
+    section_col = [
+        f"<b>{section}</b>" if first else ""
+        for section, first in zip(table["section"], starts_section, strict=True)
+    ]
+    row_colors = [_ROW_A if odd else _ROW_B for odd in starts_section.cumsum() % 2 == 1]
 
     return go.Table(
         header=dict(
-            values=["<b>Group</b>", "<b>Parameter</b>", "<b>Value</b>"],
+            values=["<b>Section</b>", "<b>Parameter</b>", "<b>Value</b>", "<b>Units</b>"],
             fill_color=_TH_BG,
             font=dict(size=12, color="#333"),
             align="left",
             height=28,
         ),
         cells=dict(
-            values=[group_col, param_col, value_col],
-            fill_color=[row_colors, row_colors, row_colors],
+            values=[
+                section_col,
+                table["label"].tolist(),
+                [f"{value:.4g}" for value in table["value"]],
+                table["units"].tolist(),
+            ],
+            fill_color=[row_colors] * 4,
             font=dict(size=11, color="#333"),
-            align=["left", "left", "right"],
+            align=["left", "left", "right", "left"],
             height=22,
         ),
-        columnwidth=[120, 200, 80],
+        columnwidth=[150, 200, 70, 110],
     )
 
 
@@ -207,7 +187,8 @@ def dashboard(
     The figure has three sections arranged vertically:
 
     * **Run Configuration**: provenance table (flags, run ID, binary, status)
-      and grouped parameter table (non-``None`` fields only)
+      and the parameters the run set, grouped by the section of SIPNET's
+      documentation (:func:`~pysipnet.parameters.metadata.parameter_metadata_table`)
     * **Climate Inputs** (2 × 2 grid): air temperature, PAR, precipitation, VPD
     * **Model Outputs**: flux panel (NEE, GPP, ET, Rₐ, Rₕ) with a
       per-panel legend and variable-selector dropdown; pool panel (plant wood C,

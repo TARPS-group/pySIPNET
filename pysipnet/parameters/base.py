@@ -128,6 +128,41 @@ def parse_requirement(expression: str) -> tuple[tuple[str, bool], ...]:
     return tuple(literals)
 
 
+class SIPNETDocsSection(StrEnum):
+    """The sections of SIPNET's parameter documentation (``docs/parameters.md``).
+
+    Each value is a heading exactly as the pinned SIPNET writes it, and the
+    members are in the order that document gives them. Every parameter's
+    :attr:`~pysipnet.parameters.base.ParameterSpec.sipnet_docs_section` is one
+    of these: SIPNET's own grouping by process, which is what a report on a
+    parameter set is organized by.
+
+    The headings are those of the pinned SIPNET, which
+    ``tests/test_parameter_metadata.py`` checks against the document itself.
+
+    The storage groups of :class:`~pysipnet.parameters.model.SIPNETParameters`
+    follow this grouping only loosely (``respiration`` holds two of its
+    sections, and the turnover rates are stored in ``allocation`` but
+    documented under tree physiology), and they cannot change without breaking
+    every saved parameter set.
+
+    SIPNET's code has no grouping of its own to follow instead: one function
+    reads parameters of several processes (``calcRootFluxes`` reads allocation,
+    turnover and root respiration), and one parameter is read by several
+    processes (``frozenSoilThreshold`` by transpiration and by foliar
+    respiration). The documentation is the one partition SIPNET states.
+    """
+
+    INITIAL_STATE = "Initial State Values"
+    PHOTOSYNTHESIS = "Photosynthesis Parameters"
+    PHENOLOGY = "Phenology-Related Parameters"
+    ALLOCATION = "Allocation Parameters"
+    AUTOTROPHIC_RESPIRATION = "Autotrophic Respiration Parameters"
+    SOIL_RESPIRATION = "Soil Respiration Parameters"
+    MOISTURE = "Moisture-Related Parameters"
+    TREE_PHYSIOLOGY = "Tree Physiological Parameters"
+
+
 class ParameterDomain(StrEnum):
     """Mathematical support of a scalar parameter.
 
@@ -220,6 +255,11 @@ class ParameterSpec:
     long_label: str
     """Plot-ready name without units, e.g. ``"Maximum photosynthesis rate"``."""
 
+    sipnet_docs_section: SIPNETDocsSection
+    """The heading SIPNET's own parameter documentation lists this parameter
+    under, e.g. ``"Photosynthesis Parameters"``: a grouping by process, which
+    the storage groups of the parameter model only approximate."""
+
     constituent: str = ""
     """Substance the unit refers to: ``"C"``, ``"N"``, ``"CO2"``, ``"H2O"`` or empty."""
 
@@ -247,6 +287,13 @@ class ParameterSpec:
 
     def __post_init__(self) -> None:
         parse_requirement(self.required_when)
+        # A dataclass does not check its annotations, and a plain string would
+        # otherwise pass for a section.
+        if not isinstance(self.sipnet_docs_section, SIPNETDocsSection):
+            raise ValueError(
+                f"sipnet_docs_section must be a SIPNETDocsSection, not "
+                f"{self.sipnet_docs_section!r}."
+            )
 
     @property
     def always_required(self) -> bool:
@@ -320,6 +367,7 @@ def param_field(
     domain: ParameterDomain,
     description: str,
     long_label: str,
+    sipnet_docs_section: SIPNETDocsSection,
     constituent: str = "",
     short_label: str = "",
     aliases: tuple[str, ...] = (),
@@ -347,6 +395,8 @@ def param_field(
         Human-readable description included in the JSON schema.
     long_label, short_label:
         Plot labels without units.
+    sipnet_docs_section:
+        The heading of SIPNET's parameter documentation the parameter is listed under.
     constituent:
         Substance qualifier not captured by the physical unit.
     aliases:
@@ -376,6 +426,7 @@ def param_field(
         domain=domain,
         description=description,
         long_label=long_label,
+        sipnet_docs_section=sipnet_docs_section,
         constituent=constituent,
         short_label=short_label,
         aliases=aliases,

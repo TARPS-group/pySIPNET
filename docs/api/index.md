@@ -8,6 +8,7 @@
 
 ::: pysipnet.parameters.base
 ::: pysipnet.parameters.model
+::: pysipnet.parameters.metadata
 
 ## Climate
 
